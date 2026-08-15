@@ -84,6 +84,62 @@ if (args is ["run-enclosure", ..])
     }
 }
 
+if (args is ["handoff", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    List<string> aFlags = [];
+    for (int i = 1; i < args.Length; i++)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        if (i + 1 < args.Length && !args[i + 1].StartsWith("--", StringComparison.Ordinal))
+            oOpts[args[i][2..]] = args[++i];
+        else
+            aFlags.Add(args[i][2..]);
+    }
+
+    if (!oOpts.TryGetValue("run", out string? strRun) || !long.TryParse(strRun, out long nRunId))
+    {
+        Console.Error.WriteLine("--run <ledger run id> is required.");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("stage", out string? strStage))
+    {
+        Console.Error.WriteLine("--stage <dir> is required (the slicing workspace to copy the artifact into).");
+        return 2;
+    }
+
+    try
+    {
+        HandoffResult oResult = StudioHandoff.Execute(
+            strArtifactsDir: oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            strLedgerPath: oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            nRunId: nRunId,
+            strStageDir: strStage,
+            strStudioUrl: oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
+            strGcodeFilename: oOpts.GetValueOrDefault("print"),
+            bOffline: aFlags.Contains("offline"));
+
+        Console.WriteLine($"handoff {oResult.HandoffId}: {oResult.Status}");
+        Console.WriteLine($"  staged  {oResult.StagedStlPath}");
+        if (oResult.ProposalId.Length > 0)
+        {
+            Console.WriteLine($"  proposal {oResult.ProposalId} — awaiting human approval in the studio dashboard");
+            if (oResult.WillRun.Length > 0)
+                Console.WriteLine($"  will run: {oResult.WillRun}");
+        }
+        return 0;
+    }
+    catch (HandoffException e)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 string strTool = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
 string strPicoGK = typeof(PicoGK.Library).Assembly.GetName().Version?.ToString() ?? "unknown";
 
@@ -94,6 +150,8 @@ Console.WriteLine();
 Console.WriteLine("usage: OpenDesignCore validate-data [dir]");
 Console.WriteLine("       OpenDesignCore run-enclosure --voxel-mm <v> [--part <id>] [--clearance-mm <v>]");
 Console.WriteLine("                                    [--wall-mm <v>] [--data <dir>] [--artifacts <dir>] [--ledger <path>]");
+Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>] [--print <gcode>]");
+Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");
 return 0;
 
 static string StrGitCommit()
