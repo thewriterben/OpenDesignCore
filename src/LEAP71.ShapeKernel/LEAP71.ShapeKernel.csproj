@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Wrapper project compiling the pinned LEAP71_ShapeKernel submodule sources
+    (tag ShapeKernel-v2.1.0). Upstream code carries its own CS0618
+    self-deprecations, so this project is deliberately not warnings-as-errors;
+    OpenDesignCore's own code stays strict. Do not add code here.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <NoWarn>$(NoWarn);CS0618;CS8632</NoWarn>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PicoGK" Version="[2.2.0]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\external\LEAP71_ShapeKernel\ShapeKernel\**\*.cs" LinkBase="ShapeKernel" />
+  </ItemGroup>
+
+</Project>
