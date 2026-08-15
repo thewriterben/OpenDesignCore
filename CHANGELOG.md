@@ -11,6 +11,7 @@ Format: [Keep a Changelog](https://keepachangelog.com). Versioning: [SemVer](htt
 - ROADMAP filled: thin thread as "Now"; scan-to-fit and MCP surface as "Next"; explicit non-goals.
 - Platform decisions PD-1..PD-6 recorded in `wiki/concepts/platform-decisions.md`; BINGO↔ODC provenance contract drafted (v0).
 
+- Thin thread runs end to end: `run-enclosure --voxel-mm <v>` builds an open-top enclosure tray around a cited part envelope on headless PicoGK, validates it, exports binary STL, writes a deterministic canonical-JSON provenance sidecar (SHA-256, byte-compatible with Project BINGO's `canonical_json`, verified against Python-generated vectors), content-addresses both into `artifacts/`, and appends the run to `ledger.db` (Microsoft.Data.Sqlite, append-only, `Pooling=False`). Resolution floor enforced (wall >= 2 voxels). 15 tests including rerun byte-identity.
 - `data/` reference store: parts + materials namespaces, snake_case JSON, strict loader (`DataStore`) enforcing citations, unknown-field rejection, and positive dimensions; `validate-data` CLI command; first test project (6 tests) activates `dotnet test`. First entries: `parts/esp32-s3-wroom-1` (Espressif datasheet), `materials/pla-generic` (secondary-sourced, TODO(source)).
 - Thin-thread solution skeleton: net9.0, PicoGK `[2.2.0]` via NuGet, ShapeKernel submodule pinned to `ShapeKernel-v2.1.0` compiled in a non-strict wrapper project; builds, runs, and formats clean. ADR-0008. Verify commands recorded in CLAUDE.md.
 

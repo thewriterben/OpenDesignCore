@@ -14,6 +14,7 @@
   <ItemGroup>
     <!-- Pinned exactly; upgrade is its own commit (ADR-0008) -->
     <PackageReference Include="PicoGK" Version="[2.2.0]" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="[9.0.19]" />
     <!-- Pinned submodule sources, compiled in a non-strict wrapper project -->
     <ProjectReference Include="..\LEAP71.ShapeKernel\LEAP71.ShapeKernel.csproj" />
   </ItemGroup>

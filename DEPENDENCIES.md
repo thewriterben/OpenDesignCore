@@ -19,7 +19,9 @@ Not used: `thewriterben/leap71ODC` is a fork of `leap71/leap71`, the organisatio
 
 | Package | Version | License | Why nothing already here will do |
 |---|---|---|---|
-| ⟨…⟩ | ⟨…⟩ | ⟨…⟩ | ⟨…⟩ |
+| Microsoft.Data.Sqlite | `[9.0.19]` | MIT | Append-only run ledger (ADR-0006). Embedded, single-file, first-class in .NET; no server. Writing SQLite by hand is not a good use of anyone's life. |
+| Microsoft.NET.Test.Sdk (tests only) | `[17.11.1]` | MIT | Test host |
+| xunit + xunit.runner.visualstudio (tests only) | `[2.9.2]` / `[2.8.2]` | Apache-2.0 | Test framework; reference tests are a repo invariant |
 
 ## License compatibility
 
