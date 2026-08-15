@@ -13,7 +13,7 @@ The single end-to-end path from ARCHITECTURE.md, working for real — as the **t
 - [x] Validation gate: emptiness + bounding-box-vs-expected within 2 voxels, before export; voxel-derived meshes are closed by construction (2026-08-15)
 - [x] Export binary STL with canonical-JSON provenance sidecar (SHA-256, byte-compatible with BINGO's `canonical_json`); both content-addressed into `artifacts/` (2026-08-15)
 - [x] Reference test: same-inputs rerun produces byte-identical artifact + sidecar hashes; cross-machine golden pinning deferred until a second machine exists (2026-08-15)
-- [ ] Handoff: submit the artifact to AdvancedStudio via MCP (propose-only) and record the print against the run
+- [x] Handoff: `handoff --run <id>` stages STL + sidecar to a slicing workspace (hash-named), verifies studio-core answers, optionally proposes `print_start` via `/api/propose` (propose-only; human approves in the dashboard) and records the confirmation id; every handoff is a ledger row. Live print pending: studio-core running + slicing (AdvancedStudio has no upload/slicer — surveyed 2026-08-15, gaps filed in wiki) (2026-08-15)
 
 ## Next
 

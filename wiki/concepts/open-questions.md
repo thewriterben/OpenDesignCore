@@ -33,3 +33,4 @@ sources: []
 6. **Thin-thread build/test commands** — CLAUDE.md "Verify with" block still has placeholders; filled when the solution skeleton lands. Plan proposed 2026-08-15, awaiting go-ahead.
 7. **REFUSAL-CATEGORIES.md review** — Benji to review/commit the draft spec in ProjectBINGO.
 8. **ASSET-GRAPH v0.2** — formalize `design_provenance` and `policy_categories` as optional manifest fields (currently extensions).
+9. **AdvancedStudio upstream gaps** (surveyed 2026-08-15, needed for a full closed loop): (a) no file upload and no slicer — studio manages pre-sliced G-code only; an upload or headless-OrcaSlicer endpoint would close the STL→print gap; (b) approvals queue is in-memory with 300 s TTL — no persistence; (c) no jobs/history store and no metadata/provenance field on proposals — nowhere to attach an ODC artifact sha256; (d) no auth on :8770 while /api/action executes directly with confirm:true — worth hardening before anything reaches beyond localhost.
