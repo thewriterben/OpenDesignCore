@@ -1,0 +1,36 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ⟨windows-latest / ubuntu-latest — PicoGK runtime availability decides⟩
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ⟨version PicoGK requires⟩
+
+      # PicoGK runtime is a native install, not a NuGet package.
+      # - name: Install PicoGK runtime
+      #   run: ⟨fetch and install the pinned runtime release⟩
+
+      - name: Build
+        run: dotnet build --configuration Release
+
+      - name: Test
+        run: dotnet test --configuration Release
+
+      # Determinism check: run the example twice at a fixed voxel size, compare bytes.
+      # This catches the class of bug that unit tests never will.
+      # - name: Determinism
+      #   run: |
+      #     ⟨run example⟩ && mv ⟨artifact⟩ a.out
+      #     ⟨run example⟩ && mv ⟨artifact⟩ b.out
+      #     cmp a.out b.out
