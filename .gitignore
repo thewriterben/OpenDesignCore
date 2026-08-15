@@ -31,6 +31,9 @@ venv/
 Thumbs.db
 desktop.ini
 
+# Machine state — the run ledger is append-only local state (ADR-0006), not history.
+ledger.db
+
 # Generated artifacts — outputs are reproducible, so they don't belong in history.
 # Reference and example inputs are exempt below and tracked deliberately.
 /out/

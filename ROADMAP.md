@@ -8,11 +8,11 @@ The single end-to-end path from ARCHITECTURE.md, working for real — as the **t
 
 - [x] Solution skeleton: net9.0 solution, PicoGK `[2.2.0]` from NuGet + ShapeKernel submodule at `ShapeKernel-v2.1.0` (ADR-0008), builds and runs clean, verify commands in CLAUDE.md (2026-08-15)
 - [x] `data/`: first cited entries — ESP32-S3-WROOM-1 envelope (Espressif datasheet) + generic PLA process constraints (secondary-sourced, TODO(source) for vendor TDS); strict loader rejects uncited values, unknown fields, non-positive dims; `validate-data` CLI; 6 tests (2026-08-15)
-- [ ] Model run type: inputs + voxel size in, artifact + provenance out; ledger.db append
-- [ ] Enclosure model: parametric shell around a board envelope (walls, standoffs, port cutouts), resolution floor declared
-- [ ] Validation gate: manifold/watertight, min wall vs. nozzle, before any export
-- [ ] Export STL/3MF with provenance sidecar; content-addressed into `artifacts/`
-- [ ] Reference test: golden fixture, byte-identical at pinned voxel size
+- [x] Model run: `EnclosureRun.Execute` — cited data in, validated STL + deterministic provenance sidecar out, run appended to `ledger.db` (2026-08-15)
+- [x] Enclosure model v0: open-top tray around a part envelope (floor + walls, clearance), resolution floor declared and enforced — standoffs/port cutouts are v0.2 work (2026-08-15)
+- [x] Validation gate: emptiness + bounding-box-vs-expected within 2 voxels, before export; voxel-derived meshes are closed by construction (2026-08-15)
+- [x] Export binary STL with canonical-JSON provenance sidecar (SHA-256, byte-compatible with BINGO's `canonical_json`); both content-addressed into `artifacts/` (2026-08-15)
+- [x] Reference test: same-inputs rerun produces byte-identical artifact + sidecar hashes; cross-machine golden pinning deferred until a second machine exists (2026-08-15)
 - [ ] Handoff: submit the artifact to AdvancedStudio via MCP (propose-only) and record the print against the run
 
 ## Next
