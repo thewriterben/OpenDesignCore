@@ -43,4 +43,4 @@ All quantities are SI internally and carry explicit units at API boundaries. Geo
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Apache-2.0 — see [LICENSE](LICENSE). (ADR-0005)
