@@ -1,0 +1,7 @@
+---
+title: "Source: LANDSCAPE-2026 (BINGO evidence base)"
+type: source-summary
+updated: 2026-08-15
+sources: ["ProjectBINGO/docs/LANDSCAPE-2026.md (Aug 2026)"]
+---
+The authoritative current layer; where the three PDFs conflict with it, it wins. Two unoccupied gaps: manufacturing DePIN (1 of ~650 DePIN projects targets fabrication — 3DOS, beta, unaudited claims) and per-unit design royalties for individual creators (do not exist at scale). Market facts: Xometry Q1 2026 $205M rev (+36% YoY), first sustained profitability, $50M Siemens investment (§2); Fictiv→MISUMI $350M on ~$98M rev; Shapeways Ch.7 July 2024; Fast Radius bankrupt post-SPAC (§3). **Structural disease: prototyping churn** — CAC $5–6K vs $7–9K/yr revenue, ~2.5-yr payback; answer is recurring royalties, standing production contracts, network-native designs (§3). Five commandments (§5): token ≠ business model; blockchain invisible; royalties enforceable only when payment necessarily routes through the enforcer; physical-world oracle problem is first-class; neutrality required. Story Protocol abandoned programmable-IP after $134M (§5). GENIUS Act: stablecoin payouts = lowest-risk rail; fractional machine interests likely securities under Howey (§4). Creator take rates 10–20%; Etsy Aug 2026 original-design rule gutted license-to-print-farm; Prusa: open-hardware desktop printing "dead" (§6). Payout rails free/audited: 0xSplits, Superfluid (§4). This page grounds [[project-bingo]]'s design choices (royalty-at-settlement = the "payment routes through enforcer" rule made structural).
