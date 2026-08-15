@@ -1,0 +1,7 @@
+---
+title: "Source: AdvancedStudio Research-Report (K2 Plus, 2026-07-12)"
+type: source-summary
+updated: 2026-08-15
+sources: ["3DP/AdvancedStudio/docs/Research-Report.md"]
+---
+Load-bearing for scan-to-fit and the thin thread. **Two-API problem:** Moonraker :7125 (documented, auth options) + Creality proprietary push WS :9999 (CFS/chamber/camera, compiled .so wrappers, no LAN auth); bridge normalizes both, reads free, writes gated. **Dimensional compensation lives in the slicer, not Klipper:** mainline Klipper has only skew_correction; use OrcaSlicer xy_hole/contour compensation, filament shrinkage %, elephant-foot comp (~0.2mm @0.4 nozzle). Calibration dependency order: mechanics → rotation_distance → input shaper → pressure advance → flow → dimensional last; never fix part size via rotation_distance. **Shrinkage starting points (cited therein): PLA 0.2–0.3%, PETG 0.3–0.8%, ABS 0.5–1.0%, ASA ~0.6%, PC 0.6–0.8%, PA/PP 1–3% (measure).** **Fit tolerances: FDM ±0.2mm standard, ±0.1mm well-tuned small parts; clearances/side: press ~0.1mm, sliding 0.2–0.3mm, loose 0.4–0.5mm; TPU more; always print pin+hole coupon first.** MZV shaper usually best on CoreXY (EI rounds corners). CFS = passive desiccant box (16 slots, RFID), doesn't dry wet filament. §8 open questions need the physical printer (port wiring, :9999 field names, camera snapshot path, purge volumes). NOTE for [[opendesigncore]]: these tolerance/shrinkage values are wiki knowledge — before any model consumes them they must land in data/ with citations per the grounding rule.
