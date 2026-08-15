@@ -1,0 +1,12 @@
+{
+  "id": "parts/esp32-s3-wroom-1",
+  "name": "ESP32-S3-WROOM-1 module",
+  "description": "Espressif Wi-Fi + BLE MCU module with PCB antenna. Envelope is the module body; the antenna area is included in the 25.5 mm length.",
+  "envelope_mm": { "x": 18.0, "y": 25.5, "z": 3.1 },
+  "tolerance_mm": 0.2,
+  "source": {
+    "citation": "Espressif ESP32-S3-WROOM-1/1U Datasheet, Table 1-1 (size 18.0 x 25.5 x 3.1 mm) and Section 10.1 Module Dimensions (25.5 +/- 0.2)",
+    "url": "https://www.espressif.com/sites/default/files/documentation/esp32-s3-wroom-1_wroom-1u_datasheet_en.pdf",
+    "retrieved": "2026-08-15"
+  }
+}

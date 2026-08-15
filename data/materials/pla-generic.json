@@ -1,0 +1,11 @@
+{
+  "id": "materials/pla-generic",
+  "name": "PLA (generic, FDM)",
+  "description": "Generic PLA process constraints for FDM printing. Values are secondary-sourced starting points, not vendor data for a specific filament.",
+  "shrinkage_pct_range": [0.2, 0.3],
+  "fdm_tolerance_mm": 0.2,
+  "source": {
+    "citation": "3DP/AdvancedStudio/docs/Research-Report.md (2026-07-12): PLA shrinkage starting point 0.2-0.3%; standard FDM dimensional tolerance +/- 0.2 mm. TODO(source): upgrade to a specific filament vendor TDS and primary calibration measurements before any dimensioned fit relies on these values.",
+    "retrieved": "2026-08-15"
+  }
+}

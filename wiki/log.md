@@ -17,3 +17,9 @@ Read BINGO v3 specs directly: SHA-256 hex confirmed, EXTERNAL-ANCHOR is a transp
 
 ## [2026-08-15] build | Thin-thread skeleton green
 .NET SDK 8 installed via winget (SDK 10 was already present); PicoGK's installer era is over — NuGet package since 1.7.7.5, latest 2.3.0, pinned [2.2.0] (ADR-0008 supersedes ADR-0001's consumption mechanics). Two facts learned by building: PicoGK 2.2.0 targets net9.0 (docs' ".NET 8" was 1.x-era), and ShapeKernel v2.1.0 carries self-deprecation warnings — compiled in a non-strict wrapper project so OpenDesignCore's own code stays warnings-as-errors. Solution builds 0/0, runs, dotnet format clean. ShapeKernel submodule at external/LEAP71_ShapeKernel @ 313d676. Next roadmap items: data/ first cited entries, model-run type + ledger.
+
+## [2026-08-15] publish | OpenPartsCore + OpenCircuitCore public on GitHub
+gh authenticated (device flow). ODC PR #1 opened (platform-foundations: 3 commits, ADRs 0005-0008, wiki, thin-thread skeleton). Both new repos published public under thewriterben/ and pushed. Entity pages updated with URLs.
+
+## [2026-08-15] build | data/ layer landed (PR #2 branch)
+PR #1 merged by Benji. data/ store created per ADR-0006: parts/esp32-s3-wroom-1 (18.0x25.5x3.1 mm, Espressif datasheet Table 1-1/§10.1 — DevKitC board dims are unpublished, so the thin thread designs around the WROOM-1 module) and materials/pla-generic (secondary-sourced from AdvancedStudio Research-Report, TODO(source) for vendor TDS). Strict loader: citations mandatory, unknown fields rejected, dims must be positive. validate-data CLI wired; test project live, 6/6 green; build/test/format all clean.
