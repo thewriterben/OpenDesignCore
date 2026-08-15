@@ -1,0 +1,45 @@
+# Build
+/target/
+/build/
+/dist/
+*.o
+*.so
+*.dll
+*.dylib
+*.pyd
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated artifacts — outputs are reproducible, so they don't belong in history.
+# Reference and example inputs are exempt below and tracked deliberately.
+/out/
+/artifacts/
+*.stl
+*.step
+*.stp
+*.3mf
+*.gcode
+*.vtk
+*.vtu
+*.msh
+!tests/reference/**/*.step
+!tests/reference/**/*.stl
+!examples/**/*.step
