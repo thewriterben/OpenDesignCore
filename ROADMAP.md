@@ -7,7 +7,7 @@ The purpose of this file is to give scope questions an answer other than "sure, 
 The single end-to-end path from ARCHITECTURE.md, working for real — as the **thin thread** (ADR-0007): one component from the Oh-Ben-Claw registry → an enclosure generated around its dimensions → validated mesh + provenance record → printed via AdvancedStudio's MCP surface.
 
 - [x] Solution skeleton: net9.0 solution, PicoGK `[2.2.0]` from NuGet + ShapeKernel submodule at `ShapeKernel-v2.1.0` (ADR-0008), builds and runs clean, verify commands in CLAUDE.md (2026-08-15)
-- [ ] `data/`: first cited reference entries (one board's dimensions from registry.json + datasheet; one filament's process constraints); schema validation on load rejects uncited values
+- [x] `data/`: first cited entries — ESP32-S3-WROOM-1 envelope (Espressif datasheet) + generic PLA process constraints (secondary-sourced, TODO(source) for vendor TDS); strict loader rejects uncited values, unknown fields, non-positive dims; `validate-data` CLI; 6 tests (2026-08-15)
 - [ ] Model run type: inputs + voxel size in, artifact + provenance out; ledger.db append
 - [ ] Enclosure model: parametric shell around a board envelope (walls, standoffs, port cutouts), resolution floor declared
 - [ ] Validation gate: manifold/watertight, min wall vs. nozzle, before any export

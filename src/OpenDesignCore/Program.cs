@@ -1,9 +1,25 @@
 using System.Reflection;
+using OpenDesignCore.Data;
 
-// Thin-thread skeleton: prove the pinned stack resolves and compiles.
-// No geometry runs here yet — model runs arrive with the ledger and
-// provenance machinery (ROADMAP "Now"). Referencing PicoGK.Library is
-// deliberate: it fails the build loudly if the package pin is broken.
+// Commands:
+//   (none)              print tool + pinned-stack versions
+//   validate-data [dir] load and validate the reference data store (default: ./data)
+
+if (args is ["validate-data", .. string[] aRest])
+{
+    string strDataDir = aRest is [string strDir, ..] ? strDir : "data";
+    try
+    {
+        DataSet oData = DataStore.LoadAll(strDataDir);
+        Console.WriteLine($"OK: {oData.Parts.Count} part(s), {oData.Materials.Count} material(s), all cited.");
+        return 0;
+    }
+    catch (DataValidationException e)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
 
 string strTool = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
 string strPicoGK = typeof(PicoGK.Library).Assembly.GetName().Version?.ToString() ?? "unknown";
@@ -11,3 +27,6 @@ string strPicoGK = typeof(PicoGK.Library).Assembly.GetName().Version?.ToString()
 Console.WriteLine($"OpenDesignCore {strTool}");
 Console.WriteLine($"PicoGK assembly {strPicoGK} (pinned package 2.2.0, ADR-0008)");
 Console.WriteLine($"ShapeKernel: compiled from submodule tag ShapeKernel-v2.1.0");
+Console.WriteLine();
+Console.WriteLine("usage: OpenDesignCore validate-data [dir]");
+return 0;
