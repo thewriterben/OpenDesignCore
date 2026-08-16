@@ -17,7 +17,8 @@
 - [[advancedstudio]] — K2 Plus studio + MCP; propose-only writes; calibration
 - [[project-bingo]] — distributed-manufacturing protocol; royalties at fabrication
 - [[openpartscore]] — canonical parts registry; schema v0; cited entries; codegen bindings planned
-- [[opencircuitcore]] — electronics engine; atopile → KiCad → verified outputs + BOM
+- [[opencircuitcore]] — electronics engine; KiCad-direct (atopile dropped, ADR-0003); netlist-as-source
+- [[openbuildcore]] — inventory + ideation; quantity-aware exclusive matching; registry-derived suggestions
 
 ## Sources
 - [[bingo-landscape-2026]] — authoritative market layer: churn disease, five commandments, gap matrix (2026-08-15)
