@@ -84,6 +84,54 @@ public sealed class CradleRunTests : IDisposable
     }
 
     [Fact]
+    public void AsciiStl_IsAccepted_AndMatchesTheBinaryEquivalent()
+    {
+        // KiCad's `pcb export stl` emits ASCII, which PicoGK 2.2.0 refuses
+        // with NotImplementedException. The import boundary parses it, so the
+        // OpenCircuitCore -> OpenDesignCore co-design bridge works on the
+        // files KiCad actually produces.
+        string strBinary = StrMakeScanStl();
+        string strAscii = Path.Combine(_strTempDir, "scan-ascii.stl");
+        WriteAsciiStlFrom(strBinary, strAscii);
+
+        CradleRunResult oFromAscii = OExecute(strAscii);
+        CradleRunResult oFromBinary = OExecute(strBinary);
+
+        // Same geometry via two encodings -> same cradle.
+        Assert.Equal(oFromBinary.ArtifactSha256, oFromAscii.ArtifactSha256);
+        // ...but the recorded scan hashes differ: provenance tracks the bytes
+        // that actually arrived, not an idea of them.
+        Assert.NotEqual(oFromBinary.ScanSha256, oFromAscii.ScanSha256);
+    }
+
+    /// <summary>Transcode a binary STL to ASCII, the flavour KiCad emits.</summary>
+    private static void WriteAsciiStlFrom(string strBinaryPath, string strAsciiPath)
+    {
+        byte[] ab = File.ReadAllBytes(strBinaryPath);
+        uint nTriangles = BitConverter.ToUInt32(ab, 80);
+        System.Text.StringBuilder oSb = new();
+        oSb.AppendLine("solid odc-test");
+        for (uint i = 0; i < nTriangles; i++)
+        {
+            int nBase = 84 + (int)i * 50 + 12; // skip the normal
+            oSb.AppendLine("  facet normal 0 0 0");
+            oSb.AppendLine("    outer loop");
+            for (int v = 0; v < 3; v++)
+            {
+                float fX = BitConverter.ToSingle(ab, nBase + v * 12);
+                float fY = BitConverter.ToSingle(ab, nBase + v * 12 + 4);
+                float fZ = BitConverter.ToSingle(ab, nBase + v * 12 + 8);
+                oSb.AppendLine(System.Globalization.CultureInfo.InvariantCulture,
+                    $"      vertex {fX:R} {fY:R} {fZ:R}");
+            }
+            oSb.AppendLine("    endloop");
+            oSb.AppendLine("  endfacet");
+        }
+        oSb.AppendLine("endsolid odc-test");
+        File.WriteAllText(strAsciiPath, oSb.ToString());
+    }
+
+    [Fact]
     public void AutoUnits_AreRefused()
     {
         string strScan = StrMakeScanStl();

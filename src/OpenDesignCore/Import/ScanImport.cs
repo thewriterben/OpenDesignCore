@@ -51,7 +51,9 @@ public static class ScanImport
         byte[] abScan = File.ReadAllBytes(strStlPath);
         string strScanHash = ArtifactStore.StrStore(strArtifactsDir, abScan, ".stl");
 
-        Mesh mshLoaded = Mesh.mshFromStlFile(strStlPath, eUnits, fPostScale, null, oLib);
+        Mesh mshLoaded = bIsAsciiStl(abScan)
+            ? mshFromAsciiStl(oLib, abScan, eUnits, fPostScale)
+            : Mesh.mshFromStlFile(strStlPath, eUnits, fPostScale, null, oLib);
 
         if (mshLoaded.nTriangleCount() == 0)
             throw new ImportValidationException(
@@ -79,4 +81,71 @@ public static class ScanImport
             SizeMm = vecSize,
         };
     }
+
+    /// <summary>
+    /// A binary STL is an 80-byte header then a uint32 triangle count; the
+    /// file size is exactly 84 + 50*n. ASCII starts with "solid" — but so do
+    /// some binary files, so the size arithmetic is what decides.
+    /// </summary>
+    private static bool bIsAsciiStl(byte[] abData)
+    {
+        if (abData.Length < 84)
+            return true;
+        uint nTriangles = BitConverter.ToUInt32(abData, 80);
+        return abData.Length != 84L + 50L * nTriangles;
+    }
+
+    /// <summary>
+    /// PicoGK 2.2.0 throws NotImplementedException for ASCII STL, and KiCad
+    /// emits exactly that (`kicad-cli pcb export stl` has no binary option).
+    /// This is file parsing, not geometry — the kernel keeps owning geometry.
+    /// </summary>
+    private static Mesh mshFromAsciiStl(Library oLib, byte[] abData, Mesh.EStlUnit eUnits, float fPostScale)
+    {
+        float fScale = fUnitScaleMm(eUnits) * fPostScale;
+        Mesh msh = new(oLib);
+        List<Vector3> aVertices = new(3);
+        int nTriangles = 0;
+
+        foreach (string strRawLine in System.Text.Encoding.ASCII.GetString(abData).Split('\n'))
+        {
+            string strLine = strRawLine.Trim();
+            if (!strLine.StartsWith("vertex", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            string[] aParts = strLine.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (aParts.Length < 4
+                || !float.TryParse(aParts[1], System.Globalization.CultureInfo.InvariantCulture, out float fX)
+                || !float.TryParse(aParts[2], System.Globalization.CultureInfo.InvariantCulture, out float fY)
+                || !float.TryParse(aParts[3], System.Globalization.CultureInfo.InvariantCulture, out float fZ))
+            {
+                throw new ImportValidationException($"Malformed ASCII STL vertex line: '{strLine}'");
+            }
+
+            aVertices.Add(new Vector3(fX, fY, fZ) * fScale);
+            if (aVertices.Count == 3)
+            {
+                msh.nAddTriangle(aVertices[0], aVertices[1], aVertices[2]);
+                aVertices.Clear();
+                nTriangles++;
+            }
+        }
+
+        if (aVertices.Count != 0)
+            throw new ImportValidationException("ASCII STL ended mid-triangle — file is truncated.");
+        if (nTriangles == 0)
+            throw new ImportValidationException("ASCII STL contained no triangles.");
+
+        return msh;
+    }
+
+    private static float fUnitScaleMm(Mesh.EStlUnit eUnits) => eUnits switch
+    {
+        Mesh.EStlUnit.MM => 1f,
+        Mesh.EStlUnit.CM => 10f,
+        Mesh.EStlUnit.M => 1000f,
+        Mesh.EStlUnit.IN => 25.4f,
+        Mesh.EStlUnit.FT => 304.8f,
+        _ => throw new ImportValidationException($"Unsupported unit {eUnits}."),
+    };
 }
