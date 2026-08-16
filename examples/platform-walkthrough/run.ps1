@@ -63,12 +63,32 @@ Write-Host $runOutput
 $runId = ([regex]::Match($runOutput, 'run (\d+): PASS')).Groups[1].Value
 if (-not $runId) { Pop-Location; throw "cradle run failed or run id unreadable" }
 
-# 5. Staged for fabrication, provenance intact.
-Step 5 "OpenDesignCore: stage for fabrication"
+# 5. Can anything actually make it?  (OpenBuildCore reads ODC's provenance)
+#
+# The peers meet at the provenance record, not at an API: OpenBuildCore reads
+# artifact.bbox_mm and volume_cubic_mm straight out of the sidecar (ODC
+# ADR-0010), so the verdict is about the geometry that will be printed and it
+# names the artifact hash it judged.
+#
+# This step is allowed to report that nothing can print it. The shipped K2 Plus
+# record carries a TODO(source) placeholder envelope, so it will refuse until
+# someone measures the bed -- that is the discipline working, not a failure.
+Step 5 "OpenBuildCore: can any of my machines make this?"
+$provHash = ([regex]::Match($runOutput, 'provenance sha256:([0-9a-f]{64})')).Groups[1].Value
+if (-not $provHash) { Pop-Location; throw "provenance hash unreadable from run output" }
+$sidecar = Join-Path $design "artifacts\$($provHash.Substring(0,2))\$provHash.provenance.json"
+Pop-Location
+Push-Location $build
+python scripts\machines.py can-print --from-sidecar $sidecar --material petg
+Pop-Location
+Push-Location $design
+
+# 6. Staged for fabrication, provenance intact.
+Step 6 "OpenDesignCore: stage for fabrication"
 dotnet run --project src/OpenDesignCore -c Release --no-build -- `
     handoff --run $runId --stage $StageDir --offline
 if ($LASTEXITCODE -ne 0) { Pop-Location; throw "handoff failed" }
 Pop-Location
 
-Write-Host "`nWalkthrough complete: inventory -> electronics -> board -> enclosure -> staged." -ForegroundColor Green
+Write-Host "`nWalkthrough complete: inventory -> electronics -> board -> enclosure -> machine check -> staged." -ForegroundColor Green
 Write-Host "Every artifact is content-addressed and its run is in ledger.db."
