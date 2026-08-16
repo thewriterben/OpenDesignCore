@@ -26,7 +26,7 @@ public sealed class StudioHandoffTests : IDisposable
     private long NSeedRun()
     {
         byte[] abStl = Encoding.ASCII.GetBytes("fake-stl-bytes");
-        byte[] abSidecar = Encoding.ASCII.GetBytes("""{"schema":"odc/provenance/0.1"}""");
+        byte[] abSidecar = Encoding.ASCII.GetBytes("""{"schema":"odc/provenance/0.2"}""");
         string strArtifact = ArtifactStore.StrStore(StrArtifactsDir, abStl, ".stl");
         string strSidecar = ArtifactStore.StrStore(StrArtifactsDir, abSidecar, ".provenance.json");
 

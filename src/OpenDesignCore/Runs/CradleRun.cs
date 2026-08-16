@@ -38,6 +38,7 @@ public static class CradleRun
         byte[] abStl;
         string strScanHash;
         int nScanTriangles;
+        ArtifactGeometry oGeometry;
 
         using (Library oLib = new(fVoxelSizeMm))
         {
@@ -60,6 +61,8 @@ public static class CradleRun
             if (mshCradle.nTriangleCount() == 0)
                 throw new GeometryValidationException("Meshing produced zero triangles.");
 
+            oGeometry = ArtifactGeometry.OMeasure(mshCradle, voxCradle);
+
             string strTmp = Path.Combine(Path.GetTempPath(), $"odc-{Guid.NewGuid():N}.stl");
             try
             {
@@ -77,7 +80,7 @@ public static class CradleRun
 
         Dictionary<string, object?> oSidecar = new()
         {
-            ["schema"] = "odc/provenance/0.1",
+            ["schema"] = "odc/provenance/0.2",
             ["model"] = CradleModel.StrModelId,
             ["voxel_size_mm"] = StrF2(fVoxelSizeMm),
             ["inputs"] = new Dictionary<string, object?>
@@ -97,11 +100,7 @@ public static class CradleRun
                 ["shapekernel"] = EnclosureRun.StrShapeKernelTag,
             },
             ["commit"] = strCommit,
-            ["artifact"] = new Dictionary<string, object?>
-            {
-                ["media_type"] = "model/stl",
-                ["sha256"] = strArtifactHash,
-            },
+            ["artifact"] = oGeometry.OArtifactBlock(strArtifactHash),
         };
 
         byte[] abSidecar = CanonicalJson.Serialize(oSidecar);

@@ -51,6 +51,7 @@ public static class EnclosureRun
         };
 
         byte[] abStl;
+        ArtifactGeometry oGeometry;
         using (Library oLib = new(fVoxelSizeMm))
         {
             Voxels voxShell = EnclosureShellModel.VoxBuild(oLib, oParams, fVoxelSizeMm);
@@ -59,6 +60,8 @@ public static class EnclosureRun
             Mesh mshShell = voxShell.mshAsMesh();
             if (mshShell.nTriangleCount() == 0)
                 throw new GeometryValidationException("Meshing produced zero triangles.");
+
+            oGeometry = ArtifactGeometry.OMeasure(mshShell, voxShell);
 
             string strTmp = Path.Combine(Path.GetTempPath(), $"odc-{Guid.NewGuid():N}.stl");
             try
@@ -77,7 +80,7 @@ public static class EnclosureRun
 
         Dictionary<string, object?> oSidecar = new()
         {
-            ["schema"] = "odc/provenance/0.1",
+            ["schema"] = "odc/provenance/0.2",
             ["model"] = EnclosureShellModel.StrModelId,
             ["voxel_size_mm"] = StrMm(fVoxelSizeMm),
             ["inputs"] = new Dictionary<string, object?>
@@ -100,11 +103,7 @@ public static class EnclosureRun
                 ["shapekernel"] = StrShapeKernelTag,
             },
             ["commit"] = strCommit,
-            ["artifact"] = new Dictionary<string, object?>
-            {
-                ["media_type"] = "model/stl",
-                ["sha256"] = strArtifactHash,
-            },
+            ["artifact"] = oGeometry.OArtifactBlock(strArtifactHash),
         };
 
         byte[] abSidecar = CanonicalJson.Serialize(oSidecar);
