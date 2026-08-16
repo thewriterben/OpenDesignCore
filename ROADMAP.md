@@ -23,6 +23,8 @@ Only after Now runs end to end for someone other than me.
 - [x] MCP surface for ODC itself: stdio server (`opendesigncore-mcp`), 7 tools — reads and deterministic runs execute, `handoff_to_studio` proposes only and no approval tool exists (ADR-0009); resource guards refuse pathological voxel sizes, volumes, and path escapes (2026-08-15)
 - [ ] Registry schema contract with Oh-Ben-Claw (consume, don't fork; drift is upstream's documented problem to fix once)
 
+- [x] Board→enclosure co-design proven end to end: `kicad-cli pcb export stl` → ODC mesh boundary → cradle fitted to real board geometry (run 3, 2026-08-15)
+
 ## Not yet
 
 Good ideas that are not this quarter's problem. Adding to this list is a valid outcome of a discussion.
