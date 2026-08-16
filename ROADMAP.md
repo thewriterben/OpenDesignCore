@@ -23,21 +23,25 @@ Only after Now runs end to end for someone other than me.
 - [x] MCP surface for ODC itself: stdio server (`opendesigncore-mcp`), 7 tools — reads and deterministic runs execute, `handoff_to_studio` proposes only and no approval tool exists (ADR-0009); resource guards refuse pathological voxel sizes, volumes, and path escapes (2026-08-15)
 - [ ] Registry schema contract with Oh-Ben-Claw (consume, don't fork; drift is upstream's documented problem to fix once)
 
+- [x] Platform walkthrough: `examples/platform-walkthrough` runs all four peers in one chain — inventory → electronics → board → enclosure → staged; every gate live (2026-08-15)
 - [x] Board→enclosure co-design proven end to end: `kicad-cli pcb export stl` → ODC mesh boundary → cradle fitted to real board geometry (run 3, 2026-08-15)
 
 ## Not yet
 
 Good ideas that are not this quarter's problem. Adding to this list is a valid outcome of a discussion.
 
-- Electronics engine (schematic/PCB/BOM/sourcing) — peer system, kernel choice needs its own ADR (KiCad presumptive); see `wiki/concepts/use-case-exploration.md` §2
-- Inventory-driven ideation — generalization of Oh-Ben-Claw's deployment planner, lives with the planner
-- BINGO integration: ODC provenance records referenced from fabrication evidence
+- BINGO integration: ODC provenance records referenced from fabrication evidence (contract drafted, see `wiki/concepts/bingo-odc-provenance-contract.md`)
 - Scan-compare verification loop (print → scan → dimensional report → profile compensation)
+- Cross-machine golden fixtures — rerun byte-identity is proven on one machine only
+
+Shipped since this list was written, and now peers rather than plans:
+electronics (OpenCircuitCore), parts registry (OpenPartsCore), inventory and
+ideation (OpenBuildCore).
 
 ## Open questions
 
-- **Electronics kernel ADR** — KiCad vs. code-as-schematic (skidl/atopile-style); owned by the electronics peer, tracked here because ODC co-design contracts depend on it.
-- **Licence** — ADR-0005 still proposed.
+- **Registry contract with Oh-Ben-Claw** — OpenPartsCore ingests OBC's registry today; OBC consuming the generated Rust binding back is the unfinished half.
+- **Live sourcing** — the BOM and shopping list name parts by id; pricing and stock need distributor APIs and credentials.
 
 ## Not ever
 
