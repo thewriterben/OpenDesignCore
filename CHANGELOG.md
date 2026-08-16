@@ -5,6 +5,10 @@ Format: [Keep a Changelog](https://keepachangelog.com). Versioning: [SemVer](htt
 ## [Unreleased]
 
 ### Added
+- **Provenance records the artifact's own dimensions** (ADR-0010, schema `odc/provenance/0.1` → `0.2`). The `artifact` block gains `bbox_mm` and `volume_cubic_mm`. The sidecar previously described only what went *in* — part envelope, scan hash, clearance, wall — so the obvious question a fabricator asks of a design, *does this fit the build volume*, could not be answered from the record that travels with the artifact. Every downstream peer would have needed a mesh parser to answer a question about dimensions. Found while wiring OpenBuildCore's machine capability check to consume ODC output, but it is a gap in the record on its own terms.
+- Extents come from the mesh bounding box at float precision and are **not** bounded by voxel size; volume comes from the voxel field and **is**. The two are kept apart deliberately — this is the same distinction the scan-compare significance bug got backwards, now written down where the next reader will find it. Verified on a real run: an 18.00 × 25.50 × 3.10 mm part envelope yields a 23.40 × 30.90 × 5.80 mm artifact, exactly envelope + 2(clearance + wall) and wall + z + clearance.
+- Rerun byte-identity survives the addition, checked rather than assumed: `CalculateProperties` is deterministic on the same voxel field. 43 tests (up from 41); the new bbox test recomputes expected dimensions from the recorded inputs rather than from the model, so it checks the record against geometry instead of against the code that wrote it.
+
 - Repository seeded: docs skeleton, contribution rules, CI stub, reference-test scaffold.
 - `wiki/`: LLM Wiki instantiated (ADR-0006 accepted) — schema, index, log, 8 entity pages, ecosystem map, use-case exploration, open questions.
 - ADR-0007: OpenDesignCore is an engine among peers; the Computational Engineering platform is the MCP-composed ecosystem.

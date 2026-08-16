@@ -180,3 +180,33 @@ The failure mode this is avoiding is well documented in the LLM Wiki thread itse
 - **Resource guards** (`McpGuard`), because a caller that can name a voxel size can exhaust the machine: voxel size clamped to [0.05 mm, 5 mm] by *refusal*, a 2×10⁹ voxel budget on implied volume, and path arguments confined to the working root. Refusals, never silent clamping — the same rule as the geometry layer.
 
 **Consequences.** Agents can drive design end to end and stop exactly where a human must decide. The CLI remains the unguarded path for deliberate local work (finer voxels, larger volumes) — the guards are about untrusted callers, not about capability. A second inbound surface now needs keeping in step with the CLI; both call the same executors, so drift means duplicated argument parsing, not duplicated behaviour. If a future peer needs to *approve* fabrication programmatically, that is a new ADR and a different threat model, not a quiet addition here.
+
+---
+
+## ADR-0010 — Provenance records the artifact's own dimensions (schema 0.2)
+
+**Date:** 2026-08-16
+**Status:** accepted
+
+**Context.** The sidecar written since ADR-0003 describes what went *into* a run — the part envelope, the scan hash, the clearance and wall — plus versions, commit, and the artifact's media type and hash. It never recorded how big the artifact itself is.
+
+That gap surfaced while wiring OpenBuildCore's machine capability check (its ADR-0005) to consume ODC output. The obvious question a fabricator asks of a design — *does this fit the build volume* — could not be answered from the provenance record. A consumer had to fetch the STL and re-parse it, which defeats the purpose of a record that travels with the artifact, and forces every downstream peer to carry a mesh parser to answer a question about dimensions.
+
+An artifact record that omits the artifact's dimensions is incomplete on its own terms, independent of who wanted to read it.
+
+**Decision.** The `artifact` block gains `bbox_mm` (`x`/`y`/`z`) and `volume_cubic_mm`. Schema string bumps `odc/provenance/0.1` → `0.2`.
+
+The two figures are measured differently and are deliberately not interchangeable:
+
+- **Extents** come from the mesh's axis-aligned bounding box at float precision. They never pass through the voxel grid, so voxel size does not bound them. This is the same distinction the scan-compare significance bug got backwards, recorded here so the next reader does not have to rediscover it.
+- **Volume** comes from the voxel field and *is* bounded by the voxel size, which the sidecar already records alongside.
+
+Extents are axis-aligned in the artifact's own frame. Nothing here presumes an orientation; a consumer deciding whether the part fits a machine may rotate it, and that is the consumer's business.
+
+Lengths are unit-keyed fixed-precision strings, like every other length in the record — floats stay banned from canonical JSON because their text form is not stable across languages and this record is hash-compared against Python.
+
+**Consequences.** Every sidecar hash changes, and so does the schema string that consumers key on. The change is additive — a 0.1 reader encountering a 0.2 record finds every field it knew still present — but the version bump is not cosmetic: a consumer that *requires* `bbox_mm` must be able to distinguish a record that has it from one that does not, and refuse rather than guess. OpenBuildCore's `can-print --from-sidecar` does exactly that, and says which schema it found.
+
+Byte-identity across reruns survives: `CalculateProperties` is deterministic on the same voxel field, verified by the existing rerun test rather than assumed. Cross-machine identity remains unproven, as it was before.
+
+Artifacts produced under 0.1 are not rewritten. They are immutable and content-addressed; re-running the same inputs produces a 0.2 record, and the old one stays valid as a description of what it described.
