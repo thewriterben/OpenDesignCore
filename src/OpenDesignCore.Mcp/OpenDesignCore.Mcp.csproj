@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Version>0.1.0</Version>
+    <Deterministic>true</Deterministic>
+    <AssemblyName>opendesigncore-mcp</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelContextProtocol" Version="[2.2.0]" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="[9.0.9]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\OpenDesignCore\OpenDesignCore.csproj" />
+  </ItemGroup>
+
+</Project>
