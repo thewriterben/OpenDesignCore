@@ -19,7 +19,7 @@ The single end-to-end path from ARCHITECTURE.md, working for real — as the **t
 
 Only after Now runs end to end for someone other than me.
 
-- [ ] Mesh→SDF import boundary (scan-to-fit): validation, scale as a provenance field — capture pipelines stay out of scope (ADR-0007)
+- [x] Mesh→SDF import boundary (scan-to-fit): `run-cradle` — units declared never inferred (AUTO refused), raw scan content-addressed and hash-chained into the sidecar, foam-insert cradle model (`scan-cradle/0.1`) with floor `min(wall/2, clearance)`; v0 requires watertight meshes, stated loudly (2026-08-15)
 - [ ] MCP surface for ODC itself, so peers (planner, BINGO orchestration) can invoke model runs
 - [ ] Registry schema contract with Oh-Ben-Claw (consume, don't fork; drift is upstream's documented problem to fix once)
 
