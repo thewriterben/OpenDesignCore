@@ -18,7 +18,7 @@
 - [[project-bingo]] — distributed-manufacturing protocol; royalties at fabrication
 - [[openpartscore]] — canonical parts registry; schema v0; cited entries; codegen bindings planned
 - [[opencircuitcore]] — electronics engine; KiCad-direct (atopile dropped, ADR-0003); netlist-as-source
-- [[openbuildcore]] — inventory + ideation; quantity-aware exclusive matching; registry-derived suggestions
+- [[openbuildcore]] — inventory + ideation + machines; quantity-aware exclusive matching; print time only from a measured throughput (ADR-0005)
 
 ## Sources
 - [[bingo-landscape-2026]] — authoritative market layer: churn disease, five commandments, gap matrix (2026-08-15)

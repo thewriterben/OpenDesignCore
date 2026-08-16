@@ -87,3 +87,130 @@ what can I build → what am I missing → what do I buy. Gaps aggregate across 
 The decision worth recording (its ADR-0004): a shopping list needs a quantity per line and there are two defensible answers — sequential builds reuse parts so quantity is the MAX shortfall; simultaneous builds SUM. On the seed catalogue that's 2 vs 3 LoRa radios. Picking one silently is how a list under-orders, and under-ordering is found at the bench after parts arrive. So sequential is the default, and the basis is printed in human output and carried as a `basis` field in --json — a consumer never infers it. Added a fourth project (lora-relay) specifically so the difference is visible in shipped data, not only in a unit test. 12 tests.
 
 Same principle as the rest of the platform: an assumption that changes a number gets stated, not defaulted quietly.
+
+## [2026-08-15] verify | Platform walkthrough — ADR-0007's composition claim, tested
+examples/platform-walkthrough runs all four peers in one chain by shelling out to each CLI (interfaces, not internals — a break here is a break a user hits). Ran clean first try: env-monitor buildable → ERC 0 → DRC 0 → run 5 fitted an enclosure to the real board → handoff 2 staged it. This is the definition-of-done's end-to-end example, and the first evidence that the four-peer split actually composes rather than merely being drawn on a diagram.
+
+What the chain guarantees, now demonstrable: every part fact cited (BOM opc_id → registry entries with sources); provenance composes across repos (enclosure sidecar records scan_sha256 = the board STL's hash, so geometry lineage crosses a repo boundary by content hash); every seam fails loudly rather than degrading.
+
+Also corrected a ROADMAP that had gone stale within the day — electronics, registry and inventory were still under "Not yet" after shipping as peers, and two settled ADRs were still listed as open questions. A roadmap that lies is worse than none.
+
+## [2026-08-15] build | Schematic drives the board (OpenCircuitCore PR #3)
+boards/sensor-breakout closes the gap reference-esp32s3 named in its own README: there, schematic and board were generated independently with nothing stopping them disagreeing. Now parts come from the shared PARTS description and pads are bound to nets *parsed from the schematic's exported netlist* (NETINFO_ITEM + pad.SetNet — both verified present in pcbnew 10.0.5 before designing around them).
+
+Result: 0 DRC violations, 10 unconnected items. That combination is the CORRECT outcome, not a failure — real nets, unrouted ratsnest, the state a router or human takes over from. Verified by reloading the saved board rather than trusting the write: U2 pads read GND/+3V3/SDA/SCL exactly as the schematic specifies (CSB high = I2C, SDO low = 0x76).
+
+Not routed, and deliberately so: KiCad ships no autorouter and writing one isn't this project's business.
+
+Second stale-roadmap correction of the session, this time in OpenCircuitCore — and I kept "provenance record emitted per build" explicitly unchecked, because ODC does that and OpenCircuitCore still doesn't. Marking it done would have been the easy lie.
+
+## [2026-08-15] build | OpenCircuitCore emits provenance (PR #3, second commit)
+Closed the invariant I'd deliberately left unchecked one commit earlier: ODC records provenance for every artifact, OpenCircuitCore didn't. emit_provenance.py now records design sources + hashes, the upstream netlist (a board whose nets came from another directory's schematic must say so, else its provenance omits what determined its connectivity), outputs, ERC/DRC results, KiCad version, commit. Canonicalisation byte-identical to BINGO's kernel and ODC's C# port, so hashes are comparable across all three; floats refused for the same reason.
+
+Two bugs found by running it rather than trusting it: KiCad writes "Found 0 DRC violations" in the report file but "Found 0 violations" on the console, and ERC reports use an entirely different shape ("** ERC messages: 0  Errors 0  Warnings 0"). Assuming symmetry between two outputs of the same tool was the error. Worse, v1's response was to record -1 and continue — printing FAIL while exiting 0. It now refuses to emit a record claiming a check happened whose result it couldn't read. A provenance record that says "passed" because it couldn't parse the answer is worse than no record at all.
+
+Pattern worth keeping: leaving an item explicitly unchecked in a roadmap made the gap visible enough to close on the next pass. Ticking it would have hidden it permanently.
+
+## [2026-08-15] build | Cited fab profile + gerbers (OpenCircuitCore, third commit on the branch)
+Last unchecked "Now" item. fab-profiles/jlcpcb-2layer-1oz.json carries JLCPCB's published capability — fetched from the vendor page, cited with section names and retrieval date. apply_fab_profile.py refuses to apply a profile lacking a citation, because manufacturing tolerances are exactly the physical data this project promised never to invent. sensor-breakout: 0 violations against real limits. Gerbers + drill exported (26 files), all hashed into provenance.
+
+The judgement call worth recording: four capabilities are listed as not_encoded rather than approximated. The via annular minimum is the sharp one — the vendor states a PTH annular ring (>=0.20mm) but no via-specific figure, and I could have derived one from "via diameter should be 0.1mm larger than hole size". It would have looked authoritative and been my invention. Marked TODO(source) instead. The others need a .kicad_dru custom rule file (KiCad has no board-wide setting), now roadmapped rather than silently dropped.
+
+DRC now asks the question that matters: not "is this self-consistent" but "will this house build it". Board is still unrouted — gerbers are structurally valid and manufacturable-as-drawn, but it does nothing until routed.
+
+## [2026-08-15] decision | REFUSAL-CATEGORIES merged
+Benji reviewed and merged the legality-gating taxonomy into ProjectBINGO. PD-5 now has a real spec in the repo that owns it. Open remainder: per-jurisdiction mappings (TODO(source) throughout — nobody should generate legal claims), and freezing the category-list hash into JOB_ACCEPTED next to the acceptance-checklist hash so a dispute resolves against the list version in force at order time.
+
+## [2026-08-15] build | Rust binding (OpenPartsCore PR #3) — item 1 of Benji's list
+Crate openpartscore: whole registry as const data, zero dependencies (a consumer shouldn't take serde to read static reference data). capabilities and usb_ids hoisted and typed because they're what consumers dispatch on; everything else stays as attributes_json so a niche field never forces a binding schema change.
+
+The design point worth keeping: candidates_for_usb returns an Iterator, not an Option. ADR-0004's many-to-many mapping is thereby enforced by the type signature rather than by a doc comment nobody reads — a signature returning one answer would quietly relearn the exact bug the ingest was written to fix. 7 cargo tests pin it (0x303a:0x1001 → >5 candidates; esp32-s3 → ≥3 identities; every entry cited).
+
+Honest scope: this makes consumption possible, not actual. OBC switching is upstream's call, now a separate unchecked roadmap item alongside reporting the duplicate-name ambiguity.
+
+## [2026-08-15] build | OpenBuildCore MCP surface (PR #2) — item 2, first half
+Five read tools (inventory, list_projects, what_can_i_build, gaps, shopping_list), all executing per ADR-0009 since nothing here writes to a store or reaches a fabricator. Deliberately NO inventory-editing tool: inventory is the user's record of physical objects, and an agent quietly changing it would poison every downstream answer with the error only surfacing at the bench.
+
+Verified connected against a real client (claude mcp add/list), applying the lesson from ODC PR #7 where DI-level testing passed while transport was unproven.
+
+Two findings. (1) Naming the package `mcp` shadows the SDK on import — walked into it, caught it, renamed to obc_mcp. (2) **The MCP Python SDK is at 2.0.0 and `mcp.server.fastmcp` is gone**, replaced by `MCPServer`. AdvancedStudio's studio-mcp imports the old path and pins `mcp>=1.2` with no upper bound, so it does not start on this machine — confirmed by running the import. Filed as open question #9; Benji's repo, Benji's call, and the two servers here are worked examples of the port.
+
+Same pattern as atopile and the STEP/STL bridge: the ecosystem's written claims aged faster than its code.
+
+## [2026-08-15] build | OpenCircuitCore MCP surface (PR #5) — item 2 complete
+All four peers now have MCP surfaces; all three Python/dotnet servers verified Connected from a neutral working directory.
+
+OpenCircuitCore ADR-0005 is the interesting part: ADR-0009's store-boundary test does NOT transfer here, and saying why matters more than applying it by rote. ODC's writes are content-addressed artifacts — rerunning yields the identical file, so executing is safe. OpenCircuitCore's writes are design source files a human also edits. Concrete failure: you route a board for an evening, an agent calls regenerate for an unrelated reason, routing gone, no undo, git only helps if committed. Proposing doesn't rescue it either — ODC can propose to AdvancedStudio because the studio owns an approval queue; this repo has nothing to propose TO, and inventing an approval mechanism to justify an unrequested tool is the wrong order. So regeneration/fab-export/profile-application are simply absent. Revisit hook recorded: a git-cleanliness check could distinguish "regenerate untouched file" from "regenerate over human work".
+
+Registration bug worth remembering: `python -m pkg.server` resolves against the CLIENT's working directory. Registered that way, openbuildcore connected from its own repo and showed "Failed to connect" from anywhere else. Both re-registered with absolute script paths. A cwd-dependent MCP registration is a latent break.
+
+## [2026-08-15] build | Custom DRC rules + ADR-0006 liveness requirement (OpenCircuitCore PR #6) — item 3
+The rule content is minor; the discipline is the point. Custom .kicad_dru rules FAIL QUIETLY: a valid constraint whose condition never matches, or whose constraint KiCad doesn't evaluate for that object type, parses fine and reports nothing. DRC then says "0 violations", which reads as coverage and is its opposite — an unchecked design that looks checked, with the prompt to check manually now removed.
+
+ADR-0006: a rule ships only once proven to FIRE. Set threshold absurdly, confirm DRC reports a violation naming the rule, restore, record the evidence beside the rule.
+
+It caught a false positive on first use. npth_min_hole (JLCPCB 0.50mm min non-plated hole) fired correctly against both mounting holes and no SMD pads. The NPTH annular-ring rule did not: annular_width with the same condition at min 9.0mm, against holes with a 0.00mm annulus (pad size 2.2mm == drill 2.2mm), reported nothing — KiCad 10.0.5 evidently doesn't evaluate annular_width for NPTH pads. That rule LOOKED obviously right; without the check it would have shipped as fake coverage.
+
+Also: .kicad_dru is now a provenance design source. A record asserting "DRC passed" without the rule file omits what passing was measured against.
+
+This is the same failure family as the emit_provenance regex (-1 recorded as a pass) and studio-mcp's stale import: things that appear to work because nothing forced them to prove they did.
+
+## [2026-08-15] build | OpenBuildCore schemas + validator + catalogue (PR #3) — item 4
+JSON Schemas for project/inventory docs, and a validator whose real job is REFERENTIAL integrity, not shape. Two failure modes are invisible in the advisor because they present as ordinary gaps: a part_id no registry entry provides (reads as a permanent shortfall, sends someone shopping for a nonexistent name), and a capability no part provides (unbuildable by construction, empty suggestion list). Neither errors today; both are caught at validation. Nine of 21 tests are negative cases proving the validator fires — ADR-0006's lesson applied to a second repo.
+
+Catalogue 4→8. Pulled the registry's actual capability vocabulary first rather than inventing tokens. Two projects deliberately shaped to test the matcher instead of flattering it: soil-moisture-nodes needs analog_read×3 and battery×3 (owning one board satisfies none of it — the presence-only failure), bird-feeder-cam separates nn_accel from camera_capture (host inference flattens a battery in a day).
+
+Example inventory now builds 3 of 8 — a realistic ratio, and it makes the leverage sort visible for the first time: "1x capability:wifi unlocks bird-feeder-cam, desk-air-quality, soil-moisture-nodes". That property existed at four projects but had nothing to demonstrate it.
+
+## [2026-08-15] build | Scan-compare (PR #10) — item 5, list complete
+design → print → scan → measured deviation, recorded and hash-chained. Per-axis deviation plus volume; axis SPREAD is what makes it actionable (near zero = one scale factor valid; wide = compensate per axis, not by an average that's wrong everywhere).
+
+The demo caught a bug in my own reasoning, which is the part worth keeping. v1 judged significance against VOXEL SIZE. Run on real board geometry it recovered an exact −0.35% on all three axes with zero spread — then declared it unresolvable. Wrong because bounding extents come from mesh vertices at float precision and never pass through the voxel grid; voxel size bounds the VOLUME figures only. I'd applied a caveat to the wrong measurement.
+
+The real floor is the scanner's accuracy, which the code cannot know — so --scan-accuracy-mm follows the units rule: declared, never inferred. Undeclared = significance UNKNOWN, not false, and the run does not count as passed. Caveats (calibration bounds absolute scale; extents are orientation-sensitive and a rotated scan is undetectably meaningless; bulk measurement not surface deviation) travel inside the record, with a test asserting they're present.
+
+41/41. Validated against synthetic prints only — a real print and scan needs Benji's printer.
+
+Pattern, fourth instance today: the thing that exposed the error was running it on real data, not reasoning about it. Voxel-size-as-floor looked obviously right.
+
+## [2026-08-15] security | AdvancedStudio write surface hardened
+The most consequential item left: :8770 bound to 0.0.0.0 with /api/action able to start, pause and cancel prints, drive heaters and run macros, gated only by confirm:true in the body. Anything on the LAN could move the printer.
+
+Two independent protections, because either alone fails differently: loopback bind by default (a service on 127.0.0.1 is not reachable from the LAN at all — strongest and least intrusive), and an optional shared token on the four state-changing endpoints for when exposure is deliberate. Reads stay open; they cannot move the printer and the dashboard polls them constantly. Constant-time comparison on the token.
+
+Key finding: the 0.0.0.0 came from studio.example.toml, not the dataclass default — there is no studio.toml on this machine, so the example file IS the effective config. Changing only the dataclass default would have fixed nothing. Verified effective bind is now 127.0.0.1.
+
+11 tests prove the gate blocks rather than merely exists: wrong token rejected, every write path gated, every read path not, env overrides file, and the shipped default is loopback.
+
+NOT COMMITTED: AdvancedStudio is not a git repository. Changes are on disk and tested; whether to git init is Benji's structural call.
+
+Still open there: studio-mcp's SDK 2.0 break, no upload/slicer, in-memory approvals, no provenance field on proposals.
+
+## [2026-08-15] build | AdvancedStudio under version control; studio-mcp ported to SDK 2.x
+git init: 69 files, .gitignore excluding .venv, kb_store (3 MB embeddings.npy, rebuildable), studio.toml (holds printer IP, API keys, and now auth_token), __pycache__. Single honest initial commit — reconstructing a "before" state to make today's security work diffable would have been fabricating history that never existed, so the commit message names what changed today instead.
+
+studio-mcp: recommended PORT over pinning mcp<2, and did it. Pinning is the correct emergency fix but freezes the server on a superseded SDK that won't track the spec, and would leave three MCP servers in this ecosystem split across two APIs. The port is genuinely two lines — MCPServer replaces FastMCP with identical decorator and run() surfaces. All 12 tools register.
+
+Three things fixed while there, each a real defect rather than tidying:
+- requirements said `mcp>=1.2` unbounded, which is what turned an SDK major release into a server that silently stopped starting. Now `>=2.0,<3`.
+- The proxy now sends X-Studio-Token on writes and explains the 401 — an integration point I created that morning by adding the auth gate, and would have broken propose_action.
+- server.py now runs by absolute path as well as -m, because MCP clients register a command and -m resolves against the CLIENT's working directory (the same latent break found with openbuildcore).
+
+All four platform MCP servers now report Connected from a neutral directory: opendesigncore, openbuildcore, opencircuitcore, studio-3dp.
+
+## [2026-08-16] build | OpenBuildCore machines: capability model, time never modelled (PR #4)
+Benji asked for printers and their capabilities so jobs can be matched to what the machine can actually do. The physical half of "what can I build" — inventory matching says nothing about whether a 260 mm bracket fits a 220 mm bed.
+
+Machines are owned state, same shape of thing as inventory: machines.json git-ignored, example/ is the template, ADR-0001's reasoning applies unchanged. Field names copied from BINGO's NODE-AGENT machine record (machine_id, driver, make/model, process, envelope_mm, materials, tier) so a machine described here hands to a node without a translation layer — read the spec first rather than inventing a vocabulary that would have to be reconciled later.
+
+The one decision worth the ADR was time. A volumetric estimate is easy and is what most tools do; it is also a number with no provenance, wrong by factors on anything but a solid block, and it will be read as a measurement. Asked Benji and he chose measured-throughput-only. So: an estimate exists only when the record carries a rate its owner measured AND says how, machines without one answer "requires slicing", and even a measured one is labelled pre-slicing triage with the caveat inside the returned result rather than in a README. Same discipline as --scan-accuracy-mm yesterday: absence is UNKNOWN, not a gap to fill with a model.
+
+The K2 Plus record makes the discipline visible in an uncomfortable way. Its build volume is not stated anywhere in the cited Research-Report material, and I would not recall it from memory, so envelope_mm is a 1x1x1 placeholder marked TODO(source) and every fit check on the machine Benji actually owns fails loudly. That is the intended behaviour and two tests pin it — one that the placeholder blocks, one that the check flips when a real envelope is supplied, so it is a live check rather than a coincidence.
+
+Fit tries all six axis-aligned orientations and names the one that works, because a part failing flat commonly fits stood on end. Arbitrary orientations are declared out of scope: they will produce false negatives, that is the safe direction, and the message says which check failed so a human can overrule it.
+
+Validator extended. The check that earns its place rejects measured_throughput with no how_measured — an unsourced rate is indistinguishable from a recalled one and would silently become a print time the user trusts. Every check made to fail on purpose and then to pass before shipping.
+
+47 tests, up from 21. obc_mcp gains list_machines and can_print, both reads; no tool edits machines, for the same reason none edits inventory.
+
+Incidental but real: em-dashes were mangling to ? under cp1252 on the Windows console, and validate.py had one inside its OWN failure message — a validator that garbles the text explaining what went wrong. Scripts are ASCII-only in printed strings now. Fifth instance this week of running the thing finding what reading it did not.
