@@ -84,6 +84,74 @@ if (args is ["run-enclosure", ..])
     }
 }
 
+if (args is ["run-cradle", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    if (!oOpts.TryGetValue("stl", out string? strStl))
+    {
+        Console.Error.WriteLine("--stl <path> is required (the scanned mesh).");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("units", out string? strUnits)
+        || !Enum.TryParse(strUnits, ignoreCase: true, out PicoGK.Mesh.EStlUnit eUnits)
+        || eUnits == PicoGK.Mesh.EStlUnit.AUTO)
+    {
+        Console.Error.WriteLine(
+            "--units <mm|cm|m|in|ft> is required: an STL carries no reliable unit " +
+            "information and silent inference is forbidden.");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("voxel-mm", out string? strVoxel)
+        || !float.TryParse(strVoxel, System.Globalization.CultureInfo.InvariantCulture, out float fVoxelMm))
+    {
+        Console.Error.WriteLine("--voxel-mm is required and takes no default (ADR-0003).");
+        return 2;
+    }
+
+    float FOpt(string strKey, float fDefault)
+        => oOpts.TryGetValue(strKey, out string? s)
+            ? float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)
+            : fDefault;
+
+    try
+    {
+        CradleRunResult oResult = CradleRun.Execute(
+            strStlPath: strStl,
+            eUnits: eUnits,
+            fPostScale: FOpt("scale", 1.0f),
+            fVoxelSizeMm: fVoxelMm,
+            fClearanceMm: FOpt("clearance-mm", 0.30f),
+            fWallMm: FOpt("wall-mm", 2.40f),
+            fSplitFraction: FOpt("split", 0.45f),
+            strArtifactsDir: oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            strLedgerPath: oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            strCommit: StrGitCommit());
+
+        Console.WriteLine($"run {oResult.RunId}: PASS");
+        Console.WriteLine($"  scan       sha256:{oResult.ScanSha256}");
+        Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine($"  provenance sha256:{oResult.ProvenanceSha256}");
+        Console.WriteLine($"  stl        {oResult.ArtifactPath}");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException
+        or OpenDesignCore.Import.ImportValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 if (args is ["handoff", ..])
 {
     Dictionary<string, string> oOpts = [];
@@ -150,6 +218,8 @@ Console.WriteLine();
 Console.WriteLine("usage: OpenDesignCore validate-data [dir]");
 Console.WriteLine("       OpenDesignCore run-enclosure --voxel-mm <v> [--part <id>] [--clearance-mm <v>]");
 Console.WriteLine("                                    [--wall-mm <v>] [--data <dir>] [--artifacts <dir>] [--ledger <path>]");
+Console.WriteLine("       OpenDesignCore run-cradle --stl <path> --units <mm|cm|m|in|ft> --voxel-mm <v>");
+Console.WriteLine("                                 [--clearance-mm <v>] [--wall-mm <v>] [--split <0..1>] [--scale <f>]");
 Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>] [--print <gcode>]");
 Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");
 return 0;
