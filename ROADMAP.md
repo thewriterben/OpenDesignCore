@@ -25,13 +25,14 @@ Only after Now runs end to end for someone other than me.
 
 - [x] Platform walkthrough: `examples/platform-walkthrough` runs all four peers in one chain — inventory → electronics → board → enclosure → staged; every gate live (2026-08-15)
 - [x] Board→enclosure co-design proven end to end: `kicad-cli pcb export stl` → ODC mesh boundary → cradle fitted to real board geometry (run 3, 2026-08-15)
+- [x] Scan-compare: `compare` measures per-axis deviation between a design and a scan of the printed part, distinguishes uniform from anisotropic shrinkage, and judges significance against a **declared** scanner accuracy. Validated against synthetic prints only — a real print and scan is still outstanding (2026-08-15)
 
 ## Not yet
 
 Good ideas that are not this quarter's problem. Adding to this list is a valid outcome of a discussion.
 
 - BINGO integration: ODC provenance records referenced from fabrication evidence (contract drafted, see `wiki/concepts/bingo-odc-provenance-contract.md`)
-- Scan-compare verification loop (print → scan → dimensional report → profile compensation)
+- Feeding a measured compensation back into slicer profiles automatically — `compare` produces the number; applying it is still manual, and belongs with AdvancedStudio's profile store
 - Cross-machine golden fixtures — rerun byte-identity is proven on one machine only
 
 Shipped since this list was written, and now peers rather than plans:

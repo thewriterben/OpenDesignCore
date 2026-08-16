@@ -3,6 +3,7 @@ using System.Reflection;
 using OpenDesignCore.Data;
 using OpenDesignCore.Models;
 using OpenDesignCore.Runs;
+using OpenDesignCore.Verification;
 
 // Commands:
 //   (none)                      print tool + pinned-stack versions
@@ -152,6 +153,81 @@ if (args is ["run-cradle", ..])
     }
 }
 
+if (args is ["compare", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    if (!oOpts.TryGetValue("design", out string? strDesign)
+        || !oOpts.TryGetValue("scan", out string? strScanPath))
+    {
+        Console.Error.WriteLine("--design <stl> and --scan <stl> are both required.");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("units", out string? strUnitsArg)
+        || !Enum.TryParse(strUnitsArg, ignoreCase: true, out PicoGK.Mesh.EStlUnit eCmpUnits)
+        || eCmpUnits == PicoGK.Mesh.EStlUnit.AUTO)
+    {
+        Console.Error.WriteLine("--units <mm|cm|m|in|ft> is required for both meshes.");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("voxel-mm", out string? strCmpVoxel)
+        || !float.TryParse(strCmpVoxel, System.Globalization.CultureInfo.InvariantCulture, out float fCmpVoxel))
+    {
+        Console.Error.WriteLine("--voxel-mm is required and takes no default (ADR-0003).");
+        return 2;
+    }
+
+    try
+    {
+        float fAccuracy = oOpts.TryGetValue("scan-accuracy-mm", out string? strAcc)
+            ? float.Parse(strAcc, System.Globalization.CultureInfo.InvariantCulture)
+            : 0f;
+
+        CompareRunResult oResult = CompareRun.Execute(
+            strDesign, strScanPath, eCmpUnits, fCmpVoxel,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit(),
+            fAccuracy);
+
+        Console.WriteLine($"run {oResult.RunId}: dimensional comparison");
+        foreach (AxisDeviation oAxis in oResult.Report.Axes)
+        {
+            Console.WriteLine(
+                $"  {oAxis.Axis}  design {oAxis.DesignMm,8:F3}  scan {oAxis.ScanMm,8:F3}  "
+                + $"dev {oAxis.DeviationMm,7:F3} mm ({oAxis.DeviationPct,6:F2} %)");
+        }
+        Console.WriteLine($"  max |deviation| {oResult.Report.MaxAbsDeviationMm:F3} mm; "
+            + $"mean {oResult.Report.MeanDeviationPct:F2} %, spread {oResult.Report.DeviationPctSpread:F2} %");
+        Console.WriteLine(oResult.Report.WithinScanAccuracy switch
+        {
+            true => "  within the declared scanner accuracy — no compensation implied",
+            false when oResult.Report.DeviationPctSpread > 0.5 =>
+                $"  axes disagree (spread {oResult.Report.DeviationPctSpread:F2} %) — a single "
+                + "scale factor is the wrong correction; compensate per axis",
+            false => $"  suggests isotropic compensation of {-oResult.Report.MeanDeviationPct:F2} %",
+            null => "  no --scan-accuracy-mm declared: cannot say whether this deviation is "
+                + "real or instrument error. Declare it, or treat the numbers as indicative only.",
+        });
+        Console.WriteLine($"  report sha256:{oResult.ReportSha256}");
+        return 0;
+    }
+    catch (Exception e) when (e is OpenDesignCore.Import.ImportValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 if (args is ["handoff", ..])
 {
     Dictionary<string, string> oOpts = [];
@@ -220,6 +296,7 @@ Console.WriteLine("       OpenDesignCore run-enclosure --voxel-mm <v> [--part <i
 Console.WriteLine("                                    [--wall-mm <v>] [--data <dir>] [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore run-cradle --stl <path> --units <mm|cm|m|in|ft> --voxel-mm <v>");
 Console.WriteLine("                                 [--clearance-mm <v>] [--wall-mm <v>] [--split <0..1>] [--scale <f>]");
+Console.WriteLine("       OpenDesignCore compare --design <stl> --scan <stl> --units <u> --voxel-mm <v>");
 Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>] [--print <gcode>]");
 Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");
 return 0;
