@@ -20,7 +20,7 @@ The single end-to-end path from ARCHITECTURE.md, working for real — as the **t
 Only after Now runs end to end for someone other than me.
 
 - [x] Mesh→SDF import boundary (scan-to-fit): `run-cradle` — units declared never inferred (AUTO refused), raw scan content-addressed and hash-chained into the sidecar, foam-insert cradle model (`scan-cradle/0.1`) with floor `min(wall/2, clearance)`; v0 requires watertight meshes, stated loudly (2026-08-15)
-- [ ] MCP surface for ODC itself, so peers (planner, BINGO orchestration) can invoke model runs
+- [x] MCP surface for ODC itself: stdio server (`opendesigncore-mcp`), 7 tools — reads and deterministic runs execute, `handoff_to_studio` proposes only and no approval tool exists (ADR-0009); resource guards refuse pathological voxel sizes, volumes, and path escapes (2026-08-15)
 - [ ] Registry schema contract with Oh-Ben-Claw (consume, don't fork; drift is upstream's documented problem to fix once)
 
 ## Not yet

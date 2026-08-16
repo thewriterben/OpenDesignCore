@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\OpenDesignCore\OpenDesignCore.csproj" />
+    <ProjectReference Include="..\..\src\OpenDesignCore.Mcp\OpenDesignCore.Mcp.csproj" />
   </ItemGroup>
 
 </Project>

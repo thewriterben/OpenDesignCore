@@ -157,4 +157,26 @@ The failure mode this is avoiding is well documented in the LLM Wiki thread itse
 
 **Decision.** PicoGK is consumed as a NuGet `PackageReference` pinned exactly to `[2.2.0]`. LEAP71_ShapeKernel is a git submodule at `external/LEAP71_ShapeKernel`, pinned to tag `ShapeKernel-v2.1.0`, compiled into the OpenDesignCore assembly as sources. Target framework `net9.0` — PicoGK 2.2.0's declared target (NU1202 rejects net8.0; the ".NET 8" documentation was 1.x-era). Built with SDK 10.0.301. Upgrades of any of these remain deliberate single commits.
 
-**Consequences.** "Clone and go" is back — no separate runtime install, and CI needs only the .NET SDK. Determinism inputs recorded in provenance become: PicoGK package version, ShapeKernel tag, TFM, tool version, commit. 2.3.0 exists and is not adopted yet; adopting it is its own tested commit.
+**Consequences (ADR-0008).** "Clone and go" is back — no separate runtime install, and CI needs only the .NET SDK. Determinism inputs recorded in provenance become: PicoGK package version, ShapeKernel tag, TFM, tool version, commit. 2.3.0 exists and is not adopted yet; adopting it is its own tested commit.
+
+---
+
+## ADR-0009 — What the MCP surface may execute, and what it may only propose
+
+**Date:** 2026-08-15
+**Status:** accepted
+
+**Context.** ADR-0007 makes OpenDesignCore an engine among peers, composed over MCP. That requires an inbound surface. The ecosystem's existing convention, arrived at independently by AdvancedStudio and ClawCam, is *reads execute, writes propose* — a rule written for tools that move physical hardware. OpenDesignCore's "writes" are not of that kind: a model run's only effects are a content-addressed artifact and an append-only ledger row, both reproducible from recorded inputs (ADR-0003). Applying the physical-safety rule literally would make the engine useless over MCP; ignoring it would let an agent reach a printer.
+
+**Options considered.**
+1. Reads only — safe, and leaves the engine unreachable for the composition ADR-0007 depends on.
+2. Everything executes, including handoff — an agent could stage and start fabrication with no human in the loop.
+3. Draw the line at the store boundary: effects confined to OpenDesignCore's own content-addressed stores execute; anything reaching beyond them stops at a proposal.
+
+**Decision.** Option 3.
+
+- **Execute:** `list_models`, `list_parts`, `list_runs`, `get_provenance`, `run_enclosure`, `run_cradle`. Model runs are deterministic and idempotent by content hash — rerunning one costs CPU and produces the identical artifact.
+- **Propose only:** `handoff_to_studio` stages an artifact and may propose a print to AdvancedStudio, which registers it in the studio's own approval queue. **This server exposes no approval tool and must not acquire one** — a test asserts no tool name contains "approve" or "confirm". The human approves in the fabricator's interface, where the machine is.
+- **Resource guards** (`McpGuard`), because a caller that can name a voxel size can exhaust the machine: voxel size clamped to [0.05 mm, 5 mm] by *refusal*, a 2×10⁹ voxel budget on implied volume, and path arguments confined to the working root. Refusals, never silent clamping — the same rule as the geometry layer.
+
+**Consequences.** Agents can drive design end to end and stop exactly where a human must decide. The CLI remains the unguarded path for deliberate local work (finer voxels, larger volumes) — the guards are about untrusted callers, not about capability. A second inbound surface now needs keeping in step with the CLI; both call the same executors, so drift means duplicated argument parsing, not duplicated behaviour. If a future peer needs to *approve* fabrication programmatically, that is a new ADR and a different threat model, not a quiet addition here.
