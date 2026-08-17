@@ -290,3 +290,22 @@ Upload and print are two proposals, never one — separate effects, and bundling
 **Verification.** The traversal guard was removed once to confirm two tests fail without it. Probed over HTTP against a real studio: all four refusal paths 400, and the good proposal reads `Upload 'cradle-e8401edf6cd1.gcode' (0.0 MB) to the printer, sliced from design sha256:e8401edf6cd1. This does not start a print.` Ran the probe against a **second instance on port 8771** rather than restarting the one Benji had running — printer was standby, but there was no reason to touch it.
 
 60 ODC tests, 39 studio tests.
+
+## [2026-08-16] build | The job ledger closes the last two AdvancedStudio gaps
+Took "proceed" as closing what I had just named as still open: a print proposal carried its design hash, and then the proposal evaporated. ADR-0002 got provenance as far as the approval; nothing survived it.
+
+**studio/jobs.py** — append-only SQLite, written at the point a human answers, from BOTH decision paths (the web app and the terminal agent in llm/cli.py). A ledger with a second unaudited way in is not a ledger.
+
+Four properties chosen rather than inherited. **Rejections are recorded too**: a store that only remembers what happened cannot answer "what did we decline", and an action proposed and rejected repeatedly is exactly the signal worth having; approved-then-failed is distinct from never-approved. **Append-only** — no update, no delete, and a test asserts the class has grown no mutator, so adding one is a deliberate act rather than a convenience. **design_artifact_sha256 is a real column**, not a key in a blob, because "every job from this design" is the question it exists for. **Both paths write.**
+
+The pending queue stays in memory deliberately, and that is worth recording as a decision rather than an omission: persisting an unanswered question would let an approval be granted for something proposed before a restart, in a state nobody can now inspect. Losing pending proposals on restart is the safe failure.
+
+**A test caught a real design flaw.** `by_design("")` returned every design-less action — the whole heater history — because "no design" matched the empty-string column. `/api/jobs/by-design/` with nothing after it is a slip, not a query, and answering it with everything is a confusing way to say "you asked me nothing". Fixed the implementation, not the test. Full-hash match only for the same family of reason: a prefix would conflate two designs the first time somebody passes twelve characters.
+
+**Second instance of a bug this platform has now hit twice.** `with sqlite3.connect(...)` commits on exit but does not CLOSE, so the handle stays open and on Windows the database is locked against deletion. Surfaced as a test teardown failing to remove a temp directory. OpenDesignCore's ledger hit the same shape as connection pooling. SQLite's context manager is a transaction, not a connection — worth knowing once, since knowing it twice cost the same debugging.
+
+Gaps 12(b) and 12(c) close together, and with 12(a) done yesterday and 12(d) on the 15th, **none of the four surveyed AdvancedStudio gaps remain**. What is left is not a gap in any repo: the compensation numbers are unvalidated until a real print is measured against a real scan. That is now the only thing between this platform and a genuinely closed loop.
+
+49 studio tests, up from 39. Proven end to end against a running studio: a rejected profile_update recorded as job 1 approved=False, an approved one as job 2 outcome='executed', a print proposal found afterwards by its design hash, and `/api/jobs/by-design/` with an empty hash returning 404 rather than everything.
+
+Housekeeping worth noting: an earlier crashed probe had left Benji's PETG profile at 0.4 with a test origin, and this run's "restore" faithfully restored the already-broken value. Caught it, restored from git, verified 0.5/seed. A restore that reads its baseline from the thing it is about to fix is not a restore.
