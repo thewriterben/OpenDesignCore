@@ -209,12 +209,39 @@ if (args is ["compare", ..])
         CompareRunResult oResult;
         if (bHasMeasured)
         {
-            (float fMx, float fMy, float fMz) = CompareRun.OParseMeasured(strMeasured!);
+            float[] aM = CompareRun.AParseMeasured(strMeasured!);
+            // Four readings: X, Y, then the shelf and the tall face. The
+            // nominal shelf height must be declared, because the design STL
+            // knows its overall height but not where the step was put.
+            float fZLowNominal = oOpts.TryGetValue("nominal-step-z-mm", out string? strNs)
+                ? float.Parse(strNs, System.Globalization.CultureInfo.InvariantCulture)
+                : 0f;
+            if (aM.Length == 4 && fZLowNominal <= 0)
+            {
+                Console.Error.WriteLine(
+                    "Four measurements given, so --nominal-step-z-mm is required: the design "
+                    + "STL records its overall height but not where the shelf was placed, and "
+                    + "the shelf's nominal height is what separates first-layer offset from "
+                    + "shrinkage. It is printed by run-calibration-block.");
+                return 2;
+            }
+
             oResult = CompareRun.ExecuteMeasured(
-                strDesign, eCmpUnits, fCmpVoxel, fMx, fMy, fMz, fAccuracy,
+                strDesign, eCmpUnits, fCmpVoxel,
+                aM[0], aM[1], aM.Length == 4 ? aM[3] : aM[2], fAccuracy,
                 oOpts.GetValueOrDefault("artifacts", "artifacts"),
                 oOpts.GetValueOrDefault("ledger", "ledger.db"),
-                StrGitCommit());
+                StrGitCommit(),
+                fMeasuredZLowMm: aM.Length == 4 ? aM[2] : 0f,
+                fNominalZLowMm: aM.Length == 4 ? fZLowNominal : 0f);
+
+            if (aM.Length == 3)
+            {
+                Console.WriteLine(
+                    "  note: a single Z reading contains the first-layer squish, which is a "
+                    + "constant rather than a percentage. Use a stepped block and four "
+                    + "readings to separate them.");
+            }
         }
         else
         {
@@ -292,6 +319,8 @@ if (args is ["run-calibration-block", ..])
         XMm = FBlock("x-mm", oDefault.XMm),
         YMm = FBlock("y-mm", oDefault.YMm),
         ZMm = FBlock("z-mm", oDefault.ZMm),
+        StepZMm = FBlock("step-z-mm", oDefault.StepZMm),
+        TallDepthYMm = FBlock("tall-depth-y-mm", oDefault.TallDepthYMm),
     };
 
     // Defaults to the model's own floor, which is derived from the block's
@@ -312,17 +341,22 @@ if (args is ["run-calibration-block", ..])
 
         Console.WriteLine($"run {oResult.RunId}: PASS  {CalibrationBlockModel.StrModelId}");
         Console.WriteLine(
-            $"  nominal    {oBlock.XMm:F2} x {oBlock.YMm:F2} x {oBlock.ZMm:F2} mm "
-            + $"(voxel {fBlockVoxel:F4} mm)");
+            $"  nominal    {oBlock.XMm:F2} x {oBlock.YMm:F2} mm, shelf at {oBlock.StepZMm:F2} mm, "
+            + $"tall face at {oBlock.ZMm:F2} mm (Z span {oBlock.ZSpanMm:F2} mm)");
         Console.WriteLine(
             $"  exported   {oResult.Geometry.BBoxXMm:F3} x {oResult.Geometry.BBoxYMm:F3} x "
-            + $"{oResult.Geometry.BBoxZMm:F3} mm");
+            + $"{oResult.Geometry.BBoxZMm:F3} mm (voxel {fBlockVoxel:F4} mm)");
         Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
         Console.WriteLine($"  stl        {oResult.ArtifactPath}");
         Console.WriteLine();
-        Console.WriteLine("  Print it, let it cool, then measure each axis across its flat faces:");
+        Console.WriteLine("  Print, cool, then take FOUR readings:");
+        Console.WriteLine("    X and Y across the flat faces, a few mm up from the bed.");
+        Console.WriteLine("    Z twice: bed to shelf, and bed to the tall face. Both contain the");
+        Console.WriteLine("    same first-layer squish, so their difference contains none.");
+        Console.WriteLine();
         Console.WriteLine($"    compare --design {oResult.ArtifactPath} --units mm \\");
-        Console.WriteLine($"            --voxel-mm {fBlockVoxel:F4} --measured <X>x<Y>x<Z> \\");
+        Console.WriteLine($"            --voxel-mm {fBlockVoxel:F4} \\");
+        Console.WriteLine("            --measured <X>x<Y>x<Zlow>x<Zhigh> \\");
         Console.WriteLine($"            --instrument-accuracy-mm {fInstrAcc}");
         return 0;
     }

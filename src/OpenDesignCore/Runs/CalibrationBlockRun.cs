@@ -94,6 +94,9 @@ public static class CalibrationBlockRun
                 ["nominal_x_mm"] = StrF3(oParams.XMm),
                 ["nominal_y_mm"] = StrF3(oParams.YMm),
                 ["nominal_z_mm"] = StrF3(oParams.ZMm),
+                ["nominal_step_z_mm"] = StrF3(oParams.StepZMm),
+                ["nominal_z_span_mm"] = StrF3(oParams.ZSpanMm),
+                ["nominal_tall_depth_y_mm"] = StrF3(oParams.TallDepthYMm),
                 ["instrument_accuracy_mm"] = StrF4(fInstrumentAccuracyMm),
             },
             ["versions"] = new Dictionary<string, object?>
@@ -106,12 +109,15 @@ public static class CalibrationBlockRun
             ["artifact"] = oGeometry.OArtifactBlock(strArtifactHash),
             ["caveats"] = new List<object?>
             {
-                "Measure across flat faces, on a cooled part, with the caliper square to "
-                    + "the surface. A reading taken over an elephant's-foot first layer or a "
-                    + "seam is a reading about that defect, not about shrinkage.",
-                "The axes are deliberately unequal so a transposed measurement is visible. "
-                    + "If two of your three readings are close to each other and far from the "
-                    + "nominal, check which faces you measured before believing the numbers.",
+                "Measure X and Y across flat faces on a cooled part, a few millimetres up "
+                    + "from the bed so the reading is not taken over elephant's foot.",
+                "Measure Z TWICE — bed to shelf, and bed to the tall face. Both contain the "
+                    + "same first-layer squish, so their difference contains none. There is "
+                    + "no way to measure a bed-printed height 'away from the first layer': "
+                    + "the height begins there. Two readings is how the constant is removed.",
+                "X and Y are deliberately unequal so a transposed measurement is visible. "
+                    + "If two readings are close to each other and far from nominal, check "
+                    + "which faces you measured before believing the numbers.",
             },
         };
 

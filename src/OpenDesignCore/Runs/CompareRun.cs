@@ -58,7 +58,9 @@ public static class CompareRun
         float fInstrumentAccuracyMm,
         string strArtifactsDir,
         string strLedgerPath,
-        string strCommit)
+        string strCommit,
+        float fMeasuredZLowMm = 0f,
+        float fNominalZLowMm = 0f)
     {
         if (fInstrumentAccuracyMm <= 0)
         {
@@ -83,13 +85,22 @@ public static class CompareRun
             Voxels voxDesign = new(oDesign.Mesh);
             voxDesign.CalculateProperties(out float fDesignVolume, out BBox3 _);
 
+            // With a shelf reading, the Z axis reports the SPAN between the
+            // two top faces rather than either height. Both readings start at
+            // the bed and carry the same first-layer squish, so their
+            // difference carries none — which is the only way a caliper can
+            // give a Z shrinkage that is not contaminated by the first layer.
+            bool bHasSpan = fMeasuredZLowMm > 0 && fNominalZLowMm > 0;
+            double fZDesign = bHasSpan ? vecDesign.Z - fNominalZLowMm : vecDesign.Z;
+            double fZMeasured = bHasSpan ? fMeasuredZMm - fMeasuredZLowMm : fMeasuredZMm;
+
             oReport = new DimensionalReport
             {
                 Axes =
                 [
                     new() { Axis = "x", DesignMm = vecDesign.X, ScanMm = fMeasuredXMm },
                     new() { Axis = "y", DesignMm = vecDesign.Y, ScanMm = fMeasuredYMm },
-                    new() { Axis = "z", DesignMm = vecDesign.Z, ScanMm = fMeasuredZMm },
+                    new() { Axis = bHasSpan ? "z-span" : "z", DesignMm = fZDesign, ScanMm = fZMeasured },
                 ],
                 DesignVolumeCubicMm = fDesignVolume,
                 // Not measured, and deliberately not inferred from the extents:
@@ -100,12 +111,20 @@ public static class CompareRun
             };
         }
 
+        double? fFirstLayerOffset = null;
+        if (fMeasuredZLowMm > 0 && fNominalZLowMm > 0)
+        {
+            AxisDeviation oZ = oReport.Axes.Single(a => a.Axis == "z-span");
+            double fScale = oZ.ScanMm / oZ.DesignMm;
+            fFirstLayerOffset = fMeasuredZLowMm - (fNominalZLowMm * fScale);
+        }
+
         return ORecord(
             oReport, strDesignHash, strMeasuredBy: "manual",
             strScanHash: "", eUnits: eUnits, fVoxelSizeMm: fVoxelSizeMm,
             fAccuracyMm: fInstrumentAccuracyMm,
             strArtifactsDir: strArtifactsDir, strLedgerPath: strLedgerPath,
-            strCommit: strCommit);
+            strCommit: strCommit, fFirstLayerOffsetMm: fFirstLayerOffset);
     }
 
     public static CompareRunResult Execute(
@@ -163,7 +182,8 @@ public static class CompareRun
         float fAccuracyMm,
         string strArtifactsDir,
         string strLedgerPath,
-        string strCommit)
+        string strCommit,
+        double? fFirstLayerOffsetMm = null)
     {
         Dictionary<string, object?> oRecord = new()
         {
@@ -203,6 +223,12 @@ public static class CompareRun
                 // is mostly infill. Absent, never inferred.
                 ["scan_volume_cubic_mm"] = strMeasuredBy == "manual"
                     ? "not-measurable-by-hand" : StrF3(oReport.ScanVolumeCubicMm),
+                // The constant that the Z span was measured in order to
+                // remove. Recorded because it is useful on its own: this is
+                // the first-layer / elephant's-foot figure, a different slicer
+                // setting from shrinkage, and no percentage will fix it.
+                ["first_layer_offset_mm"] = fFirstLayerOffsetMm is double fOff
+                    ? StrF3(fOff) : "not-separable-from-a-single-height",
             },
             ["caveats"] = new List<object?>
             {
@@ -255,20 +281,68 @@ public static class CompareRun
         };
     }
 
-    /// <summary>Parse a measured "XxYxZ" triple in mm.</summary>
-    public static (float fX, float fY, float fZ) OParseMeasured(string strText)
+    /// <summary>
+    /// Parse a measured triple or quadruple in mm.
+    ///
+    /// Three values are X, Y and a single bed-referenced Z. Four are X, Y and
+    /// two heights — the shelf and the tall face — from which a Z scale can be
+    /// derived without the first-layer offset, because both readings contain
+    /// the same offset and their difference contains none.
+    /// </summary>
+    public static float[] AParseMeasured(string strText)
     {
         string[] aParts = strText.Replace(" ", "").Split('x', StringSplitOptions.RemoveEmptyEntries);
-        if (aParts.Length != 3)
-            throw new ArgumentException($"--measured must be XxYxZ in mm, got '{strText}'.");
+        if (aParts.Length is not (3 or 4))
+        {
+            throw new ArgumentException(
+                $"--measured takes XxYxZ, or XxYxZlowxZhigh for a stepped block, got '{strText}'.");
+        }
 
-        float[] aValues = new float[3];
-        for (int i = 0; i < 3; i++)
+        float[] aValues = new float[aParts.Length];
+        for (int i = 0; i < aParts.Length; i++)
         {
             if (!float.TryParse(aParts[i], CultureInfo.InvariantCulture, out aValues[i]))
                 throw new ArgumentException($"--measured must be numeric, got '{strText}'.");
         }
-        return (aValues[0], aValues[1], aValues[2]);
+        return aValues;
+    }
+
+    /// <summary>
+    /// Separate proportional Z shrinkage from the constant first-layer offset,
+    /// given two heights measured on one part.
+    ///
+    /// Both readings start at the bed, so both contain the same squish. Two
+    /// equations, two unknowns:
+    ///
+    /// <code>
+    ///   measured_low  = nominal_low  × scale + offset
+    ///   measured_high = nominal_high × scale + offset
+    /// </code>
+    ///
+    /// The scale falls out of the difference, where the offset has cancelled.
+    /// The offset then falls out of either equation, and is worth having on
+    /// its own: it is the elephant's-foot / first-layer figure, a different
+    /// slicer setting from shrinkage and one that no percentage can fix.
+    ///
+    /// This exists because the earlier advice — "measure Z away from the first
+    /// layer" — was not merely hard, it was impossible. A bed-printed part's
+    /// height begins at the first layer.
+    /// </summary>
+    public static (double fScale, double fOffsetMm) OSolveZ(
+        double fNominalLowMm, double fNominalHighMm,
+        double fMeasuredLowMm, double fMeasuredHighMm)
+    {
+        double fNominalSpan = fNominalHighMm - fNominalLowMm;
+        if (fNominalSpan <= 0)
+        {
+            throw new ArgumentException(
+                "The tall face must be above the shelf, or there is no span to measure and "
+                + "the first-layer offset cannot be separated from shrinkage.");
+        }
+
+        double fScale = (fMeasuredHighMm - fMeasuredLowMm) / fNominalSpan;
+        double fOffset = fMeasuredLowMm - (fNominalLowMm * fScale);
+        return (fScale, fOffset);
     }
 
     private static string StrF3(double fValue) => fValue.ToString("F3", CultureInfo.InvariantCulture);

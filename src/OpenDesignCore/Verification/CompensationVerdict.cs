@@ -116,7 +116,11 @@ public sealed record CompensationProposal
 
         AxisDeviation oX = oReport.Axes.Single(a => a.Axis == "x");
         AxisDeviation oY = oReport.Axes.Single(a => a.Axis == "y");
-        double? fZ = oReport.Axes.SingleOrDefault(a => a.Axis == "z")?.DeviationPct;
+        // "z-span" when the caliper measured between two printed top faces, so
+        // the first-layer offset has cancelled; plain "z" when it is a single
+        // bed-referenced height and therefore still contains it.
+        double? fZ = oReport.Axes
+            .SingleOrDefault(a => a.Axis is "z" or "z-span")?.DeviationPct;
         double fSpread = Math.Abs(oX.DeviationPct - oY.DeviationPct);
 
         CompensationProposal OWith(ECompensationVerdict eVerdict, string strReason) => new()

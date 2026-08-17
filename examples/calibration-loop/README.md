@@ -4,8 +4,26 @@ Design → print → measure → compensation, without a 3D scanner. About an ho
 most of it printing.
 
 The part is already staged at
-`3DP/AdvancedStudio/studio-core/staging/calibration-block-0.1-1ccd5e63dfbe.stl`
-(20 × 30 × 15 mm, artifact `1ccd5e63dfbe`). Regenerate it any time with step 1.
+`3DP/AdvancedStudio/studio-core/staging/calibration-block-0.2-b74407dedcd5.stl`
+— 40 × 60 mm, with a shelf at 4 mm and a tall face at 25 mm. Regenerate it any
+time with step 1.
+
+**It has a step, and that is the whole trick.** The first version was a plain
+box whose instructions said to measure Z "away from the first layer". That is
+impossible: a bed-printed part's height *begins* at the first layer, so every
+external height reading contains it.
+
+The two errors are different in kind, which is what makes them separable:
+
+| | |
+|---|---|
+| First-layer squish | a **constant** — the same fraction of a millimetre at any height |
+| Shrinkage | **proportional** — a percentage of the dimension |
+
+Measure two heights on one part and the constant cancels out of their
+difference. What is left over is the squish itself, which is worth having:
+it is the elephant's-foot / first-layer figure, a different slicer setting that
+no shrinkage percentage will fix.
 
 ---
 
@@ -50,24 +68,42 @@ which proposes the upload for approval; propose the print separately.
 
 ## 3. Measure it
 
-Three readings, each across the flat faces, caliper square to the surface.
+**Four readings**, caliper square to the surface every time.
 
-**Avoid the first layer.** Elephant's foot is a first-layer squish artefact,
-not shrinkage, and measuring across it gives a Z compensation that makes every
-subsequent part wrong in the middle. Take the Z height across the body, and X
-and Y a few millimetres up from the bed.
+| Reading | Where |
+|---|---|
+| X | across the 40 mm faces, a few mm up from the bed |
+| Y | across the 60 mm faces, a few mm up from the bed |
+| Z low | bed to the top of the **shelf** |
+| Z high | bed to the top of the **tall face** |
 
-Sanity check before believing them: if two of your three readings are close to
-each other and far from nominal, you probably measured the same pair of faces
-twice. That is exactly what the unequal axes are for.
+X and Y are taken a few millimetres up because elephant's foot flares the very
+bottom — and unlike Z, that *is* avoidable, because those faces are vertical.
+
+Both Z readings deliberately include the first layer. They have to; there is
+nowhere else to start. Since both contain the same squish, their difference
+contains none.
+
+Sanity check before believing them: if two readings are close to each other and
+far from nominal, you probably measured the same pair of faces twice. That is
+what the unequal X and Y are for.
 
 ## 4. Compare
 
 ```
 dotnet run --project src/OpenDesignCore -c Release -- \
-  compare --design artifacts/1c/1ccd5e63...stl --units mm --voxel-mm 0.3 \
-          --measured 19.93x29.89x15.02 --instrument-accuracy-mm 0.02
+  compare --design artifacts/b7/b74407de...stl --units mm --voxel-mm 0.2 \
+          --measured 39.86x59.79x4.05x25.10 \
+          --nominal-step-z-mm 4 --instrument-accuracy-mm 0.02
 ```
+
+Four values are X, Y, Z-low, Z-high. `--nominal-step-z-mm` is required with
+four, because the design STL records its overall height but not where the shelf
+was put — and the shelf's nominal height is what separates the offset from the
+shrinkage.
+
+Three values still work, for a plain box, and the tool says plainly that the Z
+figure then contains the first-layer offset and cannot be cleanly compensated.
 
 It compares against the **exported** dimensions, not the ones you asked for.
 That is why voxel size is not tied to caliper accuracy: whatever the grid did
