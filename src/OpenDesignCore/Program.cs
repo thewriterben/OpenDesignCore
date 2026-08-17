@@ -208,13 +208,16 @@ if (args is ["compare", ..])
         }
         Console.WriteLine($"  max |deviation| {oResult.Report.MaxAbsDeviationMm:F3} mm; "
             + $"mean {oResult.Report.MeanDeviationPct:F2} %, spread {oResult.Report.DeviationPctSpread:F2} %");
+        // Whether these numbers justify a compensation is a separate judgement
+        // with a declared threshold — `compensate` makes it. This line used to
+        // decide it here against a hard-coded 0.5 % spread, which is exactly
+        // the constant-instead-of-parameter the tolerance rule forbids.
         Console.WriteLine(oResult.Report.WithinScanAccuracy switch
         {
             true => "  within the declared scanner accuracy — no compensation implied",
-            false when oResult.Report.DeviationPctSpread > 0.5 =>
-                $"  axes disagree (spread {oResult.Report.DeviationPctSpread:F2} %) — a single "
-                + "scale factor is the wrong correction; compensate per axis",
-            false => $"  suggests isotropic compensation of {-oResult.Report.MeanDeviationPct:F2} %",
+            false => "  deviation exceeds the declared scanner accuracy; run `compensate` "
+                + "--comparison <hash> --max-axis-spread-pct <v> to judge whether one "
+                + "factor is defensible",
             null => "  no --scan-accuracy-mm declared: cannot say whether this deviation is "
                 + "real or instrument error. Declare it, or treat the numbers as indicative only.",
         });
@@ -222,6 +225,79 @@ if (args is ["compare", ..])
         return 0;
     }
     catch (Exception e) when (e is OpenDesignCore.Import.ImportValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
+if (args is ["compensate", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    if (!oOpts.TryGetValue("comparison", out string? strComparison))
+    {
+        Console.Error.WriteLine(
+            "--comparison <sha256> is required: a compensation is a reading of one "
+            + "recorded measurement, not a fresh calculation.");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("max-axis-spread-pct", out string? strSpread)
+        || !double.TryParse(strSpread, System.Globalization.CultureInfo.InvariantCulture, out double fMaxSpread))
+    {
+        Console.Error.WriteLine(
+            "--max-axis-spread-pct is required and takes no default. How much X/Y "
+            + "disagreement still permits a single shrinkage factor is a process "
+            + "judgement, not a constant this tool may pick for you.");
+        return 2;
+    }
+
+    try
+    {
+        CompensationRunResult oResult = CompensationRun.Execute(
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            strComparison,
+            fMaxSpread,
+            StrGitCommit());
+
+        CompensationProposal oProp = oResult.Proposal;
+        Console.WriteLine($"run {oResult.RunId}: {oProp.Verdict}");
+        Console.WriteLine($"  {oProp.Reason}");
+        if (oProp.Actionable)
+        {
+            Console.WriteLine(
+                $"  nominal XY {oProp.NominalXyMm:F3} mm, measured {oProp.MeasuredXyMm:F3} mm "
+                + $"(spread {oProp.AxisSpreadPct:F3} pts)");
+            Console.WriteLine(
+                "  hand this pair to AdvancedStudio's shrinkage calculator; this tool "
+                + "does not compute slicer settings.");
+        }
+        if (oProp.ZDeviationPct is double fZDev)
+            Console.WriteLine($"  z deviated {fZDev:F3} % — reported separately, never folded into XY");
+        Console.WriteLine($"  record sha256:{oResult.RecordSha256}");
+
+        if (oOpts.TryGetValue("propose-to-profile", out string? strProfileKey))
+        {
+            string strConfirmation = CompensationRun.StrPropose(
+                oResult,
+                oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
+                strProfileKey);
+            Console.WriteLine(
+                $"  proposal {strConfirmation} — awaiting human approval in the studio dashboard");
+        }
+        return oProp.Actionable ? 0 : 1;
+    }
+    catch (Exception e) when (e is CompensationException or ArgumentException)
     {
         Console.Error.WriteLine(e.Message);
         return 1;
@@ -297,6 +373,10 @@ Console.WriteLine("                                    [--wall-mm <v>] [--data <
 Console.WriteLine("       OpenDesignCore run-cradle --stl <path> --units <mm|cm|m|in|ft> --voxel-mm <v>");
 Console.WriteLine("                                 [--clearance-mm <v>] [--wall-mm <v>] [--split <0..1>] [--scale <f>]");
 Console.WriteLine("       OpenDesignCore compare --design <stl> --scan <stl> --units <u> --voxel-mm <v>");
+Console.WriteLine("                              [--scan-accuracy-mm <v>]");
+Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
+Console.WriteLine("                                 [--propose-to-profile <key>] [--studio <url>]");
+Console.WriteLine("                                 [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>] [--print <gcode>]");
 Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");
 return 0;
