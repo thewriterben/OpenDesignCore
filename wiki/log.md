@@ -235,3 +235,24 @@ Validator boundary worth recording: made parts are checked for SHAPE only, never
 Seed data exercises fit-failure (260 mm stake vs 250 mm gantry), material-failure (ASA housing on a PLA/PETG machine) and success (desk case), with a test asserting both outcomes appear in shipped data so the negative path cannot quietly stop being exercised. Same discipline as the K2 placeholder.
 
 Pattern for the day: the loop being closed is what exposed the missing field. Steps 2 and 3 were straightforward once step 1 existed; step 1 was invisible until something tried to read it.
+
+## [2026-08-16] build | The compensation loop, and a provenance field that would have vanished silently
+Benji chose connecting the compensation loop over the AdvancedStudio slicer work. Checked first rather than assuming: no slicer is installed on this machine at all (no Orca, no Cura, no PrusaSlicer — only LycheeSlicer, which is resin), so the upload-and-slice option would have needed a new external dependency in the fabrication path. Worth surfacing rather than quietly installing something.
+
+Two halves of one computation had existed for weeks and never met. AdvancedStudio's `calibration/calculators.py` turns a nominal/measured pair into an Orca shrinkage percentage, calibrated against its own research; ODC's `compare` produces exactly that pair from a design and a scan. The gap between them was a person retyping a figure.
+
+**The decision worth recording is the split.** Computing the percentage in ODC is three lines. It would also have given the platform two implementations of one formula, in two languages, free to drift, with no test able to catch the drift because neither side would know the other existed. So: ODC decides whether a compensation is DEFENSIBLE (a property only the measurement can answer), the studio decides what the number MEANS (slicer semantics belong with the slicer's tooling). Neither reimplements the other.
+
+Three refusals, each a real failure mode rather than defensive padding: deviation inside the declared scanner accuracy (compensating for the instrument), accuracy undeclared (no basis to separate signal from instrument), axes disagreeing beyond a declared threshold (their mean is wrong on both axes). Z is never folded into the XY figure — Orca's Shrinkage (XY) applies to X and Y only and Z has different causes; a test pins that even when Z shrank five times as much.
+
+**Found while adding a declared tolerance: an undeclared one.** `compare`'s advisory output had been making the same axes-disagree judgement against a hard-coded `0.5`. A constant deciding a tolerance, in the repo whose rules forbid exactly that, sitting in plain sight since the compare PR. It now defers instead of deciding quietly.
+
+**The bug that matters, in AdvancedStudio.** `ProfileStore.upsert` hard-coded `source = "user"` on every update to an existing profile. Writing an origin would have been silently discarded and the result would still have looked correct — a compensation from a calibrated scan and one guessed off a forum post would have stayed indistinguishable, which is the exact condition the change exists to end. Re-seeding is guarded by the file already existing, not by that field, so nothing depended on the overwrite. Caught by a test, and I reverted the fix once to confirm the test fails without it.
+
+Proven end to end against the running studio, not simulated: PETG 0.500% → 0.400%, `source` recorded as `odc-comparison:<hash>`, then restored — and `git diff` against the initial commit confirms Benji's profile data is byte-identical, so the probe left nothing behind.
+
+AdvancedStudio now has a DECISIONS.md (ADR-0001) and pytest in requirements; its venv had fastapi, websockets and numpy but no pytest, so the suite was unrunnable there. A suite nobody can run is a suite nobody runs.
+
+Deliberate non-decision, recorded because it is the obvious-looking shortcut: `MaterialProfile.max_volumetric_speed` is NOT wired to OpenBuildCore's `measured_throughput`. It looks like the same quantity and is not — a slicer ceiling versus an achieved rate — and conflating them would put a plausible unmeasured number into the print-time path, which is the failure OpenBuildCore ADR-0005 exists to prevent.
+
+56 ODC tests, 22 studio tests. Validated on synthetic prints only: the plumbing is proven, the percentage is not, and that needs a real print and a real scan. ADR-0011 and studio ADR-0001 both say so rather than leaving it implied.
