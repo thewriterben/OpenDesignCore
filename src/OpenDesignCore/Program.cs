@@ -341,16 +341,17 @@ if (args is ["handoff", ..])
             strStageDir: strStage,
             strStudioUrl: oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
             strGcodeFilename: oOpts.GetValueOrDefault("print"),
-            bOffline: aFlags.Contains("offline"));
+            bOffline: aFlags.Contains("offline"),
+            strUploadFilename: oOpts.GetValueOrDefault("upload"));
 
         Console.WriteLine($"handoff {oResult.HandoffId}: {oResult.Status}");
         Console.WriteLine($"  staged  {oResult.StagedStlPath}");
+        if (oResult.UploadProposalId.Length > 0)
+            Console.WriteLine($"  upload proposal {oResult.UploadProposalId} — awaiting human approval");
         if (oResult.ProposalId.Length > 0)
-        {
-            Console.WriteLine($"  proposal {oResult.ProposalId} — awaiting human approval in the studio dashboard");
-            if (oResult.WillRun.Length > 0)
-                Console.WriteLine($"  will run: {oResult.WillRun}");
-        }
+            Console.WriteLine($"  print proposal  {oResult.ProposalId} — awaiting human approval");
+        if (oResult.WillRun.Length > 0)
+            Console.WriteLine($"  will run: {oResult.WillRun}");
         return 0;
     }
     catch (HandoffException e)
@@ -377,7 +378,8 @@ Console.WriteLine("                              [--scan-accuracy-mm <v>]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
 Console.WriteLine("                                 [--propose-to-profile <key>] [--studio <url>]");
 Console.WriteLine("                                 [--artifacts <dir>] [--ledger <path>]");
-Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>] [--print <gcode>]");
+Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>]");
+Console.WriteLine("                              [--upload <gcode>] [--print <gcode>]");
 Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");
 return 0;
 

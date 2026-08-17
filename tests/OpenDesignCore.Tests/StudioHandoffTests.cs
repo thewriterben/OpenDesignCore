@@ -45,7 +45,8 @@ public sealed class StudioHandoffTests : IDisposable
     }
 
     private static (HttpListener, string strUrl, List<string> aRequests) OStartStub(
-        string strProposeResponse = """{"confirmation_id":"abc123def456","action":"print_start","will_run":"Start printing 'part.gcode'"}""")
+        string strProposeResponse = """{"confirmation_id":"abc123def456","action":"print_start","will_run":"Start printing 'part.gcode'"}""",
+        int nProposeStatus = 200)
     {
         HttpListener oListener = new();
         int nPort = Random.Shared.Next(20000, 60000);
@@ -79,12 +80,112 @@ public sealed class StudioHandoffTests : IDisposable
                     "/api/propose" => strProposeResponse,
                     _ => """{"error":"not found"}""",
                 });
-                oCtx.Response.StatusCode = strPath is "/api/state" or "/api/propose" ? 200 : 404;
+                oCtx.Response.StatusCode = strPath switch
+                {
+                    "/api/state" => 200,
+                    "/api/propose" => nProposeStatus,
+                    _ => 404,
+                };
                 oCtx.Response.OutputStream.Write(abResp);
                 oCtx.Response.Close();
             }
         });
         return (oListener, strUrl, aRequests);
+    }
+
+    /// <summary>
+    /// The upload seam. A sliced job reaches the printer without anyone
+    /// copying a file by hand, and the design hash travels with it so the
+    /// human approving sees which design the job claims to be.
+    /// </summary>
+    [Fact]
+    public void ProposesUploadCarryingTheDesignHash()
+    {
+        long nRunId = NSeedRun();
+        (HttpListener oStub, string strUrl, List<string> aRequests) = OStartStub();
+        try
+        {
+            HandoffResult oResult = StudioHandoff.Execute(
+                StrArtifactsDir, StrLedgerPath, nRunId, StrStageDir, strUrl,
+                strGcodeFilename: null, bOffline: false,
+                strUploadFilename: "part.gcode");
+
+            Assert.Equal("upload-proposed", oResult.Status);
+            Assert.Equal("abc123def456", oResult.UploadProposalId);
+            Assert.Equal("", oResult.ProposalId);
+
+            string strProposal = aRequests.Single(r => r.Contains("/api/propose"));
+            Assert.Contains("\"action\":\"gcode_upload\"", strProposal);
+            Assert.Contains("\"design_artifact_sha256\"", strProposal);
+        }
+        finally
+        {
+            oStub.Stop();
+        }
+    }
+
+    /// <summary>
+    /// Two proposals, never one. Putting a file on a printer and starting a
+    /// print are separate effects; bundling them would hide the second behind
+    /// approval of the first.
+    /// </summary>
+    [Fact]
+    public void UploadAndPrintAreSeparateProposals()
+    {
+        long nRunId = NSeedRun();
+        (HttpListener oStub, string strUrl, List<string> aRequests) = OStartStub();
+        try
+        {
+            HandoffResult oResult = StudioHandoff.Execute(
+                StrArtifactsDir, StrLedgerPath, nRunId, StrStageDir, strUrl,
+                strGcodeFilename: "part.gcode", bOffline: false,
+                strUploadFilename: "part.gcode");
+
+            Assert.Equal(2, aRequests.Count(r => r.Contains("/api/propose")));
+            Assert.NotEmpty(oResult.UploadProposalId);
+            Assert.NotEmpty(oResult.ProposalId);
+            Assert.Contains(aRequests, r => r.Contains("\"action\":\"gcode_upload\""));
+            Assert.Contains(aRequests, r => r.Contains("\"action\":\"print_start\""));
+        }
+        finally
+        {
+            oStub.Stop();
+        }
+    }
+
+    [Fact]
+    public void OfflineRefusesAnUploadRatherThanIgnoringIt()
+    {
+        long nRunId = NSeedRun();
+        HandoffException oEx = Assert.Throws<HandoffException>(() =>
+            StudioHandoff.Execute(
+                StrArtifactsDir, StrLedgerPath, nRunId, StrStageDir, "http://unused",
+                strGcodeFilename: null, bOffline: true, strUploadFilename: "part.gcode"));
+        Assert.Contains("require the studio", oEx.Message);
+    }
+
+    [Fact]
+    public void AStudioRefusalNamesTheActionItRefused()
+    {
+        long nRunId = NSeedRun();
+        (HttpListener oStub, string strUrl, _) = OStartStub(
+            strProposeResponse: """{"detail":"resolves outside the staging directory"}""",
+            nProposeStatus: 400);
+        try
+        {
+            HandoffException oEx = Assert.Throws<HandoffException>(() =>
+                StudioHandoff.Execute(
+                    StrArtifactsDir, StrLedgerPath, nRunId, StrStageDir, strUrl,
+                    strGcodeFilename: null, bOffline: false,
+                    strUploadFilename: "../escape.gcode"));
+
+            Assert.Contains("gcode_upload proposal", oEx.Message);
+            Assert.Contains("staging directory", oEx.Message);
+        }
+        finally
+        {
+            oStub.Stop();
+        }
     }
 
     [Fact]
