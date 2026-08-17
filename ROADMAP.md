@@ -32,7 +32,7 @@ Only after Now runs end to end for someone other than me.
 Good ideas that are not this quarter's problem. Adding to this list is a valid outcome of a discussion.
 
 - BINGO integration: ODC provenance records referenced from fabrication evidence (contract drafted, see `wiki/concepts/bingo-odc-provenance-contract.md`)
-- Feeding a measured compensation back into slicer profiles automatically — `compare` produces the number; applying it is still manual, and belongs with AdvancedStudio's profile store
+- ~~Feeding a measured compensation back into slicer profiles automatically~~ → done 2026-08-16 (ADR-0011): `compensate` judges whether a comparison justifies one and proposes it to AdvancedStudio's profile store, which computes the setting. Still needs a real print and scan to validate the number rather than the plumbing.
 - Cross-machine golden fixtures — rerun byte-identity is proven on one machine only
 
 Shipped since this list was written, and now peers rather than plans:

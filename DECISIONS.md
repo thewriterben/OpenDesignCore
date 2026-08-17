@@ -210,3 +210,40 @@ Lengths are unit-keyed fixed-precision strings, like every other length in the r
 Byte-identity across reruns survives: `CalculateProperties` is deterministic on the same voxel field, verified by the existing rerun test rather than assumed. Cross-machine identity remains unproven, as it was before.
 
 Artifacts produced under 0.1 are not rewritten. They are immutable and content-addressed; re-running the same inputs produces a 0.2 record, and the old one stays valid as a description of what it described.
+
+---
+
+## ADR-0011 — A measurement may propose a compensation; deciding whether it *should* is this engine's job, computing it is not
+
+**Date:** 2026-08-16
+**Status:** accepted
+
+**Context.** `compare` closed the verification loop as far as a number: design → print → scan → measured per-axis deviation, recorded and hash-chained. The last step, turning that into a slicer setting so the next print is closer, was a human retyping a figure — if they remembered which print it came from.
+
+Both halves of the arithmetic already existed. AdvancedStudio's `calibration/calculators.py` converts a nominal/measured pair into an OrcaSlicer shrinkage percentage and is calibrated against its process research. This repo had the measurement. Nothing connected them.
+
+**The temptation, and why it was refused.** The obvious move is to compute the percentage here — it is three lines — and post a setting. That would give the platform two implementations of one formula, in two languages, free to drift, with no test that could ever catch the drift because neither side would know the other existed.
+
+**Decision.** The split follows what each side actually knows.
+
+- **This engine decides whether a compensation is defensible at all.** That is a property of the measurement, and only the measurement can answer it. `compensate` reads a recorded comparison and returns a verdict.
+- **AdvancedStudio computes the setting**, from the nominal/measured pair this engine hands it. Slicer semantics belong with the slicer's tooling.
+- **Applying it is a proposal, never an execution** (ADR-0009). A profile change reaches beyond this engine's stores.
+
+Three refusals, each a real failure mode:
+
+| Verdict | Why |
+|---|---|
+| `WithinScannerNoise` | The deviation is inside the declared scanner accuracy. A setting from it compensates for the instrument, not the print. |
+| `AccuracyUndeclared` | No accuracy declared, so signal cannot be separated from instrument. Unknown, never "small enough to ignore". |
+| `AxesDisagree` | X and Y differ by more than the caller's declared threshold. Orca's Shrinkage (XY) is one number; their mean is wrong on both axes. |
+
+**Z is never folded into the XY figure.** Orca's Shrinkage (XY) applies to X and Y only, and Z deviation has different causes — layer squish, first-layer offset. Averaging three axes into one number would be silently wrong in a way nobody would notice, and a test pins that the XY pair is the mean of x and y alone.
+
+**`--max-axis-spread-pct` is declared by the caller and has no default.** How much X/Y disagreement still permits one factor is a process judgement, not a constant. While adding this, `compare`'s advisory output was found to be making that same judgement against a hard-coded `0.5`, which is exactly the constant-instead-of-parameter the tolerance rule forbids; it now defers to `compensate` instead of deciding quietly.
+
+**Consequences.** The loop closes: a scan can change what the slicer does next time, and the stored value carries `odc-comparison:<sha256>` so it can be traced back. A compensation in a profile stops being indistinguishable from a number somebody typed.
+
+The system will often refuse. That is the intended behaviour — most comparisons should not become settings — and the refusal names itself rather than returning a number nobody should use.
+
+**Validated on synthetic prints only.** Every refusal path is proven and the wire is proven end to end against a running studio, but whether the resulting percentage makes the next print better needs a real print and a real scan. The plumbing is correct; the water is unvalidated.
