@@ -256,3 +256,20 @@ AdvancedStudio now has a DECISIONS.md (ADR-0001) and pytest in requirements; its
 Deliberate non-decision, recorded because it is the obvious-looking shortcut: `MaterialProfile.max_volumetric_speed` is NOT wired to OpenBuildCore's `measured_throughput`. It looks like the same quantity and is not — a slicer ceiling versus an achieved rate — and conflating them would put a plausible unmeasured number into the print-time path, which is the failure OpenBuildCore ADR-0005 exists to prevent.
 
 56 ODC tests, 22 studio tests. Validated on synthetic prints only: the plumbing is proven, the percentage is not, and that needs a real print and a real scan. ADR-0011 and studio ADR-0001 both say so rather than leaving it implied.
+
+## [2026-08-16] correction | "No slicer is installed" was wrong, and the K2 envelope was in it
+Benji: "Creality Print is installed." My check an hour earlier had grepped `C:\Program Files` for `slic|cura|prusa` and concluded no slicer existed. "Creality Print" matches none of those. A filter that only finds what it already expects to find — and I had reported the negative confidently because I had *run something*, which felt like evidence.
+
+The general lesson is not "check harder". It is that a negative result from a filter is only as good as the filter, and I stated it as a fact about the machine rather than a fact about my search. Same shape as the annular-rule bug: a check that cannot fire looks exactly like a check that passed.
+
+**What was in it.** Creality Print ships a machine profile for this exact printer: `resources/profiles/Creality/machine/Creality K2 Plus 0.4 nozzle.json`, with `printable_area "0x0,350x0,350x350,0x350"` and `printable_height "350"`. So the build volume that had been a `TODO(source)` placeholder for a day is 350 × 350 × 350 mm, cited to the vendor's own file rather than measured or recalled. Plus max/min layer height and a hardened-steel nozzle from the same source. Open question 11 closed.
+
+**The placeholder worked.** For a day every fit check on the printer Benji actually owns failed loudly, and then it was replaced by a source rather than by a recollection. That is the convention doing its job, and it is worth writing down as a success rather than only noting the successes that produce features.
+
+**Three tests had to change, and one deserved real thought.** Deleting them would have quietly dropped the behaviour they protected. The placeholder-blocks case now pins against a *synthetic* uncited machine so it survives the data that prompted it. But `test_shipped_made_parts_exercise_both_outcomes` required a *globally* unmakeable part, which only held while the K2 was 1×1×1 — a 350 mm printer makes most hobby parts. Inventing a project purely to fail would be data serving the test rather than the user. It now asserts shipped parts exercise both *kinds* of blocker on some machine (260 mm probe stake vs the bench's 250 mm gantry; ASA housing vs its PLA/PETG materials), which is a stronger claim than the original made.
+
+**On the slicer gap.** Creality Print is Bambu Studio lineage (`OrcaArena` in its vendor list) and the CLI option table is genuinely present in `CrealityPrint_Slicer.dll` — `--load-settings`, `--load-filaments`, `--slice`, `--outputdir`, `--plate-to-slice` and more, confirmed by reading the binary rather than assuming the lineage. So the STL→print gap is a *wiring* problem, not a dependency decision, and my earlier framing of it was wrong twice over.
+
+But it is not a quick win either: `CrealityPrint.exe` is a 151 KB launcher stub, a naive `--slice 0` returned in 0 s producing nothing, the Creality profiles use `inherits` with no resolved `machine_full/` (only BBL has one), and `cli_config.json` exists only for BBL. Stopped there rather than guessing invocations — two attempts and a binary read is enough to characterise it honestly and hand the decision back.
+
+72 OpenBuildCore tests.
