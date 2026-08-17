@@ -214,3 +214,24 @@ Validator extended. The check that earns its place rejects measured_throughput w
 47 tests, up from 21. obc_mcp gains list_machines and can_print, both reads; no tool edits machines, for the same reason none edits inventory.
 
 Incidental but real: em-dashes were mangling to ? under cp1252 on the Windows console, and validate.py had one inside its OWN failure message — a validator that garbles the text explaining what went wrong. Scripts are ASCII-only in printed strings now. Fifth instance this week of running the thing finding what reading it did not.
+
+## [2026-08-16] build | Closing the machines<->design loop, in three steps
+Benji picked "close the loop" over the AdvancedStudio slicer work. Planned it as three steps and each one found something the previous one had hidden.
+
+**Step 1 (ODC PR #12, ADR-0010).** Went to read the sidecar for a bounding box and there wasn't one. The record described what went IN — part envelope, scan hash, clearance, wall — and never how big the thing that came OUT was. So the obvious question a fabricator asks of a design could not be answered from the record that travels with the artifact, and every downstream peer would have needed a mesh parser to answer a question about dimensions. That is a defect in the record on its own terms, not just a missing integration hook, and it went unnoticed for exactly as long as nobody consumed the field.
+
+artifact.bbox_mm + volume_cubic_mm, schema 0.1 -> 0.2. Extents and volume kept deliberately apart in the type: extents come from the mesh at float precision and are NOT bounded by voxel size, volume comes from the voxel field and IS. Same distinction the scan-compare significance bug got backwards, now written into the thing that carries it. Real risk was determinism — a computed field could have broken rerun byte-identity — and CalculateProperties turned out stable, checked by the existing test rather than assumed. Verified on a real run: 18.00 x 25.50 x 3.10 envelope produced 23.40 x 30.90 x 5.80, exactly envelope + 2(clearance + wall).
+
+**Step 2 (OpenBuildCore PR #5).** can-print --from-sidecar. The peers meet at a FILE: OBC imports nothing from ODC and reads a record that already had to exist. The tempting fallback was inputs.part_envelope_mm, present in every 0.1 record — wrong by twice the clearance plus twice the wall, and entirely plausible-looking. Refused by name instead, and the gate tests for the FIELD not a version whitelist so a future 0.9 keeps working. --size with --from-sidecar refused rather than one silently winning: two answers to the same question, and preferring one hides a disagreement.
+
+Walkthrough gained a machine-check step. First time a peer CONSUMES a provenance field rather than producing one — which is the whole point, since until something depends on a field "we record provenance" is an untested claim.
+
+**Step 3 (OpenBuildCore PR #6, ADR-0006).** Projects declare parts to be MADE. The cheap option was a part_id under mechanical/ letting the existing gap machinery handle it, and it is wrong in a specific way: a missing part and an unmakeable part are fixed differently. Buy the LoRa radio; you cannot buy your way out of a 260 mm stake on a 220 mm bed. Collapsing them would put an unmakeable part on a shopping list where it sits unbought forever looking like an ordering oversight.
+
+So: third requirement kind, reported under `fabricate` never `gaps`, absent from shopping by construction, no part in the exclusive allocation. Two booleans rather than one because a single label cannot say which half failed. No machines declared = makeable null, unknown not false — third application of that rule now (units, scan accuracy, machines).
+
+Validator boundary worth recording: made parts are checked for SHAPE only, never against owned machines. Projects are shareable, machines are personal, and validating against machines would make a project's validity depend on who is reading it.
+
+Seed data exercises fit-failure (260 mm stake vs 250 mm gantry), material-failure (ASA housing on a PLA/PETG machine) and success (desk case), with a test asserting both outcomes appear in shipped data so the negative path cannot quietly stop being exercised. Same discipline as the K2 placeholder.
+
+Pattern for the day: the loop being closed is what exposed the missing field. Steps 2 and 3 were straightforward once step 1 existed; step 1 was invisible until something tried to read it.
