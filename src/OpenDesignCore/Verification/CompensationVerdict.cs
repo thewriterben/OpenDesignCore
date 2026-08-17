@@ -25,6 +25,18 @@ public enum ECompensationVerdict
     /// mean would be silently wrong on both axes.
     /// </summary>
     AxesDisagree,
+
+    /// <summary>
+    /// One of X or Y deviated by no more than the instrument's accuracy, so
+    /// that axis has no measured deviation at all — only the other one does.
+    ///
+    /// Averaging a real reading with a non-reading manufactures a number that
+    /// describes neither. Found on the first real print: a 0.02 mm caliper
+    /// reported X off by 0.050 mm (2.5× the accuracy, real) and Y off by
+    /// 0.020 mm (1.0×, indistinguishable from zero), and the tool cheerfully
+    /// averaged them.
+    /// </summary>
+    AxisNotSignificant,
 }
 
 /// <summary>
@@ -138,15 +150,54 @@ public sealed record CompensationProposal
                 + "instrument, not the print.");
         }
 
+        // Per-axis significance, checked before the axes are compared to each
+        // other. WithinScanAccuracy above tests only the LARGEST deviation, so
+        // it passes as soon as *one* axis is real — which is exactly how a
+        // real reading got averaged with a non-reading on the first print.
+        double fAxisNoise = oReport.ScanAccuracyMm;
+        double fXAbs = Math.Abs(oX.DeviationMm);
+        double fYAbs = Math.Abs(oY.DeviationMm);
+        if (fXAbs <= fAxisNoise || fYAbs <= fAxisNoise)
+        {
+            string strWeak = fXAbs <= fAxisNoise ? "X" : "Y";
+            double fWeak = fXAbs <= fAxisNoise ? fXAbs : fYAbs;
+            double fStrong = fXAbs <= fAxisNoise ? fYAbs : fXAbs;
+            return OWith(ECompensationVerdict.AxisNotSignificant,
+                $"{strWeak} deviated {fWeak:F3} mm, which is within the instrument's "
+                + $"{fAxisNoise:F3} mm accuracy — that axis has no measured deviation at all. "
+                + $"The other axis moved {fStrong:F3} mm and is real. Averaging a reading with "
+                + "a non-reading produces a number describing neither. Either the part is only "
+                + "deviating on one axis (which is not material shrinkage and a single XY "
+                + "factor cannot fix), or the deviation is too small for this instrument to "
+                + "resolve — print a larger block so the same shrinkage shows as more "
+                + "millimetres.");
+        }
+
+        // The spread is a difference of two percentages, each carrying the
+        // instrument's error divided by a DIFFERENT edge length. On a short
+        // edge that error is a larger fraction, so the spread of a perfectly
+        // isotropic part is not zero — it has a noise floor, and comparing a
+        // declared threshold against a spread without knowing that floor
+        // invites a confident answer to an unanswerable question.
+        double fSpreadNoisePct =
+            100.0 * fAxisNoise / oX.DesignMm + 100.0 * fAxisNoise / oY.DesignMm;
+
         if (fSpread > fMaxAxisSpreadPct)
         {
             return OWith(ECompensationVerdict.AxesDisagree,
                 $"X deviated {oX.DeviationPct:F3}% and Y deviated {oY.DeviationPct:F3}%, a spread "
                 + $"of {fSpread:F3} points against the declared limit of {fMaxAxisSpreadPct:F3}. "
                 + "A single XY shrinkage factor cannot express that, and their mean would be "
-                + "wrong on both axes. Compensate per-axis in the slicer, or find out why the "
-                + "axes differ — a spread this size is usually a mechanical or orientation "
-                + "problem rather than material shrinkage.");
+                + "wrong on both axes. "
+                + (fSpread <= fSpreadNoisePct
+                    ? $"Note that {fSpreadNoisePct:F3} points of that spread is attributable to "
+                      + "the instrument alone, because the same absolute error is a larger "
+                      + "fraction of the shorter edge — so this disagreement may not be real. "
+                      + "A larger block would settle it."
+                    : "Compensate per-axis in the slicer, or find out why the axes differ — a "
+                      + $"spread this size (against a {fSpreadNoisePct:F3}-point instrument "
+                      + "floor) is usually a mechanical or orientation problem rather than "
+                      + "material shrinkage."));
         }
 
         return OWith(ECompensationVerdict.Proposed,

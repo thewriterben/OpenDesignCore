@@ -89,12 +89,17 @@ public sealed class CompensationRunTests : IDisposable
     [Fact]
     public void AxesThatDisagree_AreRefusedRatherThanAveraged()
     {
-        // X shrank 0.2%, Y shrank 1.4%. Their mean, 0.8%, is wrong on both.
-        string strComparison = StrCompare(0.998f, 0.986f, 0.998f, fAccuracyMm: 0.05f);
+        // X shrank 0.5% (0.10 mm, 2x the accuracy) and Y 1.5% (0.45 mm, 9x).
+        // BOTH are real measurements — the fixture originally used 0.2% on a
+        // 20 mm edge, which is 0.04 mm against a 0.05 mm instrument, so the
+        // test was demonstrating disagreement with an axis that had not
+        // actually been measured. The same flaw the real print exposed in the
+        // code, sitting in the test data.
+        string strComparison = StrCompare(0.995f, 0.985f, 0.995f, fAccuracyMm: 0.05f);
         CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
 
         Assert.Equal(ECompensationVerdict.AxesDisagree, oResult.Proposal.Verdict);
-        Assert.True(oResult.Proposal.AxisSpreadPct > 1.0);
+        Assert.True(oResult.Proposal.AxisSpreadPct > 0.9);
         Assert.Contains("wrong on both axes", oResult.Proposal.Reason);
     }
 
@@ -103,12 +108,63 @@ public sealed class CompensationRunTests : IDisposable
     {
         // The same measurement, judged against two different declared limits.
         // A tolerance that decided this itself would be a hidden constant.
-        string strComparison = StrCompare(0.998f, 0.986f, 0.998f, fAccuracyMm: 0.05f);
+        // Both axes deliberately well clear of the instrument floor, so the
+        // verdict turns on the declared limit and nothing else.
+        string strComparison = StrCompare(0.995f, 0.985f, 0.995f, fAccuracyMm: 0.05f);
 
         Assert.Equal(ECompensationVerdict.AxesDisagree,
             OCompensate(strComparison, fMaxSpreadPct: 0.2).Proposal.Verdict);
         Assert.Equal(ECompensationVerdict.Proposed,
             OCompensate(strComparison, fMaxSpreadPct: 5.0).Proposal.Verdict);
+    }
+
+    /// <summary>
+    /// Found on the first real print, not by reasoning about it.
+    ///
+    /// Benji measured 19.95 × 29.98 × 15.06 against a 20 × 30 × 15 block with
+    /// 0.02 mm calipers. X was off by 0.050 mm — two and a half times the
+    /// instrument accuracy, real. Y was off by 0.020 mm — exactly the
+    /// accuracy, indistinguishable from zero. The tool averaged them and
+    /// proposed a compensation.
+    ///
+    /// `WithinScanAccuracy` only ever tested the LARGEST deviation, so it
+    /// passed as soon as one axis was real. Averaging a reading with a
+    /// non-reading produces a number describing neither.
+    /// </summary>
+    [Fact]
+    public void AnAxisInsideInstrumentAccuracyIsNotAveragedIn()
+    {
+        // 19.95 / 20 and 29.98 / 30, the real reading.
+        string strComparison = StrCompare(0.9975f, 0.99933f, 1.004f, fAccuracyMm: 0.02f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 5.0);
+
+        Assert.Equal(ECompensationVerdict.AxisNotSignificant, oResult.Proposal.Verdict);
+        Assert.False(oResult.Proposal.Actionable);
+        Assert.Contains("no measured deviation at all", oResult.Proposal.Reason);
+        Assert.Contains("print a larger block", oResult.Proposal.Reason);
+    }
+
+    [Fact]
+    public void ASlackSpreadLimitCannotRescueANonSignificantAxis()
+    {
+        // The refusal must not be defeatable by widening the threshold: the
+        // problem is the measurement, not the tolerance.
+        string strComparison = StrCompare(0.9975f, 0.99933f, 1.004f, fAccuracyMm: 0.02f);
+        foreach (double fLimit in new[] { 0.05, 0.15, 0.25, 10.0 })
+        {
+            Assert.Equal(ECompensationVerdict.AxisNotSignificant,
+                OCompensate(strComparison, fLimit).Proposal.Verdict);
+        }
+    }
+
+    [Fact]
+    public void BothAxesRealAndAgreeing_StillProposes()
+    {
+        // The significance check must not swallow the case it was built
+        // around: both axes well clear of the noise floor, and agreeing.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.02f);
+        Assert.Equal(ECompensationVerdict.Proposed,
+            OCompensate(strComparison, fMaxSpreadPct: 0.2).Proposal.Verdict);
     }
 
     [Fact]
