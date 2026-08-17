@@ -166,10 +166,19 @@ if (args is ["compare", ..])
         oOpts[args[i][2..]] = args[i + 1];
     }
 
-    if (!oOpts.TryGetValue("design", out string? strDesign)
-        || !oOpts.TryGetValue("scan", out string? strScanPath))
+    if (!oOpts.TryGetValue("design", out string? strDesign))
     {
-        Console.Error.WriteLine("--design <stl> and --scan <stl> are both required.");
+        Console.Error.WriteLine("--design <stl> is required.");
+        return 2;
+    }
+    bool bHasScan = oOpts.TryGetValue("scan", out string? strScanPath);
+    bool bHasMeasured = oOpts.TryGetValue("measured", out string? strMeasured);
+    if (bHasScan == bHasMeasured)
+    {
+        Console.Error.WriteLine(
+            "Give exactly one of --scan <stl> or --measured <X>x<Y>x<Z>. They are two "
+            + "instruments answering the same question, and silently preferring one "
+            + "would hide a disagreement between them.");
         return 2;
     }
     if (!oOpts.TryGetValue("units", out string? strUnitsArg)
@@ -188,16 +197,34 @@ if (args is ["compare", ..])
 
     try
     {
-        float fAccuracy = oOpts.TryGetValue("scan-accuracy-mm", out string? strAcc)
-            ? float.Parse(strAcc, System.Globalization.CultureInfo.InvariantCulture)
-            : 0f;
+        // One declared accuracy, whichever instrument produced the numbers.
+        // A caliper and a scanner are both instruments with a stated error,
+        // and the machinery downstream does not care which one it was.
+        float fAccuracy = oOpts.TryGetValue("instrument-accuracy-mm", out string? strInstr)
+            ? float.Parse(strInstr, System.Globalization.CultureInfo.InvariantCulture)
+            : oOpts.TryGetValue("scan-accuracy-mm", out string? strAcc)
+                ? float.Parse(strAcc, System.Globalization.CultureInfo.InvariantCulture)
+                : 0f;
 
-        CompareRunResult oResult = CompareRun.Execute(
-            strDesign, strScanPath, eCmpUnits, fCmpVoxel,
-            oOpts.GetValueOrDefault("artifacts", "artifacts"),
-            oOpts.GetValueOrDefault("ledger", "ledger.db"),
-            StrGitCommit(),
-            fAccuracy);
+        CompareRunResult oResult;
+        if (bHasMeasured)
+        {
+            (float fMx, float fMy, float fMz) = CompareRun.OParseMeasured(strMeasured!);
+            oResult = CompareRun.ExecuteMeasured(
+                strDesign, eCmpUnits, fCmpVoxel, fMx, fMy, fMz, fAccuracy,
+                oOpts.GetValueOrDefault("artifacts", "artifacts"),
+                oOpts.GetValueOrDefault("ledger", "ledger.db"),
+                StrGitCommit());
+        }
+        else
+        {
+            oResult = CompareRun.Execute(
+                strDesign, strScanPath!, eCmpUnits, fCmpVoxel,
+                oOpts.GetValueOrDefault("artifacts", "artifacts"),
+                oOpts.GetValueOrDefault("ledger", "ledger.db"),
+                StrGitCommit(),
+                fAccuracy);
+        }
 
         Console.WriteLine($"run {oResult.RunId}: dimensional comparison");
         foreach (AxisDeviation oAxis in oResult.Report.Axes)
@@ -225,6 +252,81 @@ if (args is ["compare", ..])
         return 0;
     }
     catch (Exception e) when (e is OpenDesignCore.Import.ImportValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
+if (args is ["run-calibration-block", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    if (!oOpts.TryGetValue("instrument-accuracy-mm", out string? strAcc)
+        || !float.TryParse(strAcc, System.Globalization.CultureInfo.InvariantCulture, out float fInstrAcc))
+    {
+        Console.Error.WriteLine(
+            "--instrument-accuracy-mm is required and takes no default: it is recorded in "
+            + "provenance and decides, later, whether a measured deviation is real or "
+            + "instrument error. A typical digital caliper is 0.02 mm.");
+        return 2;
+    }
+
+    CalibrationBlockParams oDefault = CalibrationBlockModel.ODefault();
+    float FBlock(string strKey, float fDefault)
+        => oOpts.TryGetValue(strKey, out string? s)
+            ? float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)
+            : fDefault;
+
+    CalibrationBlockParams oBlock = new()
+    {
+        XMm = FBlock("x-mm", oDefault.XMm),
+        YMm = FBlock("y-mm", oDefault.YMm),
+        ZMm = FBlock("z-mm", oDefault.ZMm),
+    };
+
+    // Defaults to the model's own floor, which is derived from the block's
+    // dimensions rather than being a constant. Note it is NOT derived from the
+    // instrument accuracy: the comparison uses the exported bounding box, so
+    // grid quantisation is measured rather than assumed.
+    float fBlockVoxel = oOpts.TryGetValue("voxel-mm", out string? strBv)
+        ? float.Parse(strBv, System.Globalization.CultureInfo.InvariantCulture)
+        : CalibrationBlockModel.FResolutionFloorMm(oBlock);
+
+    try
+    {
+        CalibrationBlockRunResult oResult = CalibrationBlockRun.Execute(
+            oBlock, fBlockVoxel, fInstrAcc,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+
+        Console.WriteLine($"run {oResult.RunId}: PASS  {CalibrationBlockModel.StrModelId}");
+        Console.WriteLine(
+            $"  nominal    {oBlock.XMm:F2} x {oBlock.YMm:F2} x {oBlock.ZMm:F2} mm "
+            + $"(voxel {fBlockVoxel:F4} mm)");
+        Console.WriteLine(
+            $"  exported   {oResult.Geometry.BBoxXMm:F3} x {oResult.Geometry.BBoxYMm:F3} x "
+            + $"{oResult.Geometry.BBoxZMm:F3} mm");
+        Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine($"  stl        {oResult.ArtifactPath}");
+        Console.WriteLine();
+        Console.WriteLine("  Print it, let it cool, then measure each axis across its flat faces:");
+        Console.WriteLine($"    compare --design {oResult.ArtifactPath} --units mm \\");
+        Console.WriteLine($"            --voxel-mm {fBlockVoxel:F4} --measured <X>x<Y>x<Z> \\");
+        Console.WriteLine($"            --instrument-accuracy-mm {fInstrAcc}");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException or ArgumentException)
     {
         Console.Error.WriteLine(e.Message);
         return 1;
@@ -373,8 +475,11 @@ Console.WriteLine("       OpenDesignCore run-enclosure --voxel-mm <v> [--part <i
 Console.WriteLine("                                    [--wall-mm <v>] [--data <dir>] [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore run-cradle --stl <path> --units <mm|cm|m|in|ft> --voxel-mm <v>");
 Console.WriteLine("                                 [--clearance-mm <v>] [--wall-mm <v>] [--split <0..1>] [--scale <f>]");
-Console.WriteLine("       OpenDesignCore compare --design <stl> --scan <stl> --units <u> --voxel-mm <v>");
-Console.WriteLine("                              [--scan-accuracy-mm <v>]");
+Console.WriteLine("       OpenDesignCore run-calibration-block --instrument-accuracy-mm <v>");
+Console.WriteLine("                                            [--x-mm <v>] [--y-mm <v>] [--z-mm <v>] [--voxel-mm <v>]");
+Console.WriteLine("       OpenDesignCore compare --design <stl> --units <u> --voxel-mm <v>");
+Console.WriteLine("                              (--scan <stl> | --measured <X>x<Y>x<Z>)");
+Console.WriteLine("                              [--instrument-accuracy-mm <v>]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
 Console.WriteLine("                                 [--propose-to-profile <key>] [--studio <url>]");
 Console.WriteLine("                                 [--artifacts <dir>] [--ledger <path>]");

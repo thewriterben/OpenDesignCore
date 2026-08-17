@@ -236,7 +236,13 @@ public static class CompensationRun
         {
             Axes = aAxes,
             DesignVolumeCubicMm = FParse(oSummary, "design_volume_cubic_mm"),
-            ScanVolumeCubicMm = FParse(oSummary, "scan_volume_cubic_mm"),
+            // Optional by design: a hand measurement records this as
+            // "not-measurable-by-hand", because a caliper cannot give a
+            // volume. The compensation judgement is entirely about extents
+            // and axis spread, so an unreadable volume must not stop the
+            // record loading — it would refuse the whole caliper path over a
+            // field it never consults.
+            ScanVolumeCubicMm = FParseOptional(oSummary, "scan_volume_cubic_mm"),
             VoxelSizeMm = FParse(oRoot, "voxel_size_mm"),
             ScanAccuracyMm = fAccuracy,
         };
@@ -244,6 +250,19 @@ public static class CompensationRun
 
     private static double FParse(JsonElement oParent, string strKey)
         => double.Parse(oParent.GetProperty(strKey).GetString()!, CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// A number, or zero when the record says the value was not measurable.
+    ///
+    /// Only for fields the compensation does not consult. Applying this to a
+    /// figure the verdict depends on would turn a missing measurement into a
+    /// silent zero, which is the failure this codebase spends most of its
+    /// effort avoiding.
+    /// </summary>
+    private static double FParseOptional(JsonElement oParent, string strKey)
+        => oParent.TryGetProperty(strKey, out JsonElement oValue)
+           && double.TryParse(oValue.GetString(), CultureInfo.InvariantCulture, out double f)
+            ? f : 0;
 
     private static string StrF3(double fValue) => fValue.ToString("F3", CultureInfo.InvariantCulture);
 }
