@@ -41,7 +41,7 @@ public sealed class CompensationRunTests : IDisposable
 
         return CompareRun.Execute(
             strDesign, strScan, Mesh.EStlUnit.MM, 0.2f,
-            StrArtifacts, StrLedger, "test-commit", fAccuracyMm).ReportSha256;
+            StrArtifacts, StrLedger, "test-commit", "pla", fAccuracyMm).ReportSha256;
     }
 
     private CompensationRunResult OCompensate(string strComparison, double fMaxSpreadPct)
@@ -244,8 +244,12 @@ public sealed class CompensationRunTests : IDisposable
         string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
         CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
 
+        // Profile key matches the fixture's material, so the material gate
+        // passes and the failure is the one under test. It fires first by
+        // design: there is no point reaching for a printer to file a number
+        // under the wrong material.
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oResult, "http://127.0.0.1:1", "petg"));
+            () => CompensationRun.StrPropose(oResult, "http://127.0.0.1:1", "pla"));
         Assert.Contains("unreachable", oEx.Message);
         Assert.Contains("record is written", oEx.Message);
     }

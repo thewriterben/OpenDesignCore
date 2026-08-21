@@ -59,9 +59,23 @@ public static class CompareRun
         string strArtifactsDir,
         string strLedgerPath,
         string strCommit,
+        string strMaterial,
         float fMeasuredZLowMm = 0f,
         float fNominalZLowMm = 0f)
     {
+        // Compensation is per material and per spool — the ADRs said so from
+        // the start, and nothing enforced it. The material was never captured
+        // anywhere in the pipeline, so a PLA measurement could be proposed to
+        // a PETG profile carrying a provenance hash that made it look
+        // rigorous. Declared here, never inferred, like units and accuracy.
+        if (string.IsNullOrWhiteSpace(strMaterial))
+        {
+            throw new ArgumentException(
+                "--material is required and takes no default. A shrinkage figure describes "
+                + "one material, and without recording which one, a measurement taken on PLA "
+                + "can be proposed to a PETG profile with a hash that makes it look sourced.");
+        }
+
         if (fInstrumentAccuracyMm <= 0)
         {
             throw new ArgumentException(
@@ -124,7 +138,8 @@ public static class CompareRun
             strScanHash: "", eUnits: eUnits, fVoxelSizeMm: fVoxelSizeMm,
             fAccuracyMm: fInstrumentAccuracyMm,
             strArtifactsDir: strArtifactsDir, strLedgerPath: strLedgerPath,
-            strCommit: strCommit, fFirstLayerOffsetMm: fFirstLayerOffset);
+            strCommit: strCommit, fFirstLayerOffsetMm: fFirstLayerOffset,
+            strMaterial: strMaterial.Trim().ToLowerInvariant());
     }
 
     public static CompareRunResult Execute(
@@ -135,8 +150,20 @@ public static class CompareRun
         string strArtifactsDir,
         string strLedgerPath,
         string strCommit,
+        string strMaterial,
         float fScanAccuracyMm = 0f)
     {
+        // Required on this path too. The material is a property of the printed
+        // part, not of the instrument that measured it, so a scan needs it
+        // exactly as much as a caliper does.
+        if (string.IsNullOrWhiteSpace(strMaterial))
+        {
+            throw new ArgumentException(
+                "--material is required and takes no default. A shrinkage figure describes "
+                + "one material, and an unlabelled measurement is how one material's number "
+                + "ends up in another material's profile.");
+        }
+
         DimensionalReport oReport;
         string strDesignHash, strScanHash;
 
@@ -161,7 +188,8 @@ public static class CompareRun
             strScanHash: strScanHash, eUnits: eUnits, fVoxelSizeMm: fVoxelSizeMm,
             fAccuracyMm: fScanAccuracyMm,
             strArtifactsDir: strArtifactsDir, strLedgerPath: strLedgerPath,
-            strCommit: strCommit);
+            strCommit: strCommit,
+            strMaterial: strMaterial.Trim().ToLowerInvariant());
     }
 
     /// <summary>
@@ -183,7 +211,8 @@ public static class CompareRun
         string strArtifactsDir,
         string strLedgerPath,
         string strCommit,
-        double? fFirstLayerOffsetMm = null)
+        double? fFirstLayerOffsetMm = null,
+        string strMaterial = "")
     {
         Dictionary<string, object?> oRecord = new()
         {
@@ -198,6 +227,10 @@ public static class CompareRun
                 // from a scan whose hash went missing.
                 ["scan_sha256"] = strScanHash.Length > 0 ? strScanHash : "none-measured-by-hand",
                 ["measured_by"] = strMeasuredBy,
+                // The material the part was printed in. A shrinkage figure
+                // describes one material; without this the pipeline cannot
+                // stop a PLA measurement reaching a PETG profile.
+                ["material"] = strMaterial.Length > 0 ? strMaterial : "undeclared",
                 ["declared_units"] = eUnits.ToString().ToLowerInvariant(),
                 ["declared_scan_accuracy_mm"] =
                     fAccuracyMm > 0 ? StrF3(fAccuracyMm) : "undeclared",

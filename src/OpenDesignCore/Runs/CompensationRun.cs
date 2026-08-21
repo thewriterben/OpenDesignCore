@@ -14,6 +14,9 @@ public sealed record CompensationRunResult
     public required string ComparisonSha256 { get; init; }
     public required string RecordSha256 { get; init; }
     public required CompensationProposal Proposal { get; init; }
+
+    /// <summary>The material the measured part was printed in, from the comparison.</summary>
+    public required string Material { get; init; }
 }
 
 /// <summary>
@@ -65,6 +68,7 @@ public static class CompensationRun
         byte[] abComparison = File.ReadAllBytes(strPath);
         DimensionalReport oReport = OParseReport(abComparison, strPath);
         CompensationProposal oProposal = CompensationProposal.OJudge(oReport, fMaxAxisSpreadPct);
+        string strMaterial = StrParseMaterial(abComparison);
 
         Dictionary<string, object?> oRecord = new()
         {
@@ -75,6 +79,7 @@ public static class CompensationRun
                 // Hash-chained: this proposal is about one specific measurement.
                 ["comparison_sha256"] = strComparisonSha256,
                 ["max_axis_spread_pct"] = StrF3(fMaxAxisSpreadPct),
+                ["material"] = strMaterial,
             },
             ["verdict"] = oProposal.Verdict.ToString(),
             ["actionable"] = oProposal.Actionable,
@@ -137,7 +142,33 @@ public static class CompensationRun
             ComparisonSha256 = strComparisonSha256,
             RecordSha256 = strRecordHash,
             Proposal = oProposal,
+            Material = strMaterial,
         };
+    }
+
+    /// <summary>
+    /// The material from the comparison, or a refusal.
+    ///
+    /// Older records predate the field and say nothing. Those are refused
+    /// rather than defaulted, because the whole point is that an unlabelled
+    /// measurement must not silently become a labelled compensation.
+    /// </summary>
+    private static string StrParseMaterial(byte[] abComparison)
+    {
+        using JsonDocument oDoc = JsonDocument.Parse(abComparison);
+        string strMaterial =
+            oDoc.RootElement.GetProperty("inputs").TryGetProperty("material", out JsonElement oMat)
+                ? oMat.GetString() ?? "" : "";
+
+        if (strMaterial.Length == 0 || strMaterial == "undeclared")
+        {
+            throw new CompensationException(
+                "The comparison does not record which material the part was printed in, so "
+                + "this compensation cannot be tied to one. Re-run `compare` with --material. "
+                + "A shrinkage figure describes a single material, and an unlabelled one is "
+                + "exactly how a PLA measurement ends up in a PETG profile.");
+        }
+        return strMaterial;
     }
 
     /// <summary>
@@ -160,6 +191,28 @@ public static class CompensationRun
                 + oResult.Proposal.Reason);
         }
 
+        // The gate that would have caught the real mistake. The walkthrough's
+        // example command said `--propose-to-profile petg` while the block was
+        // printed in PLA; nothing in the pipeline knew or cared, and a PLA
+        // measurement would have landed in the PETG profile carrying a
+        // provenance hash that made it look sourced.
+        //
+        // A substring match rather than equality, because a profile key may be
+        // more specific than a material name — "petg" measured, "petg-cf" or
+        // "esun-petg" as the profile — and refusing that would be pedantry.
+        // "pla" against "petg" is what this is for.
+        string strKey = strProfileKey.Trim().ToLowerInvariant();
+        if (!strKey.Contains(oResult.Material) && !oResult.Material.Contains(strKey))
+        {
+            throw new CompensationException(
+                $"Refusing to propose: the part was measured in '{oResult.Material}' but the "
+                + $"target profile is '{strProfileKey}'. Shrinkage is a property of one "
+                + "material, so this would file a measurement under a material it does not "
+                + "describe — and it would arrive carrying a provenance hash that made it "
+                + "look sourced. Propose to the profile for the material you actually "
+                + "printed.");
+        }
+
         using HttpClient oHttp = new() { Timeout = TimeSpan.FromSeconds(5) };
         Dictionary<string, object?> oBody = new()
         {
@@ -169,7 +222,10 @@ public static class CompensationRun
                 ["key"] = strProfileKey,
                 ["nominal_xy_mm"] = oResult.Proposal.NominalXyMm,
                 ["measured_xy_mm"] = oResult.Proposal.MeasuredXyMm,
-                ["origin"] = $"odc-comparison:{oResult.ComparisonSha256}",
+                // The material rides in the origin string as well as being
+                // gated on, so the stored value is self-describing even to a
+                // reader who never fetches the comparison record.
+                ["origin"] = $"odc-comparison:{oResult.ComparisonSha256} ({oResult.Material})",
             },
         };
 

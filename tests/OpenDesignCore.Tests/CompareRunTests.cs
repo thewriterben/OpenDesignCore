@@ -39,7 +39,7 @@ public sealed class CompareRunTests : IDisposable
             strDesign, strScan, Mesh.EStlUnit.MM, fVoxelMm,
             Path.Combine(_strTempDir, "artifacts"),
             Path.Combine(_strTempDir, "ledger.db"),
-            "test-commit",
+            "test-commit", "pla",
             fScanAccuracyMm);
 
     [Fact]

@@ -226,12 +226,24 @@ if (args is ["compare", ..])
                 return 2;
             }
 
+            if (!oOpts.TryGetValue("material", out string? strMaterial)
+                || string.IsNullOrWhiteSpace(strMaterial))
+            {
+                Console.Error.WriteLine(
+                    "--material is required and takes no default. A shrinkage figure "
+                    + "describes one material, and without it a measurement taken on PLA can "
+                    + "be proposed to a PETG profile carrying a hash that makes it look "
+                    + "sourced. e.g. --material pla");
+                return 2;
+            }
+
             oResult = CompareRun.ExecuteMeasured(
                 strDesign, eCmpUnits, fCmpVoxel,
                 aM[0], aM[1], aM.Length == 4 ? aM[3] : aM[2], fAccuracy,
                 oOpts.GetValueOrDefault("artifacts", "artifacts"),
                 oOpts.GetValueOrDefault("ledger", "ledger.db"),
                 StrGitCommit(),
+                strMaterial: strMaterial,
                 fMeasuredZLowMm: aM.Length == 4 ? aM[2] : 0f,
                 fNominalZLowMm: aM.Length == 4 ? fZLowNominal : 0f);
 
@@ -245,11 +257,22 @@ if (args is ["compare", ..])
         }
         else
         {
+            if (!oOpts.TryGetValue("material", out string? strScanMaterial)
+                || string.IsNullOrWhiteSpace(strScanMaterial))
+            {
+                Console.Error.WriteLine(
+                    "--material is required and takes no default. The material is a property "
+                    + "of the printed part, not of the instrument, so a scan needs it exactly "
+                    + "as much as a caliper does. e.g. --material pla");
+                return 2;
+            }
+
             oResult = CompareRun.Execute(
                 strDesign, strScanPath!, eCmpUnits, fCmpVoxel,
                 oOpts.GetValueOrDefault("artifacts", "artifacts"),
                 oOpts.GetValueOrDefault("ledger", "ledger.db"),
                 StrGitCommit(),
+                strScanMaterial,
                 fAccuracy);
         }
 
@@ -407,7 +430,7 @@ if (args is ["compensate", ..])
             StrGitCommit());
 
         CompensationProposal oProp = oResult.Proposal;
-        Console.WriteLine($"run {oResult.RunId}: {oProp.Verdict}");
+        Console.WriteLine($"run {oResult.RunId}: {oProp.Verdict}  (material: {oResult.Material})");
         Console.WriteLine($"  {oProp.Reason}");
         if (oProp.Actionable)
         {
@@ -512,8 +535,8 @@ Console.WriteLine("                                 [--clearance-mm <v>] [--wall
 Console.WriteLine("       OpenDesignCore run-calibration-block --instrument-accuracy-mm <v>");
 Console.WriteLine("                                            [--x-mm <v>] [--y-mm <v>] [--z-mm <v>] [--voxel-mm <v>]");
 Console.WriteLine("       OpenDesignCore compare --design <stl> --units <u> --voxel-mm <v>");
-Console.WriteLine("                              (--scan <stl> | --measured <X>x<Y>x<Z>)");
-Console.WriteLine("                              [--instrument-accuracy-mm <v>]");
+Console.WriteLine("                              (--scan <stl> | --measured <X>x<Y>x<Zlow>x<Zhigh> --material <m>)");
+Console.WriteLine("                              [--nominal-step-z-mm <v>] [--instrument-accuracy-mm <v>]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
 Console.WriteLine("                                 [--propose-to-profile <key>] [--studio <url>]");
 Console.WriteLine("                                 [--artifacts <dir>] [--ledger <path>]");

@@ -156,7 +156,7 @@ public sealed class CalibrationBlockTests : IDisposable
             oBlock.ArtifactPath, PicoGK.Mesh.EStlUnit.MM, FVoxel(),
             fMeasuredXMm: 39.85f, fMeasuredYMm: 59.78f, fMeasuredZMm: 24.85f,
             fInstrumentAccuracyMm: 0.02f,
-            StrArtifacts, StrLedger, "test-commit");
+            StrArtifacts, StrLedger, "test-commit", strMaterial: "pla");
 
         Assert.Equal(3, oCmp.Report.Axes.Count);
         Assert.False(oCmp.Report.WithinScanAccuracy, "150 microns is well above a 0.02 mm caliper");
@@ -182,7 +182,7 @@ public sealed class CalibrationBlockTests : IDisposable
             oBlock.ArtifactPath, PicoGK.Mesh.EStlUnit.MM, FVoxel(),
             fMeasuredXMm: 39.86f, fMeasuredYMm: 59.79f, fMeasuredZMm: 25.10f,
             fInstrumentAccuracyMm: 0.02f,
-            StrArtifacts, StrLedger, "test-commit",
+            StrArtifacts, StrLedger, "test-commit", strMaterial: "pla",
             fMeasuredZLowMm: 4.05f, fNominalZLowMm: o.StepZMm);
 
         CompensationRunResult oComp = CompensationRun.Execute(
@@ -206,7 +206,7 @@ public sealed class CalibrationBlockTests : IDisposable
             () => CompareRun.ExecuteMeasured(
                 oBlock.ArtifactPath, PicoGK.Mesh.EStlUnit.MM, 0.3f,
                 19.93f, 29.89f, 15.02f, 0f,
-                StrArtifacts, StrLedger, "test-commit"));
+                StrArtifacts, StrLedger, "test-commit", strMaterial: "pla"));
         Assert.Contains("takes no default", oEx.Message);
     }
 
@@ -269,7 +269,7 @@ public sealed class CalibrationBlockTests : IDisposable
             CalibrationBlockModel.FResolutionFloorMm(o),
             fMeasuredXMm: 39.90f, fMeasuredYMm: 59.85f, fMeasuredZMm: 24.79f,
             fInstrumentAccuracyMm: 0.02f,
-            StrArtifacts, StrLedger, "test-commit",
+            StrArtifacts, StrLedger, "test-commit", strMaterial: "pla",
             fMeasuredZLowMm: 3.90f, fNominalZLowMm: o.StepZMm);
 
         AxisDeviation oZ = oCmp.Report.Axes.Single(a => a.Axis == "z-span");
@@ -290,12 +290,98 @@ public sealed class CalibrationBlockTests : IDisposable
             oBlock.ArtifactPath, PicoGK.Mesh.EStlUnit.MM,
             CalibrationBlockModel.FResolutionFloorMm(CalibrationBlockModel.ODefault()),
             39.90f, 59.85f, 24.79f, 0.02f,
-            StrArtifacts, StrLedger, "test-commit");
+            StrArtifacts, StrLedger, "test-commit", strMaterial: "pla");
 
         Assert.Contains(oCmp.Report.Axes, a => a.Axis == "z");
         string strRecord = File.ReadAllText(ArtifactStore.StrPathFor(
             StrArtifacts, oCmp.ReportSha256, ".comparison.json"));
         Assert.Contains("not-separable-from-a-single-height", strRecord);
+    }
+
+    /// <summary>
+    /// The mistake this prevents actually happened.
+    ///
+    /// The walkthrough's step 6 said `--propose-to-profile petg` while never
+    /// saying what to print. Benji printed PLA. Nothing in the pipeline
+    /// recorded the material, so a PLA measurement would have landed in the
+    /// PETG profile carrying a provenance hash that made it look sourced —
+    /// worse than an unsourced guess, because it would have looked rigorous.
+    /// </summary>
+    [Fact]
+    public void AMaterialMismatchIsRefusedBeforeItReachesAProfile()
+    {
+        CompensationRunResult oComp = OMeasureAndJudge("pla");
+        Assert.Equal(ECompensationVerdict.Proposed, oComp.Proposal.Verdict);
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(oComp, "http://127.0.0.1:1", "petg"));
+        Assert.Contains("measured in 'pla'", oEx.Message);
+        Assert.Contains("look sourced", oEx.Message);
+    }
+
+    [Fact]
+    public void AMatchingProfileGetsPastTheMaterialGate()
+    {
+        CompensationRunResult oComp = OMeasureAndJudge("pla");
+        // Reaches the studio call and fails there, which is how we know the
+        // material gate let it through rather than the reverse.
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(oComp, "http://127.0.0.1:1", "pla"));
+        Assert.Contains("unreachable", oEx.Message);
+    }
+
+    [Fact]
+    public void AMoreSpecificProfileKeyIsAccepted()
+    {
+        // "petg" measured against a "petg-cf" or "esun-petg" profile is a
+        // reasonable thing to do; refusing it would be pedantry rather than
+        // safety. The gate exists for pla-vs-petg, not for naming schemes.
+        CompensationRunResult oComp = OMeasureAndJudge("petg");
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(oComp, "http://127.0.0.1:1", "esun-petg"));
+        Assert.Contains("unreachable", oEx.Message);
+    }
+
+    [Fact]
+    public void AnUndeclaredMaterialIsRefused()
+    {
+        ArgumentException oEx = Assert.Throws<ArgumentException>(
+            () => CompareRun.ExecuteMeasured(
+                ORun().ArtifactPath, PicoGK.Mesh.EStlUnit.MM, FVoxel(),
+                39.86f, 59.79f, 25.10f, 0.02f,
+                StrArtifacts, StrLedger, "test-commit", strMaterial: "  "));
+        Assert.Contains("takes no default", oEx.Message);
+    }
+
+    [Fact]
+    public void TheMaterialIsRecordedInBothRecords()
+    {
+        CompensationRunResult oComp = OMeasureAndJudge("pla");
+        Assert.Equal("pla", oComp.Material);
+
+        string strCompRecord = File.ReadAllText(ArtifactStore.StrPathFor(
+            StrArtifacts, oComp.RecordSha256, ".compensation.json"));
+        Assert.Contains("\"material\":\"pla\"", strCompRecord);
+
+        string strCmpRecord = File.ReadAllText(ArtifactStore.StrPathFor(
+            StrArtifacts, oComp.ComparisonSha256, ".comparison.json"));
+        Assert.Contains("\"material\":\"pla\"", strCmpRecord);
+    }
+
+    /// <summary>A clean measurement in one material, judged and ready to propose.</summary>
+    private CompensationRunResult OMeasureAndJudge(string strMaterial)
+    {
+        CalibrationBlockRunResult oBlock = ORun();
+        CalibrationBlockParams o = CalibrationBlockModel.ODefault();
+        CompareRunResult oCmp = CompareRun.ExecuteMeasured(
+            oBlock.ArtifactPath, PicoGK.Mesh.EStlUnit.MM, FVoxel(),
+            fMeasuredXMm: 39.86f, fMeasuredYMm: 59.79f, fMeasuredZMm: 25.10f,
+            fInstrumentAccuracyMm: 0.02f,
+            StrArtifacts, StrLedger, "test-commit", strMaterial: strMaterial,
+            fMeasuredZLowMm: 4.05f, fNominalZLowMm: o.StepZMm);
+
+        return CompensationRun.Execute(
+            StrArtifacts, StrLedger, oCmp.ReportSha256, 0.15, "test-commit");
     }
 
     [Fact]

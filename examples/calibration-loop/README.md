@@ -48,7 +48,13 @@ tells you which face you measured.
 ## 2. Print it
 
 Slice it in Creality Print with the profile you actually use, and print it in
-the material you want to calibrate. Compensation is per material and per spool.
+the material you want to calibrate.
+
+**Write down which material, and which spool.** Compensation is a property of
+one material — PLA and PETG shrink differently — and every command from here
+takes `--material`. It is required and has no default, because the first time
+this walkthrough was followed the examples all said `petg` while never saying
+what to print, and the part came out in PLA. Nothing would have caught it.
 
 Two things to get right, because they are the difference between measuring the
 printer and measuring a defect:
@@ -94,7 +100,8 @@ what the unequal X and Y are for.
 dotnet run --project src/OpenDesignCore -c Release -- \
   compare --design artifacts/b7/b74407de...stl --units mm --voxel-mm 0.2 \
           --measured 39.86x59.79x4.05x25.10 \
-          --nominal-step-z-mm 4 --instrument-accuracy-mm 0.02
+          --nominal-step-z-mm 4 --instrument-accuracy-mm 0.02 \
+          --material pla
 ```
 
 Four values are X, Y, Z-low, Z-high. `--nominal-step-z-mm` is required with
@@ -138,8 +145,12 @@ correct −0.36%. Roughly half the compensation you need.
 
 ```
   ... compensate --comparison <sha> --max-axis-spread-pct 0.15 \
-      --propose-to-profile petg --studio http://localhost:8770
+      --propose-to-profile pla --studio http://localhost:8770
 ```
+
+**The profile must match the material you measured.** Proposing a PLA
+measurement to a `petg` profile is refused before it reaches the studio — that
+is not a hypothetical, it is what this walkthrough told the first person to do.
 
 AdvancedStudio computes the OrcaSlicer shrinkage percentage from the measured
 pair — this side never computes slicer settings — and holds it for approval.
