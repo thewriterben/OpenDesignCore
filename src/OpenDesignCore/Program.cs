@@ -447,10 +447,31 @@ if (args is ["compensate", ..])
 
         if (oOpts.TryGetValue("propose-to-profile", out string? strProfileKey))
         {
+            // Required only on this branch. `compensate` alone computes and
+            // records without knowing anything about the machine — measuring
+            // an uncalibrated printer is how you discover it is uncalibrated,
+            // and demanding the registry to do that would make the diagnosis
+            // impossible. Proposing is the step that needs the machine.
+            if (!oOpts.TryGetValue("machines", out string? strMachines)
+                || !oOpts.TryGetValue("machine-id", out string? strMachineId))
+            {
+                Console.Error.WriteLine(
+                    "--propose-to-profile also requires --machines <machines.json> and "
+                    + "--machine-id <id>. A shrinkage figure is only about the material if "
+                    + "the machine's axes are known good; without that, part of it is the "
+                    + "machine, stored under the material's name. The comparison above is "
+                    + "recorded either way.");
+                return 2;
+            }
+
+            MachineCalibration oMachine = MachineCalibration.ORead(strMachines, strMachineId);
+            Console.WriteLine($"  calibration: {oMachine.State} — {oMachine.Reason}");
+
             string strConfirmation = CompensationRun.StrPropose(
                 oResult,
                 oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
-                strProfileKey);
+                strProfileKey,
+                oMachine);
             Console.WriteLine(
                 $"  proposal {strConfirmation} — awaiting human approval in the studio dashboard");
         }
@@ -538,8 +559,8 @@ Console.WriteLine("       OpenDesignCore compare --design <stl> --units <u> --vo
 Console.WriteLine("                              (--scan <stl> | --measured <X>x<Y>x<Zlow>x<Zhigh> --material <m>)");
 Console.WriteLine("                              [--nominal-step-z-mm <v>] [--instrument-accuracy-mm <v>]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
-Console.WriteLine("                                 [--propose-to-profile <key>] [--studio <url>]");
-Console.WriteLine("                                 [--artifacts <dir>] [--ledger <path>]");
+Console.WriteLine("                                 [--propose-to-profile <key> --machines <path> --machine-id <id>]");
+Console.WriteLine("                                 [--studio <url>] [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>]");
 Console.WriteLine("                              [--upload <gcode>] [--print <gcode>]");
 Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");

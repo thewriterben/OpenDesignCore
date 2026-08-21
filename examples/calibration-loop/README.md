@@ -27,6 +27,50 @@ no shrinkage percentage will fix.
 
 ---
 
+## 0. Calibrate the machine first — really
+
+Before any of this measures a material, it measures a machine. A printed part's
+size is the design, times the material's shrinkage, times the machine's idea of
+how far a millimetre is. A caliper cannot separate those, and whichever one you
+*name* the result is the one it gets stored under.
+
+This is not a caution written in advance. It happened on the first real run of
+this walkthrough, on purpose:
+
+```
+x = 39.9   (nominal 40)   -0.25 %
+y = 60.5   (nominal 60)   +0.83 %
+```
+
+One axis short, the other long. Averaged into the single XY number OrcaSlicer
+wants, that reads as *"PLA shrinks about 0.29 %"* — a believable figure, near
+the published ones, and completely wrong. **No material contracts on one
+in-plane axis and expands on the other.** Shrinkage is a bulk property; it
+moves X and Y the same way. That printer's Y axis was mechanically 0.83 % short,
+and the loop was one command away from filing a belt problem under the name of a
+plastic, permanently, with a provenance hash making it look rigorous.
+
+So: check X, Y and Z against a known length, correct whatever is out (on Klipper,
+multiply that axis's `rotation_distance` by measured/nominal), and record the
+result in your OpenBuildCore machine registry:
+
+```json
+"axis_calibration": {
+  "x": {"verified_on": "2026-08-21", "residual_pct": 0.04,
+        "how_measured": "calibration-block/0.2, caliper 0.02 mm"},
+  "y": {"verified_on": "2026-08-21", "residual_pct": 0.02, "how_measured": "..."},
+  "z": {"verified_on": "2026-08-21", "residual_pct": 0.03, "how_measured": "..."}
+}
+```
+
+**You can run every step below on an uncalibrated machine**, and you should —
+that is how you find out it needs calibrating, and step 5 will tell you which
+axis. What you cannot do is store the result: step 6 refuses to write a
+compensation into a material profile until the machine underneath it is known
+good, on all three axes. Absent is not "probably fine", and two axes out of
+three is not enough, because the untested one is where the fault hides. It hid
+in Y; X and Z looked healthy.
+
 ## 1. Make the block
 
 ```
@@ -128,13 +172,15 @@ dotnet run --project src/OpenDesignCore -c Release -- \
 `--max-axis-spread-pct` is yours to declare: how much X/Y disagreement still
 permits a single shrinkage factor. A process judgement, not a constant.
 
-Expect it to refuse sometimes. All three refusals are useful:
+Expect it to refuse sometimes. Every refusal is useful:
 
 | Verdict | Meaning |
 |---|---|
 | `WithinScannerNoise` | The deviation is inside your caliper's accuracy. Nothing to compensate — you would be compensating for the tool. |
+| `AxisNotSignificant` | One axis moved and the other sat inside instrument noise. Averaging a real reading with a non-reading halves it. |
 | `AccuracyUndeclared` | No instrument accuracy given, so signal cannot be told from error. |
-| `AxesDisagree` | X and Y differ by more than your threshold. One factor cannot express that, and their mean is wrong on both. |
+| `AxesDisagree` | X and Y differ by more than your threshold, in the same direction. One factor cannot express that, and their mean is wrong on both. |
+| `MachineScaleError` | X and Y moved in **opposite** directions. No material does that — see step 0. It names the axis and gives you the scale factor. |
 
 **Z is never folded into the XY figure.** Orca's Shrinkage (XY) applies to X
 and Y only, and Z has different causes. Not pedantry: in a worked example with
@@ -145,19 +191,37 @@ correct −0.36%. Roughly half the compensation you need.
 
 ```
   ... compensate --comparison <sha> --max-axis-spread-pct 0.15 \
-      --propose-to-profile pla --studio http://localhost:8770
+      --propose-to-profile pla \
+      --machines ../OpenBuildCore/example/machines.json --machine-id k2-plus \
+      --studio http://localhost:8770
 ```
+
+Two gates stand in front of the write, and both exist because the thing they
+prevent already happened once.
 
 **The profile must match the material you measured.** Proposing a PLA
 measurement to a `petg` profile is refused before it reaches the studio — that
 is not a hypothetical, it is what this walkthrough told the first person to do.
 
+**The machine must be calibrated on all three axes.** `--machines` and
+`--machine-id` are required *here only*; step 5 never asks for them, because
+measuring an unverified machine is the point of measuring it. This step is the
+one that writes something durable, so this is where the machine has to be known.
+An unrecorded calibration is refused, and so is a partial one, naming the axes
+still missing. The refusal tells you what to do rather than leaving you to read
+this file.
+
+Both gates fire before the studio is contacted. That ordering is deliberate and
+pinned by a test: if the network call went first, a bad number would land in
+front of a human on a dashboard, and dashboards get approved.
+
 AdvancedStudio computes the OrcaSlicer shrinkage percentage from the measured
 pair — this side never computes slicer settings — and holds it for approval.
 
-The stored value carries `odc-comparison:<sha256>` as its origin, so months
-later "where did this 0.4% come from" has an answer that is not "I think I
-measured it once".
+The stored value carries `odc-comparison:<sha256>` as its origin, together with
+the material, the machine and that machine's worst axis residual — so months
+later, "where did this 0.4% come from" and "was the printer any good when it was
+taken" both have answers that are not "I think I measured it once".
 
 ## 7. Prove it worked
 
@@ -166,6 +230,9 @@ The deviation should fall toward your caliper's accuracy, at which point
 `compensate` starts answering `WithinScannerNoise` — the loop telling you it is
 done.
 
-**Until step 7, none of these numbers are validated.** The refusals are tested
-and the wiring is proven end to end; whether the resulting percentage makes the
-next print better is the one thing only a real print can answer.
+**Status of this loop, honestly.** It has been run once for real, on a K2 Plus
+in PLA. That run produced no compensation — it produced a `MachineScaleError`
+and a scale factor for the Y axis, which is the correct outcome and the reason
+step 0 exists. So the measurement path, the verdicts and both gates are proven
+against a physical part; whether a resulting shrinkage percentage makes the next
+print better is still unanswered, because no run has yet earned one.

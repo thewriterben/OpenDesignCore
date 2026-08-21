@@ -37,6 +37,21 @@ public enum ECompensationVerdict
     /// averaged them.
     /// </summary>
     AxisNotSignificant,
+
+    /// <summary>
+    /// One axis deviates while the others are clean. That is the signature of
+    /// a machine scale error — steps/mm, belt tension, a slipping pulley — and
+    /// it is not compensable in the slicer at all.
+    ///
+    /// Material shrinkage is a property of the polymer, so it acts on every
+    /// axis at once and in the same direction. A single axis out on its own
+    /// is the machine, and applying a shrinkage percentage to it would
+    /// distort the two good axes to disguise the bad one.
+    ///
+    /// Found on a real print, deliberately run before calibrating: X −0.25%,
+    /// Z +0.10%, Y +0.83%. Textbook PLA on two axes and a fault on the third.
+    /// </summary>
+    MachineScaleError,
 }
 
 /// <summary>
@@ -186,8 +201,35 @@ public sealed record CompensationProposal
         double fSpreadNoisePct =
             100.0 * fAxisNoise / oX.DesignMm + 100.0 * fAxisNoise / oY.DesignMm;
 
+        // Machine fault before axis disagreement. Both present as an X/Y
+        // spread, but only one of them has a slicer remedy, and sending
+        // someone to the slicer for a belt problem wastes a print and hides
+        // the fault behind a plausible number.
         if (fSpread > fMaxAxisSpreadPct)
         {
+            (string strAxis, double fPct)? oOutlier = OFindLoneOutlier(
+                oX.DeviationPct, oY.DeviationPct,
+                100.0 * fAxisNoise / Math.Min(oX.DesignMm, oY.DesignMm));
+
+            if (oOutlier is (string strBad, double fBadPct))
+            {
+                string strUp = strBad.ToUpperInvariant();
+                double fCorrection = 1.0 / (1.0 + (fBadPct / 100.0));
+                return OWith(ECompensationVerdict.MachineScaleError,
+                    $"X deviated {oX.DeviationPct:F3}% and Y deviated {oY.DeviationPct:F3}% — "
+                    + "opposite directions. No material or flow effect does that: shrinkage "
+                    + "pulls both in-plane axes in, over-extrusion pushes both out. One axis "
+                    + "shrinking while the other grows leaves geometry as the explanation — "
+                    + $"steps/mm, belt tension, a slipping pulley on {strUp}. {strUp} is named "
+                    + "because a cooling polymer cannot make a part larger than its design, so "
+                    + "the axis that GREW is the one that is not behaving like material. "
+                    + "This is not compensable in the slicer at all; a shrinkage percentage "
+                    + "here would distort the good axis to disguise the bad one. Scale the "
+                    + $"{strUp} axis by {fCorrection:F5} (Klipper: multiply that axis's "
+                    + "rotation_distance by it), then print and measure again before asking "
+                    + "for a material compensation.");
+            }
+
             return OWith(ECompensationVerdict.AxesDisagree,
                 $"X deviated {oX.DeviationPct:F3}% and Y deviated {oY.DeviationPct:F3}%, a spread "
                 + $"of {fSpread:F3} points against the declared limit of {fMaxAxisSpreadPct:F3}. "
@@ -208,5 +250,47 @@ public sealed record CompensationProposal
             $"X and Y agree within {fSpread:F3} points (limit {fMaxAxisSpreadPct:F3}) and the "
             + $"deviation exceeds the declared scanner accuracy of {oReport.ScanAccuracyMm:F3} mm, "
             + "so one XY factor is a defensible reading of this measurement.");
+    }
+
+    /// <summary>
+    /// Whether the in-plane axes disagree in a way no material effect explains.
+    ///
+    /// The first attempt at this was a statistical outlier test across all
+    /// three axes: find the one that disagrees with the other two. It never
+    /// fired on the print that motivated it, and the reason was better than
+    /// the test — <b>X and Z are not supposed to agree</b>. In-plane shrinkage
+    /// is material contraction; Z is dominated by layer-height control, which
+    /// is a mechanism rather than a polymer. Pooling them was wrong physics
+    /// dressed up as statistics.
+    ///
+    /// The real signal is a sign disagreement between X and Y. Every material
+    /// and flow effect acts on both in-plane axes in the <i>same direction</i>:
+    /// shrinkage pulls both in, over-extrusion pushes both out. One axis
+    /// shrinking while the other grows cannot be explained by the material at
+    /// all, so what is left is geometry — steps/mm, belt tension, a slipping
+    /// pulley.
+    ///
+    /// The suspect named is the axis that <b>grew</b>, because a cooling
+    /// polymer cannot make a part larger than the design. That is a physical
+    /// argument rather than a statistical one, which is why it is worth
+    /// asserting a specific axis instead of shrugging at both.
+    ///
+    /// Returns null when the signs agree: two axes shrinking by different
+    /// amounts is a real disagreement, but it has several possible causes and
+    /// naming one would send someone to adjust a belt that was never the
+    /// problem.
+    /// </summary>
+    private static (string strAxis, double fPct)? OFindLoneOutlier(
+        double fXPct, double fYPct, double fNoisePct)
+    {
+        // Both must be real deviations, not instrument noise sitting near zero
+        // where a sign is meaningless.
+        if (Math.Abs(fXPct) <= fNoisePct || Math.Abs(fYPct) <= fNoisePct)
+            return null;
+
+        if (Math.Sign(fXPct) == Math.Sign(fYPct))
+            return null;
+
+        return fXPct > 0 ? ("x", fXPct) : ("y", fYPct);
     }
 }

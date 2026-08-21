@@ -167,6 +167,63 @@ public sealed class CompensationRunTests : IDisposable
             OCompensate(strComparison, fMaxSpreadPct: 0.2).Proposal.Verdict);
     }
 
+    /// <summary>
+    /// Benji's second print, run deliberately before calibrating the machine
+    /// to prove the platform needed this: PLA, X −0.25% (textbook), Z +0.10%
+    /// (clean), Y +0.83% (growing).
+    ///
+    /// A cooling polymer cannot make a part larger than its design, and no
+    /// material or flow effect moves the two in-plane axes in opposite
+    /// directions. So this is geometry, and the axis that grew is the suspect.
+    /// </summary>
+    [Fact]
+    public void OppositeSignedInPlaneAxesAreDiagnosedAsAMachineFault()
+    {
+        // 39.9/40 and 60.5/60 — one shrinking, one growing.
+        string strComparison = StrCompare(0.9975f, 1.00833f, 1.001f, fAccuracyMm: 0.02f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.15);
+
+        Assert.Equal(ECompensationVerdict.MachineScaleError, oResult.Proposal.Verdict);
+        Assert.False(oResult.Proposal.Actionable);
+        Assert.Contains("opposite directions", oResult.Proposal.Reason);
+        Assert.Contains(" Y ", oResult.Proposal.Reason);
+        Assert.Contains("rotation_distance", oResult.Proposal.Reason);
+    }
+
+    [Fact]
+    public void AMachineFaultIsNeverProposedToAProfile()
+    {
+        string strComparison = StrCompare(0.9975f, 1.00833f, 1.001f, fAccuracyMm: 0.02f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.15);
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OCalibrated(StrArtifacts)));
+        Assert.Contains("MachineScaleError", oEx.Message);
+    }
+
+    [Fact]
+    public void BothAxesShrinkingUnevenlyIsStillJustAxesDisagree()
+    {
+        // Same sign, different magnitude. That has several possible causes,
+        // and naming an axis would send someone to adjust a belt that was
+        // never the problem.
+        string strComparison = StrCompare(0.995f, 0.985f, 0.995f, fAccuracyMm: 0.05f);
+        Assert.Equal(ECompensationVerdict.AxesDisagree,
+            OCompensate(strComparison, fMaxSpreadPct: 0.2).Proposal.Verdict);
+    }
+
+    [Fact]
+    public void ASignFlipInsideInstrumentNoiseIsNotAMachineFault()
+    {
+        // An axis sitting a micron either side of nominal has a sign, and it
+        // means nothing. Diagnosing a belt problem from instrument noise
+        // would be worse than saying nothing.
+        string strComparison = StrCompare(0.99995f, 1.00005f, 1.0f, fAccuracyMm: 0.05f);
+        Assert.NotEqual(ECompensationVerdict.MachineScaleError,
+            OCompensate(strComparison, fMaxSpreadPct: 0.001).Proposal.Verdict);
+    }
+
     [Fact]
     public void AMissingOrZeroSpreadLimit_IsRefused()
     {
@@ -233,7 +290,8 @@ public sealed class CompensationRunTests : IDisposable
         CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
 
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oResult, "http://127.0.0.1:1", "petg"));
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "petg", TestMachines.OCalibrated(StrArtifacts)));
         Assert.Contains("Refusing to propose", oEx.Message);
         Assert.Contains("WithinScannerNoise", oEx.Message);
     }
@@ -249,9 +307,61 @@ public sealed class CompensationRunTests : IDisposable
         // design: there is no point reaching for a printer to file a number
         // under the wrong material.
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oResult, "http://127.0.0.1:1", "pla"));
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OCalibrated(StrArtifacts)));
         Assert.Contains("unreachable", oEx.Message);
         Assert.Contains("record is written", oEx.Message);
+    }
+
+    [Fact]
+    public void AnUncalibratedMachineBlocksTheProposalButNotTheMeasurement()
+    {
+        // The whole shape of the gate in one test. Benji deliberately printed
+        // the first calibration block on an unverified K2 to prove this case
+        // needed handling: the machine's Y axis was 0.83 % short, and averaged
+        // into an XY figure it would have been stored as a property of PLA.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        // Measuring succeeded. It must: measuring is how you find out.
+        Assert.Equal(ECompensationVerdict.Proposed, oResult.Proposal.Verdict);
+        Assert.True(File.Exists(ArtifactStore.StrPathFor(
+            StrArtifacts, oResult.RecordSha256, ".compensation.json")));
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OUncalibrated(StrArtifacts)));
+        Assert.Contains("no recorded axis calibration", oEx.Message);
+        Assert.Contains("Calibrate the axes", oEx.Message);
+    }
+
+    [Fact]
+    public void APartiallyCalibratedMachineIsRefusedTooAndSaysWhichAxis()
+    {
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OPartial(StrArtifacts)));
+        Assert.Contains("not y", oEx.Message);
+    }
+
+    [Fact]
+    public void TheCalibrationGateFiresBeforeTheStudioIsContacted()
+    {
+        // Ordering is load-bearing. If the network attempt came first, an
+        // uncalibrated machine on a working studio would reach the dashboard
+        // and be approved by a human who cannot see the axes. The studio
+        // address here is a closed port; the calibration refusal is what must
+        // come back, not "unreachable".
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OUncalibrated(StrArtifacts)));
+        Assert.DoesNotContain("unreachable", oEx.Message);
     }
 
     [Fact]

@@ -180,15 +180,43 @@ public static class CompensationRun
     ///
     /// Propose-only (ADR-0009). This returns a confirmation id; a human
     /// approves it in the studio, where the machine is.
+    ///
+    /// The machine's calibration is a required argument, not an optional
+    /// check. See <see cref="MachineCalibration"/> for why measuring an
+    /// unverified machine is fine but writing the result into a profile is
+    /// not — and note that ADR-0009 draws that exact line elsewhere too:
+    /// recording into our own store executes, anything that shapes work
+    /// beyond it proposes. Here the line falls one step earlier, because a
+    /// material profile shapes every future print and a human approving a
+    /// number in a dashboard has no way to see the machine underneath it.
     /// </summary>
     public static string StrPropose(
-        CompensationRunResult oResult, string strStudioUrl, string strProfileKey)
+        CompensationRunResult oResult,
+        string strStudioUrl,
+        string strProfileKey,
+        MachineCalibration oMachine)
     {
         if (!oResult.Proposal.Actionable)
         {
             throw new CompensationException(
                 $"Refusing to propose: the verdict was {oResult.Proposal.Verdict}. "
                 + oResult.Proposal.Reason);
+        }
+
+        // The gate Benji's first real print argued for. That machine's Y axis
+        // was 0.83 % short while X was 0.25 % long; averaged into one XY
+        // shrinkage figure it would have read as "PLA shrinks 0.29 %" and
+        // been believed by every subsequent print in PLA.
+        if (oMachine.State != MachineCalibrationState.Verified)
+        {
+            throw new CompensationException(
+                $"Refusing to propose: {oMachine.Reason}. The measurement stands and is "
+                + "recorded — but a shrinkage figure written into a profile shapes every "
+                + "future print in that material, and on an unverified machine part of that "
+                + "figure is the machine, filed under the material's name. Calibrate the "
+                + "axes against a known length, record the result in the machine registry, "
+                + "then re-measure. (Recording the comparison never required this; only "
+                + "proposing it does.)");
         }
 
         // The gate that would have caught the real mistake. The walkthrough's
@@ -225,7 +253,12 @@ public static class CompensationRun
                 // The material rides in the origin string as well as being
                 // gated on, so the stored value is self-describing even to a
                 // reader who never fetches the comparison record.
-                ["origin"] = $"odc-comparison:{oResult.ComparisonSha256} ({oResult.Material})",
+                // The machine rides along too. A reader six months from now
+                // asking "was the printer any good when this was measured?"
+                // should not have to take it on trust.
+                ["origin"] = $"odc-comparison:{oResult.ComparisonSha256} ({oResult.Material}, "
+                             + $"machine {oMachine.MachineId} worst axis residual "
+                             + $"{oMachine.WorstResidualPct?.ToString("F3", CultureInfo.InvariantCulture)} %)",
             },
         };
 

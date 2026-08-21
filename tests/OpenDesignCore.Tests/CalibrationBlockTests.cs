@@ -314,7 +314,8 @@ public sealed class CalibrationBlockTests : IDisposable
         Assert.Equal(ECompensationVerdict.Proposed, oComp.Proposal.Verdict);
 
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oComp, "http://127.0.0.1:1", "petg"));
+            () => CompensationRun.StrPropose(
+                oComp, "http://127.0.0.1:1", "petg", TestMachines.OCalibrated(StrArtifacts)));
         Assert.Contains("measured in 'pla'", oEx.Message);
         Assert.Contains("look sourced", oEx.Message);
     }
@@ -326,7 +327,8 @@ public sealed class CalibrationBlockTests : IDisposable
         // Reaches the studio call and fails there, which is how we know the
         // material gate let it through rather than the reverse.
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oComp, "http://127.0.0.1:1", "pla"));
+            () => CompensationRun.StrPropose(
+                oComp, "http://127.0.0.1:1", "pla", TestMachines.OCalibrated(StrArtifacts)));
         Assert.Contains("unreachable", oEx.Message);
     }
 
@@ -338,7 +340,8 @@ public sealed class CalibrationBlockTests : IDisposable
         // safety. The gate exists for pla-vs-petg, not for naming schemes.
         CompensationRunResult oComp = OMeasureAndJudge("petg");
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oComp, "http://127.0.0.1:1", "esun-petg"));
+            () => CompensationRun.StrPropose(
+                oComp, "http://127.0.0.1:1", "esun-petg", TestMachines.OCalibrated(StrArtifacts)));
         Assert.Contains("unreachable", oEx.Message);
     }
 

@@ -247,3 +247,55 @@ Three refusals, each a real failure mode:
 The system will often refuse. That is the intended behaviour — most comparisons should not become settings — and the refusal names itself rather than returning a number nobody should use.
 
 **Validated on synthetic prints only.** Every refusal path is proven and the wire is proven end to end against a running studio, but whether the resulting percentage makes the next print better needs a real print and a real scan. The plumbing is correct; the water is unvalidated.
+
+---
+
+## ADR-0012 — An uncalibrated machine may be measured, but its measurement may not become a material profile
+
+**Date:** 2026-08-21
+**Status:** accepted
+
+**Context.** ADR-0011 closed the loop as far as a proposal, and noted the water was unvalidated. It got validated. Benji printed the calibration block on a Creality K2 Plus in PLA and measured it with calipers: X 39.90 against a nominal 40, Y 60.50 against 60, Z-span 25.05 against 25.
+
+He had deliberately not calibrated the machine first, and said so afterwards: the point was to see what the pipeline would do.
+
+What it did was almost produce a number. X was 0.25% under, Y was 0.83% over. Both are in the range a shrinkage figure lives in, and averaged into the single XY value OrcaSlicer wants they read as "PLA shrinks about 0.29%" — plausible, close to published PLA figures, and wrong. No material contracts on one in-plane axis and expands on the other; shrinkage is a bulk property and moves X and Y the same way. The Y axis was mechanically short by 0.83%, and that fault was about to be recorded as a property of a plastic, in a profile that shapes every subsequent print in that plastic, carrying a comparison hash that made it look sourced rather than guessed.
+
+**Two changes, and only one of them is this ADR.**
+
+The first is diagnosis: a `MachineScaleError` verdict fires when the two in-plane axes deviate in opposite directions by more than the instrument's accuracy, because no material or flow effect does that. It names the axis and gives the correction (`scale Y by 0.99174`; on Klipper, multiply that axis's `rotation_distance`). That is a verdict like the others and needs no policy.
+
+The second is the policy, and it is the harder question: **what should the tooling do when it cannot tell whether the machine is any good?** The K2's fault was large enough to spot. A machine 0.15% out on one axis would produce a perfectly self-consistent, entirely wrong shrinkage figure and no verdict would fire.
+
+**Options.**
+
+1. *Refuse to measure an uncalibrated machine.* Rejected, and not narrowly. Measuring is how you discover a machine is uncalibrated — this whole finding came from measuring one. A tool that requires calibration before it will measure cannot be used to calibrate.
+2. *Warn and proceed.* Rejected. The warning appears once, in a terminal, next to a number that is about to be stored permanently. The stored value outlives the warning by years.
+3. *Gate the write, not the read.* Accepted.
+
+**Decision.** ADR-0009's line — effects confined to a peer's own content-addressed stores execute; anything reaching beyond proposes — applies one step earlier here.
+
+- `compensate` computes and records the comparison **regardless of machine calibration state**. The record is a measurement, and measurements are always allowed. Nothing about this path changed.
+- `compensate --propose-to-profile` **additionally requires** `--machines` and `--machine-id`, reads the machine's `axis_calibration` from the OpenBuildCore registry, and refuses to propose unless all three axes are verified.
+
+Three states, deliberately not two:
+
+| State | Meaning | Proposal |
+|---|---|---|
+| `Unknown` | no `axis_calibration` recorded | refused |
+| `Partial` | some axes verified, others not | refused, naming the missing ones |
+| `Verified` | x, y and z each carry a date, a residual and a method | permitted |
+
+`Unknown` is not `Verified` with a zero residual, and the type refuses to let the two collapse: `WorstResidualPct` is `null`, never `0.0`. A zero residual claims a machine was measured and found perfect; unknown claims nothing at all. Conflating them is precisely the failure this ADR exists to prevent, expressed in a nullable field.
+
+`Partial` is refused rather than waved through because a part is measured on all three axes, and the unverified axis is exactly where a fault hides. It hid there here — X and Z would have looked fine.
+
+**Where the state lives.** OpenBuildCore owns machines, so `axis_calibration` is a field on its machine schema, its validator refuses a half-made claim (a date with no residual, a residual with no method), and this engine only reads the registry. That is the mirror of OpenBuildCore reading this engine's provenance sidecars, and neither repo gained a dependency on the other's code.
+
+**Ordering is load-bearing and pinned by a test.** The calibration refusal fires before the studio is contacted. If the network call came first, an uncalibrated machine on a working studio would put the number in front of a human who has no way to see the axes underneath it, and dashboards get approved.
+
+**Consequences.** Anyone using this loop must calibrate before a compensation can be stored — which is the intended outcome, stated as an error message that names what to do rather than as documentation. The measurement path is unaffected, so the diagnostic route stays open: print the block, measure it, read the verdict, fix the axis, record the residual, measure again.
+
+The proposal now carries the machine and its worst residual in the origin string alongside the material, so a reader six months later can ask "was the printer any good when this was taken?" without taking it on trust.
+
+**Cost, stated plainly.** Three extra CLI arguments on the propose path, and a cross-repo file read. The alternative was a machine fault permanently filed as a material property.
