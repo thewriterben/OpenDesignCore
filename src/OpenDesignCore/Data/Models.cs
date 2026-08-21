@@ -41,6 +41,14 @@ public sealed record MaterialEntry
     public double[]? ShrinkagePctRange { get; init; }
     /// <summary>Achievable dimensional tolerance for FDM, in mm, if known.</summary>
     public double? FdmToleranceMm { get; init; }
+    /// <summary>
+    /// Which catalogued filament variant this entry describes, if it describes
+    /// one. Optional: plenty of real filament is not catalogued anywhere, and
+    /// requiring a reference would block work without making anything safer.
+    /// Identity only — no value in this entry may be sourced from the
+    /// catalogue (ADR-0013); that is what <see cref="Source"/> is for.
+    /// </summary>
+    public FilamentRef? FilamentRef { get; init; }
     public required SourceCitation Source { get; init; }
 }
 

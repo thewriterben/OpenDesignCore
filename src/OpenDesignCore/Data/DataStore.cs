@@ -101,5 +101,10 @@ public static class DataStore
         }
         if (oMaterial.FdmToleranceMm is <= 0)
             aErrors.Add($"{oMaterial.Id}: fdm_tolerance_mm must be positive when present");
+        if (oMaterial.FilamentRef is { } oRef)
+        {
+            foreach (string strError in oRef.AValidate())
+                aErrors.Add($"{oMaterial.Id}: filament_ref {strError}");
+        }
     }
 }

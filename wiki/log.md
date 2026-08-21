@@ -256,3 +256,68 @@ AdvancedStudio now has a DECISIONS.md (ADR-0001) and pytest in requirements; its
 Deliberate non-decision, recorded because it is the obvious-looking shortcut: `MaterialProfile.max_volumetric_speed` is NOT wired to OpenBuildCore's `measured_throughput`. It looks like the same quantity and is not — a slicer ceiling versus an achieved rate — and conflating them would put a plausible unmeasured number into the print-time path, which is the failure OpenBuildCore ADR-0005 exists to prevent.
 
 56 ODC tests, 22 studio tests. Validated on synthetic prints only: the plumbing is proven, the percentage is not, and that needs a real print and a real scan. ADR-0011 and studio ADR-0001 both say so rather than leaving it implied.
+
+## [2026-08-16] correction | "No slicer is installed" was wrong, and the K2 envelope was in it
+Benji: "Creality Print is installed." My check an hour earlier had grepped `C:\Program Files` for `slic|cura|prusa` and concluded no slicer existed. "Creality Print" matches none of those. A filter that only finds what it already expects to find — and I had reported the negative confidently because I had *run something*, which felt like evidence.
+
+The general lesson is not "check harder". It is that a negative result from a filter is only as good as the filter, and I stated it as a fact about the machine rather than a fact about my search. Same shape as the annular-rule bug: a check that cannot fire looks exactly like a check that passed.
+
+**What was in it.** Creality Print ships a machine profile for this exact printer: `resources/profiles/Creality/machine/Creality K2 Plus 0.4 nozzle.json`, with `printable_area "0x0,350x0,350x350,0x350"` and `printable_height "350"`. So the build volume that had been a `TODO(source)` placeholder for a day is 350 × 350 × 350 mm, cited to the vendor's own file rather than measured or recalled. Plus max/min layer height and a hardened-steel nozzle from the same source. Open question 11 closed.
+
+**The placeholder worked.** For a day every fit check on the printer Benji actually owns failed loudly, and then it was replaced by a source rather than by a recollection. That is the convention doing its job, and it is worth writing down as a success rather than only noting the successes that produce features.
+
+**Three tests had to change, and one deserved real thought.** Deleting them would have quietly dropped the behaviour they protected. The placeholder-blocks case now pins against a *synthetic* uncited machine so it survives the data that prompted it. But `test_shipped_made_parts_exercise_both_outcomes` required a *globally* unmakeable part, which only held while the K2 was 1×1×1 — a 350 mm printer makes most hobby parts. Inventing a project purely to fail would be data serving the test rather than the user. It now asserts shipped parts exercise both *kinds* of blocker on some machine (260 mm probe stake vs the bench's 250 mm gantry; ASA housing vs its PLA/PETG materials), which is a stronger claim than the original made.
+
+**On the slicer gap.** Creality Print is Bambu Studio lineage (`OrcaArena` in its vendor list) and the CLI option table is genuinely present in `CrealityPrint_Slicer.dll` — `--load-settings`, `--load-filaments`, `--slice`, `--outputdir`, `--plate-to-slice` and more, confirmed by reading the binary rather than assuming the lineage. So the STL→print gap is a *wiring* problem, not a dependency decision, and my earlier framing of it was wrong twice over.
+
+But it is not a quick win either: `CrealityPrint.exe` is a 151 KB launcher stub, a naive `--slice 0` returned in 0 s producing nothing, the Creality profiles use `inherits` with no resolved `machine_full/` (only BBL has one), and `cli_config.json` exists only for BBL. Stopped there rather than guessing invocations — two attempts and a binary read is enough to characterise it honestly and hand the decision back.
+
+72 OpenBuildCore tests.
+
+## [2026-08-16] build | The upload seam, and a slicer CLI that crashes
+Benji picked reframing the gap: the studio does not need to slice. Creality Print slices fine with a human driving it, and the human is where ADR-0009 wants a person anyway. The missing piece was never slicing — it was upload.
+
+**Checked the slicer CLI first rather than assuming it was hopeless.** Creality Print 7.2 genuinely carries a Bambu-lineage CLI: `--load-settings`, `--load-filaments`, `--slice`, `--outputdir` all present in `CrealityPrint_Slicer.dll`, confirmed by reading the binary. It parses arguments correctly — a bad path produces a proper `Slic3r::CLI::run ... can not find setting file` — and then **crashes with an access violation (0xC0000005)** on valid ones. Two attempts, then stopped rather than trying a fourth variation. Useful either way: it means "wire up the slicer" is not a viable task, and it made the upload framing obviously right rather than a consolation prize.
+
+**The design decision.** An upload proposal NAMES a file rather than carrying its bytes — both processes are on the same machine, and a path keeps the proposal short enough that a human actually reads it in a dashboard. That makes "upload this to the printer" an arbitrary-file-read primitive unless the path is bounded, so `studio/staging.py` is the only thing that turns a proposal filename into a real path, resolving strictly under one configured directory. Absolute paths, traversal and symlink escapes are **refused, not sanitised**: quietly rewriting a hostile path into a safe one hides both the bug and the attack.
+
+**Benji asked for both sides guarded.** I had leaned toward upload executing — the file is inert until something prints it, and guarding inert transfers arguably just trains people to click approve without reading, devaluing the approval that matters. He said hit both, and the argument for it is sound: the file lands on a networked device that is not ours, stays there, and could be printed later by someone who never saw the proposal. Reversibility that depends on someone remembering to reverse it is not reversibility. Recorded as studio ADR-0002 with the counter-argument written down rather than lost.
+
+Upload and print are two proposals, never one — separate effects, and bundling them would hide the second behind approval of the first. The path is validated twice: at propose time so a doomed proposal never reaches a human, and again at approval, because a proposal can sit pending for its TTL and only the later check reflects the filesystem as it is when the file actually moves.
+
+**Provenance on print proposals** (gap 12(c), narrowed not closed). `print_start` carries `design_artifact_sha256` and the prompt names it, so approving says which design the job claims to be rather than only a filename. The durable half is the filename: ODC hash-names what it stages, so a slicer output keeping the stem carries provenance to the printer for free. A rename is flagged, not blocked — a human may legitimately rename, but a job whose name no longer matches its design is exactly how the wrong file gets printed.
+
+**Verification.** The traversal guard was removed once to confirm two tests fail without it. Probed over HTTP against a real studio: all four refusal paths 400, and the good proposal reads `Upload 'cradle-e8401edf6cd1.gcode' (0.0 MB) to the printer, sliced from design sha256:e8401edf6cd1. This does not start a print.` Ran the probe against a **second instance on port 8771** rather than restarting the one Benji had running — printer was standby, but there was no reason to touch it.
+
+60 ODC tests, 39 studio tests.
+
+## [2026-08-16] build | The job ledger closes the last two AdvancedStudio gaps
+Took "proceed" as closing what I had just named as still open: a print proposal carried its design hash, and then the proposal evaporated. ADR-0002 got provenance as far as the approval; nothing survived it.
+
+**studio/jobs.py** — append-only SQLite, written at the point a human answers, from BOTH decision paths (the web app and the terminal agent in llm/cli.py). A ledger with a second unaudited way in is not a ledger.
+
+Four properties chosen rather than inherited. **Rejections are recorded too**: a store that only remembers what happened cannot answer "what did we decline", and an action proposed and rejected repeatedly is exactly the signal worth having; approved-then-failed is distinct from never-approved. **Append-only** — no update, no delete, and a test asserts the class has grown no mutator, so adding one is a deliberate act rather than a convenience. **design_artifact_sha256 is a real column**, not a key in a blob, because "every job from this design" is the question it exists for. **Both paths write.**
+
+The pending queue stays in memory deliberately, and that is worth recording as a decision rather than an omission: persisting an unanswered question would let an approval be granted for something proposed before a restart, in a state nobody can now inspect. Losing pending proposals on restart is the safe failure.
+
+**A test caught a real design flaw.** `by_design("")` returned every design-less action — the whole heater history — because "no design" matched the empty-string column. `/api/jobs/by-design/` with nothing after it is a slip, not a query, and answering it with everything is a confusing way to say "you asked me nothing". Fixed the implementation, not the test. Full-hash match only for the same family of reason: a prefix would conflate two designs the first time somebody passes twelve characters.
+
+**Second instance of a bug this platform has now hit twice.** `with sqlite3.connect(...)` commits on exit but does not CLOSE, so the handle stays open and on Windows the database is locked against deletion. Surfaced as a test teardown failing to remove a temp directory. OpenDesignCore's ledger hit the same shape as connection pooling. SQLite's context manager is a transaction, not a connection — worth knowing once, since knowing it twice cost the same debugging.
+
+Gaps 12(b) and 12(c) close together, and with 12(a) done yesterday and 12(d) on the 15th, **none of the four surveyed AdvancedStudio gaps remain**. What is left is not a gap in any repo: the compensation numbers are unvalidated until a real print is measured against a real scan. That is now the only thing between this platform and a genuinely closed loop.
+
+49 studio tests, up from 39. Proven end to end against a running studio: a rejected profile_update recorded as job 1 approved=False, an approved one as job 2 outcome='executed', a print proposal found afterwards by its design hash, and `/api/jobs/by-design/` with an empty hash returning 404 rather than everything.
+
+Housekeeping worth noting: an earlier crashed probe had left Benji's PETG profile at 0.4 with a test origin, and this run's "restore" faithfully restored the already-broken value. Caught it, restored from git, verified 0.5/seed. A restore that reads its baseline from the thing it is about to fix is not a restore.
+
+## [2026-08-21] ingest | awesome-3d-printingODC → spool identity, and one description that is wrong
+
+Read the sibling `awesome-3d-printingODC` repo — a fork of `ad-si/awesome-3d-printing`, ~250 curated links, no code, no divergence from upstream. Most of it (brands, marketplaces, services, filament vendors) has no bearing on this engine. Two things did.
+
+**Its CI was the better idea.** The whole repo's build is a `lychee` link check. Applied here to the thing that actually needs it: every value entering a model run carries a citation, and a citation that no longer resolves is a value that is no longer grounded — an invariant with nothing enforcing it until now. `.github/workflows/citations.yml`. The check proves reachability, not that the document still says what the citation claims; that distinction is written into the workflow so it is not mistaken for more.
+
+**[[open-filament-database]] gave the pipeline a way to name a spool** (ADR-0013). `--material pla` is a label two brands share, and `CompareRun` has carried a comment since ADR-0011 admitting nothing enforced the per-spool part. **Conflict:** the list describes OFD as carrying "print settings". It does not — it is a catalogue of brands, product lines, colours and stores, with no shrinkage or tolerance data anywhere in it. Anyone following that description into `data/` produces an invented material property with a citation attached, which is the exact failure the project rules name. Recorded in the ADR before the mechanism, because the misreading is the more likely outcome than the adoption.
+
+**A finding that came from reading the lockfile rather than the docs.** PicoGK 2.2.0 ships natives for `win-x64` and `osx-arm64` only. ADR-0008's "CI needs only the .NET SDK" was true and incomplete; a Linux job builds green and dies at the first `Library`. CI is Windows, and a Linux contributor cannot run the test suite at all. Amended in the ADR rather than written as a new one — it is a consequence nobody had checked, not a decision anybody made.
+
+**Rejected, and written down so it is not relitigated:** community print-settings sites (FilamentProfilesHub, Filwiz) as data sources — uncited, straight through the grounding rule; browser mesh-repair tools at the import boundary — repairing a scan silently is exactly the degradation ADR-0003's spirit forbids; slicer-side infill optimisation — someone else's domain, already under ROADMAP "Not ever".

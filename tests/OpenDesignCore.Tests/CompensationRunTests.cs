@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
+using OpenDesignCore.Data;
 using OpenDesignCore.Provenance;
 using OpenDesignCore.Runs;
 using OpenDesignCore.Verification;
@@ -41,7 +42,7 @@ public sealed class CompensationRunTests : IDisposable
 
         return CompareRun.Execute(
             strDesign, strScan, Mesh.EStlUnit.MM, 0.2f,
-            StrArtifacts, StrLedger, "test-commit", fAccuracyMm).ReportSha256;
+            StrArtifacts, StrLedger, "test-commit", "pla", fAccuracyMm).ReportSha256;
     }
 
     private CompensationRunResult OCompensate(string strComparison, double fMaxSpreadPct)
@@ -89,12 +90,17 @@ public sealed class CompensationRunTests : IDisposable
     [Fact]
     public void AxesThatDisagree_AreRefusedRatherThanAveraged()
     {
-        // X shrank 0.2%, Y shrank 1.4%. Their mean, 0.8%, is wrong on both.
-        string strComparison = StrCompare(0.998f, 0.986f, 0.998f, fAccuracyMm: 0.05f);
+        // X shrank 0.5% (0.10 mm, 2x the accuracy) and Y 1.5% (0.45 mm, 9x).
+        // BOTH are real measurements — the fixture originally used 0.2% on a
+        // 20 mm edge, which is 0.04 mm against a 0.05 mm instrument, so the
+        // test was demonstrating disagreement with an axis that had not
+        // actually been measured. The same flaw the real print exposed in the
+        // code, sitting in the test data.
+        string strComparison = StrCompare(0.995f, 0.985f, 0.995f, fAccuracyMm: 0.05f);
         CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
 
         Assert.Equal(ECompensationVerdict.AxesDisagree, oResult.Proposal.Verdict);
-        Assert.True(oResult.Proposal.AxisSpreadPct > 1.0);
+        Assert.True(oResult.Proposal.AxisSpreadPct > 0.9);
         Assert.Contains("wrong on both axes", oResult.Proposal.Reason);
     }
 
@@ -103,12 +109,120 @@ public sealed class CompensationRunTests : IDisposable
     {
         // The same measurement, judged against two different declared limits.
         // A tolerance that decided this itself would be a hidden constant.
-        string strComparison = StrCompare(0.998f, 0.986f, 0.998f, fAccuracyMm: 0.05f);
+        // Both axes deliberately well clear of the instrument floor, so the
+        // verdict turns on the declared limit and nothing else.
+        string strComparison = StrCompare(0.995f, 0.985f, 0.995f, fAccuracyMm: 0.05f);
 
         Assert.Equal(ECompensationVerdict.AxesDisagree,
             OCompensate(strComparison, fMaxSpreadPct: 0.2).Proposal.Verdict);
         Assert.Equal(ECompensationVerdict.Proposed,
             OCompensate(strComparison, fMaxSpreadPct: 5.0).Proposal.Verdict);
+    }
+
+    /// <summary>
+    /// Found on the first real print, not by reasoning about it.
+    ///
+    /// Benji measured 19.95 × 29.98 × 15.06 against a 20 × 30 × 15 block with
+    /// 0.02 mm calipers. X was off by 0.050 mm — two and a half times the
+    /// instrument accuracy, real. Y was off by 0.020 mm — exactly the
+    /// accuracy, indistinguishable from zero. The tool averaged them and
+    /// proposed a compensation.
+    ///
+    /// `WithinScanAccuracy` only ever tested the LARGEST deviation, so it
+    /// passed as soon as one axis was real. Averaging a reading with a
+    /// non-reading produces a number describing neither.
+    /// </summary>
+    [Fact]
+    public void AnAxisInsideInstrumentAccuracyIsNotAveragedIn()
+    {
+        // 19.95 / 20 and 29.98 / 30, the real reading.
+        string strComparison = StrCompare(0.9975f, 0.99933f, 1.004f, fAccuracyMm: 0.02f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 5.0);
+
+        Assert.Equal(ECompensationVerdict.AxisNotSignificant, oResult.Proposal.Verdict);
+        Assert.False(oResult.Proposal.Actionable);
+        Assert.Contains("no measured deviation at all", oResult.Proposal.Reason);
+        Assert.Contains("print a larger block", oResult.Proposal.Reason);
+    }
+
+    [Fact]
+    public void ASlackSpreadLimitCannotRescueANonSignificantAxis()
+    {
+        // The refusal must not be defeatable by widening the threshold: the
+        // problem is the measurement, not the tolerance.
+        string strComparison = StrCompare(0.9975f, 0.99933f, 1.004f, fAccuracyMm: 0.02f);
+        foreach (double fLimit in new[] { 0.05, 0.15, 0.25, 10.0 })
+        {
+            Assert.Equal(ECompensationVerdict.AxisNotSignificant,
+                OCompensate(strComparison, fLimit).Proposal.Verdict);
+        }
+    }
+
+    [Fact]
+    public void BothAxesRealAndAgreeing_StillProposes()
+    {
+        // The significance check must not swallow the case it was built
+        // around: both axes well clear of the noise floor, and agreeing.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.02f);
+        Assert.Equal(ECompensationVerdict.Proposed,
+            OCompensate(strComparison, fMaxSpreadPct: 0.2).Proposal.Verdict);
+    }
+
+    /// <summary>
+    /// Benji's second print, run deliberately before calibrating the machine
+    /// to prove the platform needed this: PLA, X −0.25% (textbook), Z +0.10%
+    /// (clean), Y +0.83% (growing).
+    ///
+    /// A cooling polymer cannot make a part larger than its design, and no
+    /// material or flow effect moves the two in-plane axes in opposite
+    /// directions. So this is geometry, and the axis that grew is the suspect.
+    /// </summary>
+    [Fact]
+    public void OppositeSignedInPlaneAxesAreDiagnosedAsAMachineFault()
+    {
+        // 39.9/40 and 60.5/60 — one shrinking, one growing.
+        string strComparison = StrCompare(0.9975f, 1.00833f, 1.001f, fAccuracyMm: 0.02f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.15);
+
+        Assert.Equal(ECompensationVerdict.MachineScaleError, oResult.Proposal.Verdict);
+        Assert.False(oResult.Proposal.Actionable);
+        Assert.Contains("opposite directions", oResult.Proposal.Reason);
+        Assert.Contains(" Y ", oResult.Proposal.Reason);
+        Assert.Contains("rotation_distance", oResult.Proposal.Reason);
+    }
+
+    [Fact]
+    public void AMachineFaultIsNeverProposedToAProfile()
+    {
+        string strComparison = StrCompare(0.9975f, 1.00833f, 1.001f, fAccuracyMm: 0.02f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.15);
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OCalibrated(StrArtifacts)));
+        Assert.Contains("MachineScaleError", oEx.Message);
+    }
+
+    [Fact]
+    public void BothAxesShrinkingUnevenlyIsStillJustAxesDisagree()
+    {
+        // Same sign, different magnitude. That has several possible causes,
+        // and naming an axis would send someone to adjust a belt that was
+        // never the problem.
+        string strComparison = StrCompare(0.995f, 0.985f, 0.995f, fAccuracyMm: 0.05f);
+        Assert.Equal(ECompensationVerdict.AxesDisagree,
+            OCompensate(strComparison, fMaxSpreadPct: 0.2).Proposal.Verdict);
+    }
+
+    [Fact]
+    public void ASignFlipInsideInstrumentNoiseIsNotAMachineFault()
+    {
+        // An axis sitting a micron either side of nominal has a sign, and it
+        // means nothing. Diagnosing a belt problem from instrument noise
+        // would be worse than saying nothing.
+        string strComparison = StrCompare(0.99995f, 1.00005f, 1.0f, fAccuracyMm: 0.05f);
+        Assert.NotEqual(ECompensationVerdict.MachineScaleError,
+            OCompensate(strComparison, fMaxSpreadPct: 0.001).Proposal.Verdict);
     }
 
     [Fact]
@@ -177,7 +291,8 @@ public sealed class CompensationRunTests : IDisposable
         CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
 
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oResult, "http://127.0.0.1:1", "petg"));
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "petg", TestMachines.OCalibrated(StrArtifacts)));
         Assert.Contains("Refusing to propose", oEx.Message);
         Assert.Contains("WithinScannerNoise", oEx.Message);
     }
@@ -188,10 +303,66 @@ public sealed class CompensationRunTests : IDisposable
         string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
         CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
 
+        // Profile key matches the fixture's material, so the material gate
+        // passes and the failure is the one under test. It fires first by
+        // design: there is no point reaching for a printer to file a number
+        // under the wrong material.
         CompensationException oEx = Assert.Throws<CompensationException>(
-            () => CompensationRun.StrPropose(oResult, "http://127.0.0.1:1", "petg"));
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OCalibrated(StrArtifacts)));
         Assert.Contains("unreachable", oEx.Message);
         Assert.Contains("record is written", oEx.Message);
+    }
+
+    [Fact]
+    public void AnUncalibratedMachineBlocksTheProposalButNotTheMeasurement()
+    {
+        // The whole shape of the gate in one test. Benji deliberately printed
+        // the first calibration block on an unverified K2 to prove this case
+        // needed handling: the machine's Y axis was 0.83 % short, and averaged
+        // into an XY figure it would have been stored as a property of PLA.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        // Measuring succeeded. It must: measuring is how you find out.
+        Assert.Equal(ECompensationVerdict.Proposed, oResult.Proposal.Verdict);
+        Assert.True(File.Exists(ArtifactStore.StrPathFor(
+            StrArtifacts, oResult.RecordSha256, ".compensation.json")));
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OUncalibrated(StrArtifacts)));
+        Assert.Contains("no recorded axis calibration", oEx.Message);
+        Assert.Contains("Calibrate the axes", oEx.Message);
+    }
+
+    [Fact]
+    public void APartiallyCalibratedMachineIsRefusedTooAndSaysWhichAxis()
+    {
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OPartial(StrArtifacts)));
+        Assert.Contains("not y", oEx.Message);
+    }
+
+    [Fact]
+    public void TheCalibrationGateFiresBeforeTheStudioIsContacted()
+    {
+        // Ordering is load-bearing. If the network attempt came first, an
+        // uncalibrated machine on a working studio would reach the dashboard
+        // and be approved by a human who cannot see the axes. The studio
+        // address here is a closed port; the calibration refusal is what must
+        // come back, not "unreachable".
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, "http://127.0.0.1:1", "pla", TestMachines.OUncalibrated(StrArtifacts)));
+        Assert.DoesNotContain("unreachable", oEx.Message);
     }
 
     [Fact]
@@ -213,5 +384,74 @@ public sealed class CompensationRunTests : IDisposable
         CompensationException oEx = Assert.Throws<CompensationException>(
             () => OCompensate(strHash, fMaxSpreadPct: 0.2));
         Assert.Contains("not a comparison record", oEx.Message);
+    }
+
+    // ---- Filament identity (ADR-0013) ----
+
+    private const string StrSpool =
+        "open-filament-database:dataset-v2026.07.10:"
+        + "brands/prusament/materials/PLA/filaments/prusament-pla/variants/galaxy-black";
+
+    [Fact]
+    public void ADeclaredSpool_TravelsFromComparisonIntoTheCompensation()
+    {
+        // The point of the whole change: the compensation record can name the
+        // spool, not just the material. Without this the identity is declared
+        // at the command line and lost one hop later.
+        string strDesign = Path.Combine(_strTempDir, "spool-d.stl");
+        string strScan = Path.Combine(_strTempDir, "spool-s.stl");
+        using (Library oLib = new(0.2f))
+        {
+            Mesh mshDesign = Utils.mshCreateCube(oLib, new Vector3(20, 30, 10), Vector3.Zero);
+            mshDesign.SaveToStlFile(strDesign, Mesh.EStlUnit.MM);
+            mshDesign.mshCreateTransformed(Matrix4x4.CreateScale(0.993f, 0.993f, 0.993f))
+                .SaveToStlFile(strScan, Mesh.EStlUnit.MM);
+        }
+
+        string strComparison = CompareRun.Execute(
+            strDesign, strScan, Mesh.EStlUnit.MM, 0.2f,
+            StrArtifacts, StrLedger, "test-commit", "pla", 0.05f,
+            FilamentRef.OParse(StrSpool)).ReportSha256;
+
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+        Assert.Equal(StrSpool, oResult.FilamentRef);
+    }
+
+    [Fact]
+    public void AnUndeclaredSpool_DoesNotRefuseTheCompensation()
+    {
+        // The asymmetry with --material, pinned so nobody "tidies" it into a
+        // matching refusal later. A missing material makes the compensation
+        // unfileable; a missing spool only makes it less precise, and refusing
+        // it would block every uncatalogued filament for no gain in truth.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        Assert.Equal("undeclared", oResult.FilamentRef);
+        Assert.Equal(ECompensationVerdict.Proposed, oResult.Proposal.Verdict);
+    }
+
+    [Fact]
+    public void AComparisonRecordedBeforeTheFieldExisted_StillCompensates()
+    {
+        // Schema odc/comparison/0.1 has no filament_ref at all. Records already
+        // in artifact stores must keep working — a schema bump that silently
+        // invalidates history is worse than the gap it closed.
+        byte[] abLegacy = System.Text.Encoding.ASCII.GetBytes(
+            """
+            {"axes":[{"axis":"x","design_mm":"20.000","scan_mm":"19.860"},
+            {"axis":"y","design_mm":"30.000","scan_mm":"29.790"},
+            {"axis":"z","design_mm":"10.000","scan_mm":"9.930"}],
+            "inputs":{"declared_scan_accuracy_mm":"0.050","material":"pla"},
+            "schema":"odc/comparison/0.1",
+            "summary":{"design_volume_cubic_mm":"6000.000","scan_volume_cubic_mm":"5874.000"},
+            "voxel_size_mm":"0.200"}
+            """.Replace("\r", "").Replace("\n", ""));
+        string strHash = ArtifactStore.StrStore(StrArtifacts, abLegacy, ".comparison.json");
+
+        CompensationRunResult oResult = OCompensate(strHash, fMaxSpreadPct: 0.2);
+
+        Assert.Equal("pla", oResult.Material);
+        Assert.Equal("undeclared", oResult.FilamentRef);
     }
 }

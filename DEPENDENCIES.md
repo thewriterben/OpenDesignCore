@@ -13,6 +13,8 @@ Every dependency is a liability someone else controls. Each one gets a row befor
 
 Upgrading any of these is a deliberate, tested change with its own commit. PicoGK 2.3.0 exists on NuGet and is not yet adopted.
 
+**Platform support is part of the pin.** PicoGK 2.2.0 carries natives for `win-x64` and `osx-arm64` and no others — verified in `obj/project.assets.json` rather than taken from documentation. Linux builds and fails at first use; CI runs on Windows for that reason (ADR-0008 amendment, CONTRIBUTING.md). Check this again on any PicoGK upgrade: a package that quietly drops or adds a runtime changes who can contribute.
+
 Not used: `thewriterben/leap71ODC` is a fork of `leap71/leap71`, the organisation's landing-page repo — README and images only. It contains no kernel code and is not part of the build.
 
 ## Packages
@@ -24,6 +26,14 @@ Not used: `thewriterben/leap71ODC` is a fork of `leap71/leap71`, the organisatio
 | Microsoft.Data.Sqlite | `[9.0.19]` | MIT | Append-only run ledger (ADR-0006). Embedded, single-file, first-class in .NET; no server. Writing SQLite by hand is not a good use of anyone's life. |
 | Microsoft.NET.Test.Sdk (tests only) | `[17.11.1]` | MIT | Test host |
 | xunit + xunit.runner.visualstudio (tests only) | `[2.9.2]` / `[2.8.2]` | Apache-2.0 | Test framework; reference tests are a repo invariant |
+
+## External catalogues (referenced, not consumed)
+
+| Catalogue | Pinned | License | How consumed |
+|---|---|---|---|
+| Open Filament Database | per-reference, by dataset release (e.g. `dataset-v2026.07.10`) | MIT | **Not consumed.** No package, no API call, no vendored copy. A `FilamentRef` is an opaque string recorded in comparison and compensation records (ADR-0013). |
+
+This row exists so the next person does not add the dependency thinking it is already half-added. Dereferencing a reference at run time would put a network call inside a deterministic run and make a recorded result depend on a remote service's current contents — refused in ADR-0013. And the catalogue carries no engineering values: it identifies spools, it does not describe them. A number never comes from here.
 
 ## License compatibility
 

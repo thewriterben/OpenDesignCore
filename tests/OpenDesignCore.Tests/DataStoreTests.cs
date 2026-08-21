@@ -117,4 +117,50 @@ public sealed class DataStoreTests : IDisposable
             Assert.Throws<DataValidationException>(() => DataStore.LoadAll(strDir));
         Assert.Contains(oEx.Errors, s => s.Contains("shrinkage_pct_range"));
     }
+
+    [Fact]
+    public void MaterialWithValidFilamentRef_Loads()
+    {
+        string strDir = StrWriteEntry("materials", "spooled.json", """
+            {
+              "id": "materials/prusament-pla-galaxy-black",
+              "name": "Prusament PLA Galaxy Black",
+              "filament_ref": {
+                "catalog": "open-filament-database",
+                "dataset_version": "dataset-v2026.07.10",
+                "path": "brands/prusament/materials/PLA/filaments/prusament-pla/variants/galaxy-black"
+              },
+              "source": { "citation": "test" }
+            }
+            """);
+
+        DataSet oData = DataStore.LoadAll(strDir);
+        MaterialEntry oMat = Assert.Single(oData.Materials);
+        Assert.NotNull(oMat.FilamentRef);
+        Assert.Equal("dataset-v2026.07.10", oMat.FilamentRef!.DatasetVersion);
+    }
+
+    [Fact]
+    public void MaterialWithUnpinnedFilamentRef_IsRejectedNamingTheEntry()
+    {
+        // The loader reports every failure with the entry that owns it, and a
+        // filament reference is no exception — "invalid ref" without the id is
+        // useless in a store of many materials.
+        string strDir = StrWriteEntry("materials", "unpinned.json", """
+            {
+              "id": "materials/unpinned",
+              "name": "Reference to a moving catalogue",
+              "filament_ref": {
+                "catalog": "open-filament-database",
+                "dataset_version": "latest",
+                "path": "brands/prusament/materials/PLA/filaments/prusament-pla/variants/galaxy-black"
+              },
+              "source": { "citation": "test" }
+            }
+            """);
+
+        DataValidationException oEx =
+            Assert.Throws<DataValidationException>(() => DataStore.LoadAll(strDir));
+        Assert.Contains(oEx.Errors, s => s.Contains("materials/unpinned") && s.Contains("filament_ref"));
+    }
 }

@@ -166,10 +166,19 @@ if (args is ["compare", ..])
         oOpts[args[i][2..]] = args[i + 1];
     }
 
-    if (!oOpts.TryGetValue("design", out string? strDesign)
-        || !oOpts.TryGetValue("scan", out string? strScanPath))
+    if (!oOpts.TryGetValue("design", out string? strDesign))
     {
-        Console.Error.WriteLine("--design <stl> and --scan <stl> are both required.");
+        Console.Error.WriteLine("--design <stl> is required.");
+        return 2;
+    }
+    bool bHasScan = oOpts.TryGetValue("scan", out string? strScanPath);
+    bool bHasMeasured = oOpts.TryGetValue("measured", out string? strMeasured);
+    if (bHasScan == bHasMeasured)
+    {
+        Console.Error.WriteLine(
+            "Give exactly one of --scan <stl> or --measured <X>x<Y>x<Z>. They are two "
+            + "instruments answering the same question, and silently preferring one "
+            + "would hide a disagreement between them.");
         return 2;
     }
     if (!oOpts.TryGetValue("units", out string? strUnitsArg)
@@ -186,20 +195,108 @@ if (args is ["compare", ..])
         return 2;
     }
 
+    // Optional, and parsed before anything expensive runs: a malformed
+    // reference should fail before the meshes are loaded, not after (ADR-0013).
+    FilamentRef? oCmpFilament = null;
+    if (oOpts.TryGetValue("filament-ref", out string? strFilamentRefArg))
+    {
+        try
+        {
+            oCmpFilament = FilamentRef.OParse(strFilamentRefArg);
+        }
+        catch (FilamentRefException e)
+        {
+            Console.Error.WriteLine(e.Message);
+            return 2;
+        }
+    }
+
     try
     {
-        float fAccuracy = oOpts.TryGetValue("scan-accuracy-mm", out string? strAcc)
-            ? float.Parse(strAcc, System.Globalization.CultureInfo.InvariantCulture)
-            : 0f;
+        // One declared accuracy, whichever instrument produced the numbers.
+        // A caliper and a scanner are both instruments with a stated error,
+        // and the machinery downstream does not care which one it was.
+        float fAccuracy = oOpts.TryGetValue("instrument-accuracy-mm", out string? strInstr)
+            ? float.Parse(strInstr, System.Globalization.CultureInfo.InvariantCulture)
+            : oOpts.TryGetValue("scan-accuracy-mm", out string? strAcc)
+                ? float.Parse(strAcc, System.Globalization.CultureInfo.InvariantCulture)
+                : 0f;
 
-        CompareRunResult oResult = CompareRun.Execute(
-            strDesign, strScanPath, eCmpUnits, fCmpVoxel,
-            oOpts.GetValueOrDefault("artifacts", "artifacts"),
-            oOpts.GetValueOrDefault("ledger", "ledger.db"),
-            StrGitCommit(),
-            fAccuracy);
+        CompareRunResult oResult;
+        if (bHasMeasured)
+        {
+            float[] aM = CompareRun.AParseMeasured(strMeasured!);
+            // Four readings: X, Y, then the shelf and the tall face. The
+            // nominal shelf height must be declared, because the design STL
+            // knows its overall height but not where the step was put.
+            float fZLowNominal = oOpts.TryGetValue("nominal-step-z-mm", out string? strNs)
+                ? float.Parse(strNs, System.Globalization.CultureInfo.InvariantCulture)
+                : 0f;
+            if (aM.Length == 4 && fZLowNominal <= 0)
+            {
+                Console.Error.WriteLine(
+                    "Four measurements given, so --nominal-step-z-mm is required: the design "
+                    + "STL records its overall height but not where the shelf was placed, and "
+                    + "the shelf's nominal height is what separates first-layer offset from "
+                    + "shrinkage. It is printed by run-calibration-block.");
+                return 2;
+            }
+
+            if (!oOpts.TryGetValue("material", out string? strMaterial)
+                || string.IsNullOrWhiteSpace(strMaterial))
+            {
+                Console.Error.WriteLine(
+                    "--material is required and takes no default. A shrinkage figure "
+                    + "describes one material, and without it a measurement taken on PLA can "
+                    + "be proposed to a PETG profile carrying a hash that makes it look "
+                    + "sourced. e.g. --material pla");
+                return 2;
+            }
+
+            oResult = CompareRun.ExecuteMeasured(
+                strDesign, eCmpUnits, fCmpVoxel,
+                aM[0], aM[1], aM.Length == 4 ? aM[3] : aM[2], fAccuracy,
+                oOpts.GetValueOrDefault("artifacts", "artifacts"),
+                oOpts.GetValueOrDefault("ledger", "ledger.db"),
+                StrGitCommit(),
+                strMaterial: strMaterial,
+                fMeasuredZLowMm: aM.Length == 4 ? aM[2] : 0f,
+                fNominalZLowMm: aM.Length == 4 ? fZLowNominal : 0f,
+                oFilamentRef: oCmpFilament);
+
+            if (aM.Length == 3)
+            {
+                Console.WriteLine(
+                    "  note: a single Z reading contains the first-layer squish, which is a "
+                    + "constant rather than a percentage. Use a stepped block and four "
+                    + "readings to separate them.");
+            }
+        }
+        else
+        {
+            if (!oOpts.TryGetValue("material", out string? strScanMaterial)
+                || string.IsNullOrWhiteSpace(strScanMaterial))
+            {
+                Console.Error.WriteLine(
+                    "--material is required and takes no default. The material is a property "
+                    + "of the printed part, not of the instrument, so a scan needs it exactly "
+                    + "as much as a caliper does. e.g. --material pla");
+                return 2;
+            }
+
+            oResult = CompareRun.Execute(
+                strDesign, strScanPath!, eCmpUnits, fCmpVoxel,
+                oOpts.GetValueOrDefault("artifacts", "artifacts"),
+                oOpts.GetValueOrDefault("ledger", "ledger.db"),
+                StrGitCommit(),
+                strScanMaterial,
+                fAccuracy,
+                oCmpFilament);
+        }
 
         Console.WriteLine($"run {oResult.RunId}: dimensional comparison");
+        if (oCmpFilament is { } oDeclaredFilament)
+            Console.WriteLine($"  spool      {oDeclaredFilament}");
         foreach (AxisDeviation oAxis in oResult.Report.Axes)
         {
             Console.WriteLine(
@@ -225,6 +322,88 @@ if (args is ["compare", ..])
         return 0;
     }
     catch (Exception e) when (e is OpenDesignCore.Import.ImportValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
+if (args is ["run-calibration-block", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    if (!oOpts.TryGetValue("instrument-accuracy-mm", out string? strAcc)
+        || !float.TryParse(strAcc, System.Globalization.CultureInfo.InvariantCulture, out float fInstrAcc))
+    {
+        Console.Error.WriteLine(
+            "--instrument-accuracy-mm is required and takes no default: it is recorded in "
+            + "provenance and decides, later, whether a measured deviation is real or "
+            + "instrument error. A typical digital caliper is 0.02 mm.");
+        return 2;
+    }
+
+    CalibrationBlockParams oDefault = CalibrationBlockModel.ODefault();
+    float FBlock(string strKey, float fDefault)
+        => oOpts.TryGetValue(strKey, out string? s)
+            ? float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)
+            : fDefault;
+
+    CalibrationBlockParams oBlock = new()
+    {
+        XMm = FBlock("x-mm", oDefault.XMm),
+        YMm = FBlock("y-mm", oDefault.YMm),
+        ZMm = FBlock("z-mm", oDefault.ZMm),
+        StepZMm = FBlock("step-z-mm", oDefault.StepZMm),
+        TallDepthYMm = FBlock("tall-depth-y-mm", oDefault.TallDepthYMm),
+    };
+
+    // Defaults to the model's own floor, which is derived from the block's
+    // dimensions rather than being a constant. Note it is NOT derived from the
+    // instrument accuracy: the comparison uses the exported bounding box, so
+    // grid quantisation is measured rather than assumed.
+    float fBlockVoxel = oOpts.TryGetValue("voxel-mm", out string? strBv)
+        ? float.Parse(strBv, System.Globalization.CultureInfo.InvariantCulture)
+        : CalibrationBlockModel.FResolutionFloorMm(oBlock);
+
+    try
+    {
+        CalibrationBlockRunResult oResult = CalibrationBlockRun.Execute(
+            oBlock, fBlockVoxel, fInstrAcc,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+
+        Console.WriteLine($"run {oResult.RunId}: PASS  {CalibrationBlockModel.StrModelId}");
+        Console.WriteLine(
+            $"  nominal    {oBlock.XMm:F2} x {oBlock.YMm:F2} mm, shelf at {oBlock.StepZMm:F2} mm, "
+            + $"tall face at {oBlock.ZMm:F2} mm (Z span {oBlock.ZSpanMm:F2} mm)");
+        Console.WriteLine(
+            $"  exported   {oResult.Geometry.BBoxXMm:F3} x {oResult.Geometry.BBoxYMm:F3} x "
+            + $"{oResult.Geometry.BBoxZMm:F3} mm (voxel {fBlockVoxel:F4} mm)");
+        Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine($"  stl        {oResult.ArtifactPath}");
+        Console.WriteLine();
+        Console.WriteLine("  Print, cool, then take FOUR readings:");
+        Console.WriteLine("    X and Y across the flat faces, a few mm up from the bed.");
+        Console.WriteLine("    Z twice: bed to shelf, and bed to the tall face. Both contain the");
+        Console.WriteLine("    same first-layer squish, so their difference contains none.");
+        Console.WriteLine();
+        Console.WriteLine($"    compare --design {oResult.ArtifactPath} --units mm \\");
+        Console.WriteLine($"            --voxel-mm {fBlockVoxel:F4} \\");
+        Console.WriteLine("            --measured <X>x<Y>x<Zlow>x<Zhigh> \\");
+        Console.WriteLine($"            --instrument-accuracy-mm {fInstrAcc}");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException or ArgumentException)
     {
         Console.Error.WriteLine(e.Message);
         return 1;
@@ -271,7 +450,8 @@ if (args is ["compensate", ..])
             StrGitCommit());
 
         CompensationProposal oProp = oResult.Proposal;
-        Console.WriteLine($"run {oResult.RunId}: {oProp.Verdict}");
+        Console.WriteLine($"run {oResult.RunId}: {oProp.Verdict}  (material: {oResult.Material}, "
+            + $"spool: {oResult.FilamentRef})");
         Console.WriteLine($"  {oProp.Reason}");
         if (oProp.Actionable)
         {
@@ -288,10 +468,31 @@ if (args is ["compensate", ..])
 
         if (oOpts.TryGetValue("propose-to-profile", out string? strProfileKey))
         {
+            // Required only on this branch. `compensate` alone computes and
+            // records without knowing anything about the machine — measuring
+            // an uncalibrated printer is how you discover it is uncalibrated,
+            // and demanding the registry to do that would make the diagnosis
+            // impossible. Proposing is the step that needs the machine.
+            if (!oOpts.TryGetValue("machines", out string? strMachines)
+                || !oOpts.TryGetValue("machine-id", out string? strMachineId))
+            {
+                Console.Error.WriteLine(
+                    "--propose-to-profile also requires --machines <machines.json> and "
+                    + "--machine-id <id>. A shrinkage figure is only about the material if "
+                    + "the machine's axes are known good; without that, part of it is the "
+                    + "machine, stored under the material's name. The comparison above is "
+                    + "recorded either way.");
+                return 2;
+            }
+
+            MachineCalibration oMachine = MachineCalibration.ORead(strMachines, strMachineId);
+            Console.WriteLine($"  calibration: {oMachine.State} — {oMachine.Reason}");
+
             string strConfirmation = CompensationRun.StrPropose(
                 oResult,
                 oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
-                strProfileKey);
+                strProfileKey,
+                oMachine);
             Console.WriteLine(
                 $"  proposal {strConfirmation} — awaiting human approval in the studio dashboard");
         }
@@ -341,16 +542,17 @@ if (args is ["handoff", ..])
             strStageDir: strStage,
             strStudioUrl: oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
             strGcodeFilename: oOpts.GetValueOrDefault("print"),
-            bOffline: aFlags.Contains("offline"));
+            bOffline: aFlags.Contains("offline"),
+            strUploadFilename: oOpts.GetValueOrDefault("upload"));
 
         Console.WriteLine($"handoff {oResult.HandoffId}: {oResult.Status}");
         Console.WriteLine($"  staged  {oResult.StagedStlPath}");
+        if (oResult.UploadProposalId.Length > 0)
+            Console.WriteLine($"  upload proposal {oResult.UploadProposalId} — awaiting human approval");
         if (oResult.ProposalId.Length > 0)
-        {
-            Console.WriteLine($"  proposal {oResult.ProposalId} — awaiting human approval in the studio dashboard");
-            if (oResult.WillRun.Length > 0)
-                Console.WriteLine($"  will run: {oResult.WillRun}");
-        }
+            Console.WriteLine($"  print proposal  {oResult.ProposalId} — awaiting human approval");
+        if (oResult.WillRun.Length > 0)
+            Console.WriteLine($"  will run: {oResult.WillRun}");
         return 0;
     }
     catch (HandoffException e)
@@ -372,12 +574,17 @@ Console.WriteLine("       OpenDesignCore run-enclosure --voxel-mm <v> [--part <i
 Console.WriteLine("                                    [--wall-mm <v>] [--data <dir>] [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore run-cradle --stl <path> --units <mm|cm|m|in|ft> --voxel-mm <v>");
 Console.WriteLine("                                 [--clearance-mm <v>] [--wall-mm <v>] [--split <0..1>] [--scale <f>]");
-Console.WriteLine("       OpenDesignCore compare --design <stl> --scan <stl> --units <u> --voxel-mm <v>");
-Console.WriteLine("                              [--scan-accuracy-mm <v>]");
+Console.WriteLine("       OpenDesignCore run-calibration-block --instrument-accuracy-mm <v>");
+Console.WriteLine("                                            [--x-mm <v>] [--y-mm <v>] [--z-mm <v>] [--voxel-mm <v>]");
+Console.WriteLine("       OpenDesignCore compare --design <stl> --units <u> --voxel-mm <v>");
+Console.WriteLine("                              (--scan <stl> | --measured <X>x<Y>x<Zlow>x<Zhigh> --material <m>)");
+Console.WriteLine("                              [--nominal-step-z-mm <v>] [--instrument-accuracy-mm <v>]");
+Console.WriteLine("                              [--filament-ref <catalog>:<dataset-version>:<path>[#uuid]]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
-Console.WriteLine("                                 [--propose-to-profile <key>] [--studio <url>]");
-Console.WriteLine("                                 [--artifacts <dir>] [--ledger <path>]");
-Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>] [--print <gcode>]");
+Console.WriteLine("                                 [--propose-to-profile <key> --machines <path> --machine-id <id>]");
+Console.WriteLine("                                 [--studio <url>] [--artifacts <dir>] [--ledger <path>]");
+Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>]");
+Console.WriteLine("                              [--upload <gcode>] [--print <gcode>]");
 Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");
 return 0;
 

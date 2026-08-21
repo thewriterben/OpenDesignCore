@@ -13,24 +13,34 @@ public sealed record HandoffResult
     public required string Status { get; init; }
     public required string StagedStlPath { get; init; }
     public required string ProposalId { get; init; }
+    public required string UploadProposalId { get; init; }
     public required string WillRun { get; init; }
 }
 
 /// <summary>
 /// Hands a recorded run's artifact to AdvancedStudio, honestly:
 ///
-/// AdvancedStudio (studio-core 0.2.0, surveyed 2026-08-15) has no file upload
-/// and no slicer — it manages pre-sliced G-code already on the printer, and its
-/// only write seam is POST /api/propose (propose-only; a human approves in the
-/// dashboard). Dimensional compensation deliberately lives in the slicer.
+/// AdvancedStudio still has no slicer, and that is not this repo's problem to
+/// solve: a human slices the staged STL in whatever slicer they trust. What
+/// the studio now has is an *upload* seam, so the file need not be moved by
+/// hand. Its only write path remains POST /api/propose — propose-only, a human
+/// approves in the dashboard. Dimensional compensation deliberately lives in
+/// the slicer (see ADR-0011 for how a measurement gets there).
 ///
-/// So a handoff is three explicit steps, each recorded:
-///  1. STAGE  — copy the STL + provenance sidecar to a slicing workspace.
-///  2. VERIFY — studio must answer GET /api/state, else fail loudly
-///              (--offline records "staged-offline" instead; never silent).
-///  3. PROPOSE — only if a sliced G-code filename is given: POST /api/propose
-///              {action: "print_start", params: {filename}} and record the
-///              confirmation id. Approval stays with the human.
+/// A handoff is explicit steps, each recorded:
+///  1. STAGE   — copy the STL + provenance sidecar to a slicing workspace,
+///               hash-named so the slicer's output can carry its origin.
+///  2. VERIFY  — studio must answer GET /api/state, else fail loudly
+///               (--offline records "staged-offline" instead; never silent).
+///  3. UPLOAD  — with --upload &lt;name&gt;: propose putting that sliced job on the
+///               printer. Guarded, because the file lands on a networked
+///               device and outlives the proposal (studio ADR-0002).
+///  4. PRINT   — with --print &lt;name&gt;: propose starting it.
+///
+/// Upload and print are two proposals, not one. They are separate effects, and
+/// bundling them would hide the second behind approval of the first. Both
+/// carry the design's artifact hash, so the human approving sees which design
+/// the job claims to be rather than only a filename.
 /// </summary>
 public static class StudioHandoff
 {
@@ -41,7 +51,8 @@ public static class StudioHandoff
         string strStageDir,
         string strStudioUrl,
         string? strGcodeFilename,
-        bool bOffline)
+        bool bOffline,
+        string? strUploadFilename = null)
     {
         using Ledger oLedger = new(strLedgerPath);
         RunRecord oRun = oLedger.ORunById(nRunId)
@@ -63,13 +74,14 @@ public static class StudioHandoff
 
         string strStatus;
         string strProposalId = "";
+        string strUploadProposalId = "";
         string strWillRun = "";
 
         if (bOffline)
         {
             strStatus = "staged-offline";
-            if (strGcodeFilename is not null)
-                throw new HandoffException("--print requires the studio; drop --offline.");
+            if (strGcodeFilename is not null || strUploadFilename is not null)
+                throw new HandoffException("--print and --upload require the studio; drop --offline.");
         }
         else
         {
@@ -90,26 +102,32 @@ public static class StudioHandoff
             }
             strStatus = "staged";
 
-            // 3. Propose the print for the already-sliced G-code, if named.
+            // 3. Propose the upload, if a sliced job was named. Two proposals
+            //    rather than one: putting a file on the printer and starting a
+            //    print are separate effects, and bundling them would hide the
+            //    second behind approval of the first.
+            if (strUploadFilename is not null)
+            {
+                (strUploadProposalId, strWillRun) = OPropose(
+                    oHttp, strStudioUrl, "gcode_upload", new Dictionary<string, object?>
+                    {
+                        ["filename"] = strUploadFilename,
+                        ["design_artifact_sha256"] = oRun.ArtifactSha256,
+                    });
+                strStatus = "upload-proposed";
+            }
+
+            // 4. Propose the print for an already-sliced G-code, if named. The
+            //    design hash travels with it so the human approving sees which
+            //    design the job claims to be, not just a filename.
             if (strGcodeFilename is not null)
             {
-                using HttpResponseMessage oResp = oHttp.PostAsJsonAsync(
-                    $"{strStudioUrl}/api/propose",
-                    new Dictionary<string, object?>
+                (strProposalId, strWillRun) = OPropose(
+                    oHttp, strStudioUrl, "print_start", new Dictionary<string, object?>
                     {
-                        ["action"] = "print_start",
-                        ["params"] = new Dictionary<string, object?> { ["filename"] = strGcodeFilename },
-                    }).GetAwaiter().GetResult();
-
-                string strBody = oResp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
-                if (!oResp.IsSuccessStatusCode)
-                    throw new HandoffException($"Studio rejected the proposal ({(int)oResp.StatusCode}): {strBody}");
-
-                using JsonDocument oDoc = JsonDocument.Parse(strBody);
-                strProposalId = oDoc.RootElement.GetProperty("confirmation_id").GetString()
-                    ?? throw new HandoffException("Studio response lacked confirmation_id.");
-                strWillRun = oDoc.RootElement.TryGetProperty("will_run", out JsonElement oWill)
-                    ? oWill.GetString() ?? "" : "";
+                        ["filename"] = strGcodeFilename,
+                        ["design_artifact_sha256"] = oRun.ArtifactSha256,
+                    });
                 strStatus = "proposed";
             }
         }
@@ -131,7 +149,42 @@ public static class StudioHandoff
             Status = strStatus,
             StagedStlPath = strStlDst,
             ProposalId = strProposalId,
+            UploadProposalId = strUploadProposalId,
             WillRun = strWillRun,
         };
+    }
+
+    /// <summary>
+    /// Register one proposal and return its confirmation id and prompt.
+    ///
+    /// Nothing here approves anything: the studio holds the pending action and
+    /// a human releases it where the machine is (ADR-0009). This engine only
+    /// ever learns the id it was given.
+    /// </summary>
+    private static (string strId, string strWillRun) OPropose(
+        HttpClient oHttp, string strStudioUrl, string strAction,
+        Dictionary<string, object?> oParams)
+    {
+        using HttpResponseMessage oResp = oHttp.PostAsJsonAsync(
+            $"{strStudioUrl}/api/propose",
+            new Dictionary<string, object?>
+            {
+                ["action"] = strAction,
+                ["params"] = oParams,
+            }).GetAwaiter().GetResult();
+
+        string strBody = oResp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        if (!oResp.IsSuccessStatusCode)
+        {
+            throw new HandoffException(
+                $"Studio rejected the {strAction} proposal ({(int)oResp.StatusCode}): {strBody}");
+        }
+
+        using JsonDocument oDoc = JsonDocument.Parse(strBody);
+        string strId = oDoc.RootElement.GetProperty("confirmation_id").GetString()
+            ?? throw new HandoffException($"Studio response to {strAction} lacked confirmation_id.");
+        string strWillRun = oDoc.RootElement.TryGetProperty("will_run", out JsonElement oWill)
+            ? oWill.GetString() ?? "" : "";
+        return (strId, strWillRun);
     }
 }

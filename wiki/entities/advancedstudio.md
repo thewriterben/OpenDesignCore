@@ -12,4 +12,8 @@ Under version control since 2026-08-15 (single honest initial commit — reconst
 
 The division with ODC: this side owns the shrinkage arithmetic (already calibrated against its research), ODC decides whether one factor is defensible at all. Neither reimplements the other.
 
-**Standing gaps:** no file upload and no slicer — it manages pre-sliced G-code only, and no slicer is installed on the machine at all (checked 2026-08-16), so closing the STL→print gap needs a new external dependency. Approvals are in-memory with a 300 s TTL. No jobs/history store, and no provenance field on print proposals — an ODC artifact hash still cannot be attached to a print, though a *profile* value can now carry its origin.
+**ADR-0002 (2026-08-16)** adds the upload seam: `gcode_upload` proposed through the same guard, reading from one bounded staging directory (`studio/staging.py`) where absolute paths and traversal are **refused, not sanitised** — an upload proposal names a file rather than carrying its bytes, so without a boundary it is an arbitrary-file-read for anything reaching `/api/propose`. Upload and print are two proposals, never one. Both carry `design_artifact_sha256`. **Slicing is deliberately not automated**: Creality Print's CLI exists but crashes (`0xC0000005`) on valid arguments, and the studio does not need to slice — a human does, which is where ADR-0009 wants a person.
+
+**ADR-0003 (2026-08-16)** adds `studio/jobs.py`, an append-only ledger of every guarded decision **including rejections**, with the design hash as a real column. `GET /api/jobs`, `/api/jobs/by-design/<sha256>`. Written from both decision paths — web and terminal — because a ledger with a second unaudited way in is not a ledger.
+
+**Standing gaps:** none of the four surveyed on 2026-08-15 remain. What is left is not a gap in this repo: the compensation numbers are unvalidated until a real print is measured against a real scan.

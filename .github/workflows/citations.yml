@@ -1,0 +1,95 @@
+name: citations
+
+# Every value that enters a model run carries a citation, and a citation that
+# no longer resolves is a value that is no longer grounded. This job treats
+# link rot in `data/` as a build failure rather than something discovered
+# years later when someone asks where a number came from.
+#
+# Scope note: a resolving URL proves the document is still reachable, not that
+# it still says what the citation claims. Only a human re-reading the source
+# proves that. This catches the cheap half.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - "data/**"
+      - "**/*.md"
+      - ".github/workflows/citations.yml"
+  schedule:
+    # Weekly, Mondays 03:00 UTC. Datasheets rot slowly; a push-only check
+    # would never notice a vendor reorganising their site.
+    - cron: "0 3 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  citations:
+    # No build here, so the PicoGK win-x64/osx-arm64 constraint that pins
+    # ci.yml to Windows does not apply. This job only reads text.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The data store and wiki live in this repo; the pinned ShapeKernel
+          # submodule is upstream's to keep alive, not ours.
+          submodules: false
+
+      - name: Build citation index from data/
+        run: |
+          set -euo pipefail
+          {
+            echo "# Generated citation index"
+            echo
+            echo "Written by .github/workflows/citations.yml. Not committed."
+            echo
+          } > .citations.md
+
+          # Any nested object carrying a "url" is a citation target. Written
+          # as a markdown link whose *text* is the owning file, so a lychee
+          # failure can be traced back to the data entry that owns it.
+          while IFS= read -r -d '' f; do
+            jq -r --arg f "$f" '
+              [.. | objects | select(has("url")) | .url]
+              | unique[]
+              | "- [\($f)](\(.))"
+            ' "$f" >> .citations.md
+          done < <(find data -name '*.json' -print0 | sort -z)
+
+          echo "--- .citations.md ---"
+          cat .citations.md
+
+          if ! grep -q '^- \[' .citations.md; then
+            echo "No citation URLs found under data/. Either the data store is"
+            echo "empty or the extraction broke — failing rather than passing"
+            echo "a check that checked nothing."
+            exit 1
+          fi
+
+      - name: Check citation and documentation links
+        uses: lycheeverse/lychee-action@f796c8b7d468feb9b8c0a46da3fac0af6874d374 # v2.2.0
+        with:
+          fail: true
+          args: |
+            --no-progress
+            --verbose
+            --max-redirects 3
+            --accept '200..=299,403,429'
+            --timeout 30
+            --max-retries 3
+            --retry-wait-time 5
+            --exclude-path external
+            --exclude-path .git
+            './.citations.md'
+            './*.md'
+            './wiki/**/*.md'
+            './examples/**/*.md'
+
+      - name: Map failures back to their data entries
+        if: failure()
+        run: |
+          echo "Citation index (file -> url). Match a failing URL to its owner:"
+          grep '^- \[' .citations.md || true

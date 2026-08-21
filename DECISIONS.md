@@ -159,6 +159,8 @@ The failure mode this is avoiding is well documented in the LLM Wiki thread itse
 
 **Consequences (ADR-0008).** "Clone and go" is back — no separate runtime install, and CI needs only the .NET SDK. Determinism inputs recorded in provenance become: PicoGK package version, ShapeKernel tag, TFM, tool version, commit. 2.3.0 exists and is not adopted yet; adopting it is its own tested commit.
 
+**Amendment, 2026-08-21 — "only the .NET SDK" was incomplete: it also needs a supported platform.** PicoGK 2.2.0 bundles native runtimes for `win-x64` and `osx-arm64` only; there is no `linux-x64` payload in the package (`obj/project.assets.json`, `runtimeTargets`). Linux restores and builds the managed assembly fine and then fails at the first `new Library(...)`, so a Linux CI job would go green on build and red on test for a reason the log does not explain. CI therefore runs on `windows-latest`, matching the development machine; a macOS arm64 runner would serve equally. The consequence worth naming: **a contributor on Linux cannot run the test suite at all**, only `dotnet build` and `dotnet format`. That is a property of the pinned dependency, not a choice this project made, and it is the cost side of ADR-0001's "geometry is solved and we inherit its constraints wholesale". Revisit if LEAP 71 ships a Linux runtime.
+
 ---
 
 ## ADR-0009 — What the MCP surface may execute, and what it may only propose
@@ -247,3 +249,94 @@ Three refusals, each a real failure mode:
 The system will often refuse. That is the intended behaviour — most comparisons should not become settings — and the refusal names itself rather than returning a number nobody should use.
 
 **Validated on synthetic prints only.** Every refusal path is proven and the wire is proven end to end against a running studio, but whether the resulting percentage makes the next print better needs a real print and a real scan. The plumbing is correct; the water is unvalidated.
+
+---
+
+## ADR-0012 — An uncalibrated machine may be measured, but its measurement may not become a material profile
+
+**Date:** 2026-08-21
+**Status:** accepted
+
+**Context.** ADR-0011 closed the loop as far as a proposal, and noted the water was unvalidated. It got validated. Benji printed the calibration block on a Creality K2 Plus in PLA and measured it with calipers: X 39.90 against a nominal 40, Y 60.50 against 60, Z-span 25.05 against 25.
+
+He had deliberately not calibrated the machine first, and said so afterwards: the point was to see what the pipeline would do.
+
+What it did was almost produce a number. X was 0.25% under, Y was 0.83% over. Both are in the range a shrinkage figure lives in, and averaged into the single XY value OrcaSlicer wants they read as "PLA shrinks about 0.29%" — plausible, close to published PLA figures, and wrong. No material contracts on one in-plane axis and expands on the other; shrinkage is a bulk property and moves X and Y the same way. The Y axis was mechanically short by 0.83%, and that fault was about to be recorded as a property of a plastic, in a profile that shapes every subsequent print in that plastic, carrying a comparison hash that made it look sourced rather than guessed.
+
+**Two changes, and only one of them is this ADR.**
+
+The first is diagnosis: a `MachineScaleError` verdict fires when the two in-plane axes deviate in opposite directions by more than the instrument's accuracy, because no material or flow effect does that. It names the axis and gives the correction (`scale Y by 0.99174`; on Klipper, multiply that axis's `rotation_distance`). That is a verdict like the others and needs no policy.
+
+The second is the policy, and it is the harder question: **what should the tooling do when it cannot tell whether the machine is any good?** The K2's fault was large enough to spot. A machine 0.15% out on one axis would produce a perfectly self-consistent, entirely wrong shrinkage figure and no verdict would fire.
+
+**Options.**
+
+1. *Refuse to measure an uncalibrated machine.* Rejected, and not narrowly. Measuring is how you discover a machine is uncalibrated — this whole finding came from measuring one. A tool that requires calibration before it will measure cannot be used to calibrate.
+2. *Warn and proceed.* Rejected. The warning appears once, in a terminal, next to a number that is about to be stored permanently. The stored value outlives the warning by years.
+3. *Gate the write, not the read.* Accepted.
+
+**Decision.** ADR-0009's line — effects confined to a peer's own content-addressed stores execute; anything reaching beyond proposes — applies one step earlier here.
+
+- `compensate` computes and records the comparison **regardless of machine calibration state**. The record is a measurement, and measurements are always allowed. Nothing about this path changed.
+- `compensate --propose-to-profile` **additionally requires** `--machines` and `--machine-id`, reads the machine's `axis_calibration` from the OpenBuildCore registry, and refuses to propose unless all three axes are verified.
+
+Three states, deliberately not two:
+
+| State | Meaning | Proposal |
+|---|---|---|
+| `Unknown` | no `axis_calibration` recorded | refused |
+| `Partial` | some axes verified, others not | refused, naming the missing ones |
+| `Verified` | x, y and z each carry a date, a residual and a method | permitted |
+
+`Unknown` is not `Verified` with a zero residual, and the type refuses to let the two collapse: `WorstResidualPct` is `null`, never `0.0`. A zero residual claims a machine was measured and found perfect; unknown claims nothing at all. Conflating them is precisely the failure this ADR exists to prevent, expressed in a nullable field.
+
+`Partial` is refused rather than waved through because a part is measured on all three axes, and the unverified axis is exactly where a fault hides. It hid there here — X and Z would have looked fine.
+
+**Where the state lives.** OpenBuildCore owns machines, so `axis_calibration` is a field on its machine schema, its validator refuses a half-made claim (a date with no residual, a residual with no method), and this engine only reads the registry. That is the mirror of OpenBuildCore reading this engine's provenance sidecars, and neither repo gained a dependency on the other's code.
+
+**Ordering is load-bearing and pinned by a test.** The calibration refusal fires before the studio is contacted. If the network call came first, an uncalibrated machine on a working studio would put the number in front of a human who has no way to see the axes underneath it, and dashboards get approved.
+
+**Consequences.** Anyone using this loop must calibrate before a compensation can be stored — which is the intended outcome, stated as an error message that names what to do rather than as documentation. The measurement path is unaffected, so the diagnostic route stays open: print the block, measure it, read the verdict, fix the axis, record the residual, measure again.
+
+The proposal now carries the machine and its worst residual in the origin string alongside the material, so a reader six months later can ask "was the printer any good when this was taken?" without taking it on trust.
+
+**Cost, stated plainly.** Three extra CLI arguments on the propose path, and a cross-repo file read. The alternative was a machine fault permanently filed as a material property.
+
+---
+
+## ADR-0013 — A filament reference is an identity, never a source of values
+
+**Date:** 2026-08-21
+**Status:** accepted
+
+**Context.** `--material pla` is a label, not an identity. Two spools from two brands are both `pla`, so a compensation measured on one is eligible for the other, and `compensate`'s own caveat has said the quiet part since ADR-0011: *"shrinkage varies by spool, geometry and cooling."* `CompareRun` says it too, in a comment: *"compensation is per material and per spool — the ADRs said so from the start, and nothing enforced it."* ADR-0012 then closed the machine half of that sentence and left the spool half open. The profile-key gate compares free text against free text; `pla` measured, `pla` targeted, two different filaments, no complaint.
+
+The Open Filament Database (Open Filament Collective, facilitated by SimplyPrint; MIT; static REST API; dated dataset releases) catalogues brands → materials → product lines → colour variants → spool sizes → stores, and its UUIDs are what the OpenPrintTag NFC spec consumes — which is also what AdvancedStudio's CFS/RFID material tracking reads. There is a ready-made, permissively licensed identifier for exactly the thing this pipeline could not name.
+
+**The trap this ADR mainly exists to close.** The catalogue is easy to mistake for a source of engineering values — the awesome-3d-printing entry that surfaced it describes it as carrying "print settings". It does not. It has no shrinkage figures, no dimensional tolerances, no mechanical properties. Adopting it *as a data source* would be the invented-material-property failure the project rules forbid, wearing a citation. So the rule is stated before the mechanism:
+
+> **No number reached through a filament reference may enter a model run.** Values come from `data/` with a citation to a vendor TDS or to a measurement. A reference identifies which spool; it never says anything about how that spool behaves.
+
+In particular, this does **not** discharge the `TODO(source)` on `data/materials/pla-generic.json`. Only a vendor TDS or a measurement does that, and it remains open.
+
+**Options considered.**
+
+1. *Require a reference on every measurement.* Rejected. Most real filament is uncatalogued, and refusing to record a measurement for want of a catalogue entry blocks work without making any measurement truer.
+2. *Store the vendor and colour as free text.* Rejected. It is the same problem one layer down — free text does not join to anything, and two spellings of one spool are two spools.
+3. *Resolve references against the catalogue API at run time.* Rejected outright. That puts a network call inside a deterministic run and makes a recorded result depend on a remote service's availability and current contents. A reference is an opaque recorded string; ODC never dereferences it.
+4. *Record an optional, pinned, shape-validated reference.* Accepted.
+
+**Decision.** A `FilamentRef` is `catalog:dataset_version:path[#uuid]`, canonical text form, validated for shape and refused loudly when malformed:
+
+- `catalog` must be `open-filament-database` — the only one understood. An unknown catalogue is refused rather than stored uninterpreted, because a reference nothing can resolve looks like provenance and is not.
+- `dataset_version` is **required**, and `latest` / `main` / `HEAD` are refused by name. The catalogue renames and retires entries; a reference without the release it was read from is a lookup that used to work.
+- `path` must be a full variant path (`brands/{b}/materials/{M}/filaments/{f}/variants/{v}`). A brand- or material-level path is refused: shrinkage varies between colours of one product line, so the variant is the unit that matters.
+- `uuid` is optional and must parse as a UUID if given.
+
+It is optional everywhere it appears — on `data/` material entries, and on `compare --filament-ref`. Where `--material` is **required** and its absence refuses the compensation, an absent reference does not. The asymmetry is deliberate and pinned by a test: without a material the compensation cannot be filed at all, whereas without a spool it is merely a compensation for "some PLA" — which is what every compensation was before this ADR.
+
+**Schema bumps.** `odc/comparison/0.1` → `0.2` and `odc/compensation/0.1` → `0.2`, each gaining `inputs.filament_ref`, recorded as `"undeclared"` when absent so a reader can tell "no spool named" from "field missing". Records written under `0.1` keep loading and read as undeclared; a schema bump that silently invalidated history would be worse than the gap it closed.
+
+**`odc/provenance/0.2` is deliberately not bumped.** Design provenance carries no material and gains no field here — a design is not printed in anything at design time; the material is a property of the print. Adding a filament reference to `EnclosureRun`, `CradleRun` or `CalibrationBlockRun` would be a field nothing sets and nothing reads. It also means the peers consuming provenance sidecars — OpenBuildCore's capability check, the BINGO contract — see no change at all.
+
+**Consequences.** A compensation can now name the spool it came from, and the studio proposal's origin string carries it, so a profile keyed `pla` that was measured on one specific spool says so to whoever reads it next. The profile-key gate is unchanged and still matches on material — tightening it to demand a matching reference would refuse every uncatalogued spool, which is most of them. That gate stays a material check; the reference is evidence for a human, not another automated refusal. Revisit if the catalogue's coverage ever makes the stricter gate reasonable.
