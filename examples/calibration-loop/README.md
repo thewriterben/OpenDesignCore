@@ -46,13 +46,24 @@ One axis short, the other long. Averaged into the single XY number OrcaSlicer
 wants, that reads as *"PLA shrinks about 0.29 %"* — a believable figure, near
 the published ones, and completely wrong. **No material contracts on one
 in-plane axis and expands on the other.** Shrinkage is a bulk property; it
-moves X and Y the same way. That printer's Y axis was mechanically 0.83 % short,
-and the loop was one command away from filing a belt problem under the name of a
+moves X and Y the same way. Whatever produced that Y reading, it was not the
+material — and the loop was one command away from filing it under the name of a
 plastic, permanently, with a provenance hash making it look rigorous.
 
-So: check X, Y and Z against a known length, correct whatever is out (on Klipper,
-multiply that axis's `rotation_distance` by measured/nominal), and record the
-result in your OpenBuildCore machine registry:
+(What it *was* is still open. Half a millimetre on one pair of faces is as
+easily a Z seam or a caliper held at an angle as it is a machine fault, and the
+procedure below rules out the cheap explanations before touching anything.)
+
+**How you check depends on the kinematics, and getting that wrong makes things
+worse.** On a Cartesian machine one motor drives one axis, so a single axis can
+be scaled on its own. On a CoreXY both motors move for every move, X and Y
+*cannot* have different scale factors, and changing one stepper's
+`rotation_distance` produces skew rather than scale. [MACHINE-CALIBRATION.md](MACHINE-CALIBRATION.md)
+walks the whole procedure — rule out the measurement first, then a rotation test
+that says whether the error follows the part or the machine, then the correction
+that actually applies.
+
+Once you know, record the result in your OpenBuildCore machine registry:
 
 ```json
 "axis_calibration": {

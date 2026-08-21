@@ -224,10 +224,30 @@ public sealed record CompensationProposal
                     + "because a cooling polymer cannot make a part larger than its design, so "
                     + "the axis that GREW is the one that is not behaving like material. "
                     + "This is not compensable in the slicer at all; a shrinkage percentage "
-                    + "here would distort the good axis to disguise the bad one. Scale the "
-                    + $"{strUp} axis by {fCorrection:F5} (Klipper: multiply that axis's "
-                    + "rotation_distance by it), then print and measure again before asking "
-                    + "for a material compensation.");
+                    + "here would distort the good axis to disguise the bad one. To cancel "
+                    + $"it, {strUp} would need scaling by {fCorrection:F5}. "
+                    // BUG, tracked in examples/calibration-loop/MACHINE-CALIBRATION.md:
+                    // this used to end by telling the reader to multiply that axis's
+                    // rotation_distance. That is right on a Cartesian machine and harmful
+                    // on a CoreXY, where both motors move for every move: matched
+                    // rotation distances scale X and Y together, and mismatched ones
+                    // produce skew rather than independent scale. So the advice would have
+                    // introduced a real geometric fault into a machine whose actual
+                    // problem was still unidentified.
+                    //
+                    // Fixing it properly needs a kinematics field on OpenBuildCore's
+                    // machine schema — machine facts belong in the machine registry — and
+                    // this verdict reading it. Until then the verdict states the
+                    // observation and stops, because a remedy it cannot justify is worse
+                    // than no remedy.
+                    + "HOW to apply that depends on the kinematics and this tool does not "
+                    + "know yours: on a Cartesian machine it is that axis's rotation_distance, "
+                    + "but on a CoreXY X and Y cannot be scaled independently at all and "
+                    + "changing one stepper produces skew instead. Rule out the measurement "
+                    + "first — half a millimetre on one pair of faces is as easily a seam or "
+                    + "a caliper angle as a machine fault. See "
+                    + "examples/calibration-loop/MACHINE-CALIBRATION.md before changing "
+                    + "anything, then print and measure again.");
             }
 
             return OWith(ECompensationVerdict.AxesDisagree,
