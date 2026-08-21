@@ -346,6 +346,31 @@ public sealed class CalibrationBlockTests : IDisposable
     }
 
     [Fact]
+    public void SwappingTheTwoZReadingsIsRefusedBeforeAnythingIsRecorded()
+    {
+        // The block has unequal axes so a transposition is detectable. This is
+        // the test that makes it detected. Z-low and Z-high are the pair at
+        // risk: both are "bed to a flat face", and the two arguments are
+        // adjacent on the command line.
+        //
+        // Without the check the swap does not merely mis-record — it makes the
+        // span negative, and a negative span was being compared against a
+        // positive design span as though the result meant something.
+        ArgumentException oEx = Assert.Throws<ArgumentException>(
+            () => CompareRun.ExecuteMeasured(
+                ORun().ArtifactPath, PicoGK.Mesh.EStlUnit.MM, FVoxel(),
+                39.86f, 59.79f, 4.05f, 0.02f,
+                StrArtifacts, StrLedger, "test-commit", "pla",
+                fMeasuredZLowMm: 25.10f, fNominalZLowMm: 4f));
+
+        Assert.Contains("Z-low", oEx.Message);
+        Assert.Contains("Nothing is recorded", oEx.Message);
+
+        using Ledger oLedger = new(StrLedger);
+        Assert.DoesNotContain(oLedger.ARuns(), r => r.Model == CompareRun.StrModelId);
+    }
+
+    [Fact]
     public void AnUndeclaredMaterialIsRefused()
     {
         ArgumentException oEx = Assert.Throws<ArgumentException>(

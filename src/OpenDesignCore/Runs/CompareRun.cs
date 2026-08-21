@@ -105,6 +105,30 @@ public static class CompareRun
             // difference carries none — which is the only way a caliper can
             // give a Z shrinkage that is not contaminated by the first layer.
             bool bHasSpan = fMeasuredZLowMm > 0 && fNominalZLowMm > 0;
+
+            // Before deriving anything: are these readings even assignable to
+            // the labels they were given? The block's axes are unequal so that
+            // a transposition is detectable, and until now nothing detected
+            // one. Checked on the RAW readings, because a Z-low/Z-high swap
+            // disappears into the span the moment the difference is taken —
+            // it flips the sign, and a negative span would then be compared
+            // against a positive design span as though it meant something.
+            List<Reading> aReadings =
+            [
+                new("X", vecDesign.X, fMeasuredXMm),
+                new("Y", vecDesign.Y, fMeasuredYMm),
+            ];
+            if (bHasSpan)
+            {
+                aReadings.Add(new("Z-low", fNominalZLowMm, fMeasuredZLowMm));
+                aReadings.Add(new("Z-high", vecDesign.Z, fMeasuredZMm));
+            }
+            else
+            {
+                aReadings.Add(new("Z", vecDesign.Z, fMeasuredZMm));
+            }
+            MeasurementAssignment.Assert(aReadings);
+
             double fZDesign = bHasSpan ? vecDesign.Z - fNominalZLowMm : vecDesign.Z;
             double fZMeasured = bHasSpan ? fMeasuredZMm - fMeasuredZLowMm : fMeasuredZMm;
 
