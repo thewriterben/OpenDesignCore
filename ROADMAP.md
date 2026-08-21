@@ -33,7 +33,7 @@ Good ideas that are not this quarter's problem. Adding to this list is a valid o
 
 - BINGO integration: ODC provenance records referenced from fabrication evidence (contract drafted, see `wiki/concepts/bingo-odc-provenance-contract.md`)
 - ~~Feeding a measured compensation back into slicer profiles automatically~~ → done 2026-08-16 (ADR-0011): `compensate` judges whether a comparison justifies one and proposes it to AdvancedStudio's profile store, which computes the setting. Still needs a real print and scan to validate the number rather than the plumbing.
-- Cross-machine golden fixtures — rerun byte-identity is proven on one machine only
+- ~~Cross-machine golden fixtures — rerun byte-identity is proven on one machine only~~ → **first cross-machine evidence, 2026-08-21.** The CI determinism step and a local run produced the *same* enclosure STL hash, `7b1c8fb9dcdb7436b2d6893960e66906477ea5e34dc43e3f4c71e2786b1aa02b`, on two different machines. Provenance hashes differ, correctly — the sidecar records the commit. **What this does not yet show:** both machines are Windows x64 on the same pinned stack, and it is one model at one voxel size. macOS arm64 is untested and is where a difference would most plausibly appear. A pinned golden fixture is now worth writing; it was not before, because there was nothing to compare against.
 
 Shipped since this list was written, and now peers rather than plans:
 electronics (OpenCircuitCore), parts registry (OpenPartsCore), inventory and
