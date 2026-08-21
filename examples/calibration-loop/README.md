@@ -27,12 +27,21 @@ no shrinkage percentage will fix.
 
 ---
 
-## 0. Calibrate the machine first — really
+## 0. Calibrate first — machine, then filament, then measure
 
-Before any of this measures a material, it measures a machine. A printed part's
-size is the design, times the material's shrinkage, times the machine's idea of
-how far a millimetre is. A caliper cannot separate those, and whichever one you
-*name* the result is the one it gets stored under.
+A measured dimension is the design, times the material's shrinkage, times the
+machine's idea of a millimetre, times how much plastic the extruder actually
+pushed. A caliper sees the product, not the factors. Whichever factor you *name*
+when you store the result is the one that inherits all the others' error.
+
+So the order is: **square the machine, calibrate the filament (temperature, then
+flow, then pressure advance), then print and measure.** Flow rate especially —
+over-extrusion bulges every external wall, and measuring shrinkage on top of an
+uncalibrated flow ratio produces a number that says "PLA shrinks 0.4%" and means
+"my flow is 3% high". Same failure this whole step exists to prevent, one layer
+down.
+
+Full sequence in [CALIBRATE-FIRST.md](CALIBRATE-FIRST.md).
 
 This is not a caution written in advance. It happened on the first real run of
 this walkthrough, on purpose:
@@ -50,20 +59,21 @@ moves X and Y the same way. Whatever produced that Y reading, it was not the
 material — and the loop was one command away from filing it under the name of a
 plastic, permanently, with a provenance hash making it look rigorous.
 
-(What it *was* is still open. Half a millimetre on one pair of faces is as
-easily a Z seam or a caliper held at an angle as it is a machine fault, and the
-procedure below rules out the cheap explanations before touching anything.)
+(What it *was* is still open, and that is the point. The print predated any flow
+calibration, on a machine that had never been checked, so it had too many
+unknowns in it to diagnose. Half a millimetre on one pair of faces is as easily
+a Z seam or a caliper held at an angle as it is anything mechanical. The answer
+is not forensics on a bad print — it is calibrating the things upstream and
+printing a clean one.)
 
-**How you check depends on the kinematics, and getting that wrong makes things
-worse.** On a Cartesian machine one motor drives one axis, so a single axis can
-be scaled on its own. On a CoreXY both motors move for every move, X and Y
-*cannot* have different scale factors, and changing one stepper's
-`rotation_distance` produces skew rather than scale. [MACHINE-CALIBRATION.md](MACHINE-CALIBRATION.md)
-walks the whole procedure — rule out the measurement first, then a rotation test
-that says whether the error follows the part or the machine, then the correction
-that actually applies.
+**If you do need a mechanical correction, the kinematics decides what is even
+available.** On a Cartesian machine one motor drives one axis, so a single axis
+can be scaled alone. On a CoreXY both motors move for every move, X and Y cannot
+have different scale factors, and changing one stepper's `rotation_distance`
+produces skew rather than scale.
 
-Once you know, record the result in your OpenBuildCore machine registry:
+Once the machine is checked, record the result in your OpenBuildCore machine
+registry:
 
 ```json
 "axis_calibration": {
@@ -111,12 +121,15 @@ takes `--material`. It is required and has no default, because the first time
 this walkthrough was followed the examples all said `petg` while never saying
 what to print, and the part came out in PLA. Nothing would have caught it.
 
-Two things to get right, because they are the difference between measuring the
-printer and measuring a defect:
+Three things to get right, because they are the difference between measuring the
+material and measuring something else:
 
-- **Let it cool completely.** Warm PETG is still shrinking.
+- **Calibrate flow rate for this filament first** (step 0). Over-extrusion
+  bulges every external wall, and a shrinkage figure measured on top of it is
+  partly a flow setting wearing the material's name.
 - **Print with shrinkage compensation OFF**, or you are measuring the
   compensation rather than the material.
+- **Let it cool completely.** Warm plastic is still shrinking.
 
 You can move the sliced job to the printer through the studio:
 

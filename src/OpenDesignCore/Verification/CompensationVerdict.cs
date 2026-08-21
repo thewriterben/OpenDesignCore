@@ -245,9 +245,9 @@ public sealed record CompensationProposal
                     + "but on a CoreXY X and Y cannot be scaled independently at all and "
                     + "changing one stepper produces skew instead. Rule out the measurement "
                     + "first — half a millimetre on one pair of faces is as easily a seam or "
-                    + "a caliper angle as a machine fault. See "
-                    + "examples/calibration-loop/MACHINE-CALIBRATION.md before changing "
-                    + "anything, then print and measure again.");
+                    + "a caliper angle as a machine fault, and an uncalibrated flow ratio "
+                    + "moves dimensions too. See examples/calibration-loop/CALIBRATE-FIRST.md "
+                    + "before changing anything, then print and measure again.");
             }
 
             return OWith(ECompensationVerdict.AxesDisagree,
