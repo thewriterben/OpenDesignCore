@@ -44,15 +44,52 @@ public sealed class StudioHandoffTests : IDisposable
         });
     }
 
+    /// <summary>
+    /// A listening stub on a port that was actually free, or a failure that
+    /// says so. Tries a bounded number of ports and gives up loudly rather
+    /// than returning a listener that is not listening — the previous version
+    /// surfaced a failed bind as "AdvancedStudio unreachable", which reads as
+    /// a defect in the code under test rather than in the fixture.
+    /// </summary>
+    private static (HttpListener oListener, string strUrl) OBindStub()
+    {
+        const int nAttempts = 20;
+        for (int i = 0; i < nAttempts; i++)
+        {
+            HttpListener oListener = new();
+            string strUrl = $"http://127.0.0.1:{Random.Shared.Next(20000, 49000)}";
+            oListener.Prefixes.Add(strUrl + "/");
+            try
+            {
+                oListener.Start();
+                return (oListener, strUrl);
+            }
+            catch (HttpListenerException)
+            {
+                ((IDisposable)oListener).Dispose();
+            }
+        }
+        throw new InvalidOperationException(
+            $"Could not bind a loopback stub in {nAttempts} attempts. This is the test "
+            + "fixture failing, not the handoff code.");
+    }
+
     private static (HttpListener, string strUrl, List<string> aRequests) OStartStub(
         string strProposeResponse = """{"confirmation_id":"abc123def456","action":"print_start","will_run":"Start printing 'part.gcode'"}""",
         int nProposeStatus = 200)
     {
-        HttpListener oListener = new();
-        int nPort = Random.Shared.Next(20000, 60000);
-        string strUrl = $"http://127.0.0.1:{nPort}";
-        oListener.Prefixes.Add(strUrl + "/");
-        oListener.Start();
+        // Bind with retry rather than hoping. The port was picked at random
+        // from 20000-60000 and used without checking: Windows hands out
+        // ephemeral ports from 49152 upward, so on a busy machine that span is
+        // sometimes already taken and Start() throws ERROR_SHARING_VIOLATION.
+        // It never lost that lottery on a developer machine and lost it three
+        // times in one CI run, which is why it looked like one flaky test
+        // rather than a helper that cannot bind.
+        //
+        // Randomness here is not seeded, and deliberately so: the port does not
+        // reach any output, so nothing about the result depends on which one is
+        // used. Availability is the only thing being decided.
+        (HttpListener oListener, string strUrl) = OBindStub();
         List<string> aRequests = [];
 
         _ = Task.Run(async () =>
