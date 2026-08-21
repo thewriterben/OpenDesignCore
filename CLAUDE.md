@@ -8,7 +8,7 @@ C# on .NET, built on PicoGK and the LEAP 71 ShapeKernel as pinned submodules. Th
 
 ```
 dotnet build OpenDesignCore.sln -c Release
-dotnet test OpenDesignCore.sln -c Release        # no test project yet — activates with the first reference test (ROADMAP "Now")
+dotnet test OpenDesignCore.sln -c Release        # includes tests/reference/ — known answers, not pinned outputs
 dotnet format OpenDesignCore.sln --verify-no-changes --exclude external
 ```
 

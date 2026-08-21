@@ -1,5 +1,6 @@
 using System.Numerics;
 using System.Text.Json;
+using OpenDesignCore.Data;
 using OpenDesignCore.Provenance;
 using OpenDesignCore.Runs;
 using OpenDesignCore.Verification;
@@ -383,5 +384,74 @@ public sealed class CompensationRunTests : IDisposable
         CompensationException oEx = Assert.Throws<CompensationException>(
             () => OCompensate(strHash, fMaxSpreadPct: 0.2));
         Assert.Contains("not a comparison record", oEx.Message);
+    }
+
+    // ---- Filament identity (ADR-0013) ----
+
+    private const string StrSpool =
+        "open-filament-database:dataset-v2026.07.10:"
+        + "brands/prusament/materials/PLA/filaments/prusament-pla/variants/galaxy-black";
+
+    [Fact]
+    public void ADeclaredSpool_TravelsFromComparisonIntoTheCompensation()
+    {
+        // The point of the whole change: the compensation record can name the
+        // spool, not just the material. Without this the identity is declared
+        // at the command line and lost one hop later.
+        string strDesign = Path.Combine(_strTempDir, "spool-d.stl");
+        string strScan = Path.Combine(_strTempDir, "spool-s.stl");
+        using (Library oLib = new(0.2f))
+        {
+            Mesh mshDesign = Utils.mshCreateCube(oLib, new Vector3(20, 30, 10), Vector3.Zero);
+            mshDesign.SaveToStlFile(strDesign, Mesh.EStlUnit.MM);
+            mshDesign.mshCreateTransformed(Matrix4x4.CreateScale(0.993f, 0.993f, 0.993f))
+                .SaveToStlFile(strScan, Mesh.EStlUnit.MM);
+        }
+
+        string strComparison = CompareRun.Execute(
+            strDesign, strScan, Mesh.EStlUnit.MM, 0.2f,
+            StrArtifacts, StrLedger, "test-commit", "pla", 0.05f,
+            FilamentRef.OParse(StrSpool)).ReportSha256;
+
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+        Assert.Equal(StrSpool, oResult.FilamentRef);
+    }
+
+    [Fact]
+    public void AnUndeclaredSpool_DoesNotRefuseTheCompensation()
+    {
+        // The asymmetry with --material, pinned so nobody "tidies" it into a
+        // matching refusal later. A missing material makes the compensation
+        // unfileable; a missing spool only makes it less precise, and refusing
+        // it would block every uncatalogued filament for no gain in truth.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        Assert.Equal("undeclared", oResult.FilamentRef);
+        Assert.Equal(ECompensationVerdict.Proposed, oResult.Proposal.Verdict);
+    }
+
+    [Fact]
+    public void AComparisonRecordedBeforeTheFieldExisted_StillCompensates()
+    {
+        // Schema odc/comparison/0.1 has no filament_ref at all. Records already
+        // in artifact stores must keep working — a schema bump that silently
+        // invalidates history is worse than the gap it closed.
+        byte[] abLegacy = System.Text.Encoding.ASCII.GetBytes(
+            """
+            {"axes":[{"axis":"x","design_mm":"20.000","scan_mm":"19.860"},
+            {"axis":"y","design_mm":"30.000","scan_mm":"29.790"},
+            {"axis":"z","design_mm":"10.000","scan_mm":"9.930"}],
+            "inputs":{"declared_scan_accuracy_mm":"0.050","material":"pla"},
+            "schema":"odc/comparison/0.1",
+            "summary":{"design_volume_cubic_mm":"6000.000","scan_volume_cubic_mm":"5874.000"},
+            "voxel_size_mm":"0.200"}
+            """.Replace("\r", "").Replace("\n", ""));
+        string strHash = ArtifactStore.StrStore(StrArtifacts, abLegacy, ".comparison.json");
+
+        CompensationRunResult oResult = OCompensate(strHash, fMaxSpreadPct: 0.2);
+
+        Assert.Equal("pla", oResult.Material);
+        Assert.Equal("undeclared", oResult.FilamentRef);
     }
 }

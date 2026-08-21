@@ -7,30 +7,89 @@ on:
 
 jobs:
   check:
-    runs-on: ⟨windows-latest / ubuntu-latest — PicoGK runtime availability decides⟩
+    # windows-latest, not ubuntu. PicoGK 2.2.0 ships native runtimes for
+    # win-x64 and osx-arm64 only — there is no linux-x64 payload in the
+    # package (verified in obj/project.assets.json: runtimeTargets lists
+    # runtimes/osx-arm64/native/* and runtimes/win-x64/native/* and nothing
+    # else). A Linux job would restore and build the managed assembly and
+    # then fail the moment a test constructs `Library`. GitHub's macOS
+    # runners are arm64 and would also work; windows-latest matches the
+    # machine this project is developed on.
+    runs-on: windows-latest
+
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          # StrGitCommit() reads the checked-out commit into provenance.
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ⟨version PicoGK requires⟩
+          # Built with the 10.x SDK, targeting net9.0 (ADR-0008). The 9.0
+          # runtime is installed as well so the net9.0 test host has a
+          # matching runtime without relying on roll-forward.
+          dotnet-version: |
+            9.0.x
+            10.0.x
 
-      # PicoGK runtime is a native install, not a NuGet package.
-      # - name: Install PicoGK runtime
-      #   run: ⟨fetch and install the pinned runtime release⟩
+      # PicoGK's runtime ships inside the NuGet package (ADR-0008), so there
+      # is no separate native install step. If that ever changes, it changes
+      # here and in DEPENDENCIES.md.
+      - name: Restore
+        run: dotnet restore OpenDesignCore.sln
 
       - name: Build
-        run: dotnet build --configuration Release
+        run: dotnet build OpenDesignCore.sln -c Release --no-restore
+
+      - name: Format
+        run: dotnet format OpenDesignCore.sln --verify-no-changes --exclude external
 
       - name: Test
-        run: dotnet test --configuration Release
+        run: dotnet test OpenDesignCore.sln -c Release --no-build
 
-      # Determinism check: run the example twice at a fixed voxel size, compare bytes.
-      # This catches the class of bug that unit tests never will.
-      # - name: Determinism
-      #   run: |
-      #     ⟨run example⟩ && mv ⟨artifact⟩ a.out
-      #     ⟨run example⟩ && mv ⟨artifact⟩ b.out
-      #     cmp a.out b.out
+      # Determinism check: same inputs, same voxel size, same pinned versions
+      # must produce byte-identical artifacts (ADR-0003). Two runs into
+      # separate artifact stores and ledgers, then compare the content
+      # addresses. This catches the class of bug that unit tests never will —
+      # a hash-ordered iteration or an unseeded value changing the geometry
+      # between runs. Timestamps live in the ledger, never in the artifact,
+      # so a differing hash here is a real defect and not clock noise.
+      - name: Determinism
+        shell: pwsh
+        run: |
+          $strRunA = Join-Path $env:RUNNER_TEMP 'det-a'
+          $strRunB = Join-Path $env:RUNNER_TEMP 'det-b'
+
+          function Get-Hashes([string]$strDir) {
+              $strOut = dotnet run --project src/OpenDesignCore -c Release --no-build -- `
+                  run-enclosure `
+                  --voxel-mm 0.30 `
+                  --artifacts (Join-Path $strDir 'artifacts') `
+                  --ledger (Join-Path $strDir 'ledger.db')
+              if ($LASTEXITCODE -ne 0) {
+                  Write-Host ($strOut -join "`n")
+                  throw "run-enclosure exited $LASTEXITCODE"
+              }
+              Write-Host ($strOut -join "`n")
+              $strArtifact = ($strOut | Select-String -Pattern 'artifact\s+sha256:(\S+)').Matches.Groups[1].Value
+              $strProv = ($strOut | Select-String -Pattern 'provenance\s+sha256:(\S+)').Matches.Groups[1].Value
+              if (-not $strArtifact -or -not $strProv) {
+                  throw "Could not parse artifact/provenance hashes from run output."
+              }
+              return @{ Artifact = $strArtifact; Provenance = $strProv }
+          }
+
+          $oA = Get-Hashes $strRunA
+          $oB = Get-Hashes $strRunB
+
+          Write-Host "run A: artifact $($oA.Artifact) provenance $($oA.Provenance)"
+          Write-Host "run B: artifact $($oB.Artifact) provenance $($oB.Provenance)"
+
+          if ($oA.Artifact -ne $oB.Artifact) {
+              throw "NON-DETERMINISTIC ARTIFACT: $($oA.Artifact) != $($oB.Artifact)"
+          }
+          if ($oA.Provenance -ne $oB.Provenance) {
+              throw "NON-DETERMINISTIC PROVENANCE: $($oA.Provenance) != $($oB.Provenance)"
+          }
+          Write-Host "Deterministic: both runs produced identical artifact and provenance hashes."

@@ -195,6 +195,22 @@ if (args is ["compare", ..])
         return 2;
     }
 
+    // Optional, and parsed before anything expensive runs: a malformed
+    // reference should fail before the meshes are loaded, not after (ADR-0013).
+    FilamentRef? oCmpFilament = null;
+    if (oOpts.TryGetValue("filament-ref", out string? strFilamentRefArg))
+    {
+        try
+        {
+            oCmpFilament = FilamentRef.OParse(strFilamentRefArg);
+        }
+        catch (FilamentRefException e)
+        {
+            Console.Error.WriteLine(e.Message);
+            return 2;
+        }
+    }
+
     try
     {
         // One declared accuracy, whichever instrument produced the numbers.
@@ -245,7 +261,8 @@ if (args is ["compare", ..])
                 StrGitCommit(),
                 strMaterial: strMaterial,
                 fMeasuredZLowMm: aM.Length == 4 ? aM[2] : 0f,
-                fNominalZLowMm: aM.Length == 4 ? fZLowNominal : 0f);
+                fNominalZLowMm: aM.Length == 4 ? fZLowNominal : 0f,
+                oFilamentRef: oCmpFilament);
 
             if (aM.Length == 3)
             {
@@ -273,10 +290,13 @@ if (args is ["compare", ..])
                 oOpts.GetValueOrDefault("ledger", "ledger.db"),
                 StrGitCommit(),
                 strScanMaterial,
-                fAccuracy);
+                fAccuracy,
+                oCmpFilament);
         }
 
         Console.WriteLine($"run {oResult.RunId}: dimensional comparison");
+        if (oCmpFilament is { } oDeclaredFilament)
+            Console.WriteLine($"  spool      {oDeclaredFilament}");
         foreach (AxisDeviation oAxis in oResult.Report.Axes)
         {
             Console.WriteLine(
@@ -430,7 +450,8 @@ if (args is ["compensate", ..])
             StrGitCommit());
 
         CompensationProposal oProp = oResult.Proposal;
-        Console.WriteLine($"run {oResult.RunId}: {oProp.Verdict}  (material: {oResult.Material})");
+        Console.WriteLine($"run {oResult.RunId}: {oProp.Verdict}  (material: {oResult.Material}, "
+            + $"spool: {oResult.FilamentRef})");
         Console.WriteLine($"  {oProp.Reason}");
         if (oProp.Actionable)
         {
@@ -558,6 +579,7 @@ Console.WriteLine("                                            [--x-mm <v>] [--y
 Console.WriteLine("       OpenDesignCore compare --design <stl> --units <u> --voxel-mm <v>");
 Console.WriteLine("                              (--scan <stl> | --measured <X>x<Y>x<Zlow>x<Zhigh> --material <m>)");
 Console.WriteLine("                              [--nominal-step-z-mm <v>] [--instrument-accuracy-mm <v>]");
+Console.WriteLine("                              [--filament-ref <catalog>:<dataset-version>:<path>[#uuid]]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
 Console.WriteLine("                                 [--propose-to-profile <key> --machines <path> --machine-id <id>]");
 Console.WriteLine("                                 [--studio <url>] [--artifacts <dir>] [--ledger <path>]");

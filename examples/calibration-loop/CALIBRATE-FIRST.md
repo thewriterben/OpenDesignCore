@@ -76,8 +76,17 @@ declares an accuracy for:
 3. Measure the wall in the **middle of each of the four faces**, away from
    corners and away from the first and last layers. Average them.
 4. Read your profile's **external perimeter line width** — do not assume it
-   equals the nozzle diameter. On a 0.4 mm nozzle these slicers commonly
-   default to 0.42 mm.
+   equals the nozzle diameter.
+
+   For the K2 Plus this was read from the vendor's own profiles rather than
+   recalled: every `@Creality K2 Plus 0.4 nozzle` process in Creality Print 7.2
+   sets `outer_wall_line_width = 0.42`, against a nozzle diameter of 0.4. Also
+   `inner_wall_line_width = 0.45` and `initial_layer_line_width = 0.5` — the
+   first layer is deliberately wider, which is the sourced reason for measuring
+   away from it rather than a rule of thumb.
+
+   If your measured wall lands near 0.45 rather than 0.42, the slicer treated
+   it as an inner wall; check that the model really is one perimeter.
 
 ```
 new_flow_ratio = current_flow_ratio × (line_width ÷ measured_wall_thickness)

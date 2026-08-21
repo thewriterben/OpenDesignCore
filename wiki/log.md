@@ -309,3 +309,15 @@ Gaps 12(b) and 12(c) close together, and with 12(a) done yesterday and 12(d) on 
 49 studio tests, up from 39. Proven end to end against a running studio: a rejected profile_update recorded as job 1 approved=False, an approved one as job 2 outcome='executed', a print proposal found afterwards by its design hash, and `/api/jobs/by-design/` with an empty hash returning 404 rather than everything.
 
 Housekeeping worth noting: an earlier crashed probe had left Benji's PETG profile at 0.4 with a test origin, and this run's "restore" faithfully restored the already-broken value. Caught it, restored from git, verified 0.5/seed. A restore that reads its baseline from the thing it is about to fix is not a restore.
+
+## [2026-08-21] ingest | awesome-3d-printingODC → spool identity, and one description that is wrong
+
+Read the sibling `awesome-3d-printingODC` repo — a fork of `ad-si/awesome-3d-printing`, ~250 curated links, no code, no divergence from upstream. Most of it (brands, marketplaces, services, filament vendors) has no bearing on this engine. Two things did.
+
+**Its CI was the better idea.** The whole repo's build is a `lychee` link check. Applied here to the thing that actually needs it: every value entering a model run carries a citation, and a citation that no longer resolves is a value that is no longer grounded — an invariant with nothing enforcing it until now. `.github/workflows/citations.yml`. The check proves reachability, not that the document still says what the citation claims; that distinction is written into the workflow so it is not mistaken for more.
+
+**[[open-filament-database]] gave the pipeline a way to name a spool** (ADR-0013). `--material pla` is a label two brands share, and `CompareRun` has carried a comment since ADR-0011 admitting nothing enforced the per-spool part. **Conflict:** the list describes OFD as carrying "print settings". It does not — it is a catalogue of brands, product lines, colours and stores, with no shrinkage or tolerance data anywhere in it. Anyone following that description into `data/` produces an invented material property with a citation attached, which is the exact failure the project rules name. Recorded in the ADR before the mechanism, because the misreading is the more likely outcome than the adoption.
+
+**A finding that came from reading the lockfile rather than the docs.** PicoGK 2.2.0 ships natives for `win-x64` and `osx-arm64` only. ADR-0008's "CI needs only the .NET SDK" was true and incomplete; a Linux job builds green and dies at the first `Library`. CI is Windows, and a Linux contributor cannot run the test suite at all. Amended in the ADR rather than written as a new one — it is a consequence nobody had checked, not a decision anybody made.
+
+**Rejected, and written down so it is not relitigated:** community print-settings sites (FilamentProfilesHub, Filwiz) as data sources — uncited, straight through the grounding rule; browser mesh-repair tools at the import boundary — repairing a scan silently is exactly the degradation ADR-0003's spirit forbids; slicer-side infill optimisation — someone else's domain, already under ROADMAP "Not ever".

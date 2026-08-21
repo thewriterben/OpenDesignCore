@@ -19,4 +19,14 @@
     <ProjectReference Include="..\..\src\OpenDesignCore.Mcp\OpenDesignCore.Mcp.csproj" />
   </ItemGroup>
 
+  <!--
+    Reference tests (tests/reference/) compile into this assembly so that
+    `dotnet test` stays one command. They live in their own directory because
+    they are a different kind of test — known answers rather than pinned
+    outputs — not because they need a separate runner. See tests/reference/README.md.
+  -->
+  <ItemGroup>
+    <Compile Include="..\reference\**\*.cs" LinkBase="Reference" />
+  </ItemGroup>
+
 </Project>

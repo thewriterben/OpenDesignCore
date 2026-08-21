@@ -159,6 +159,8 @@ The failure mode this is avoiding is well documented in the LLM Wiki thread itse
 
 **Consequences (ADR-0008).** "Clone and go" is back — no separate runtime install, and CI needs only the .NET SDK. Determinism inputs recorded in provenance become: PicoGK package version, ShapeKernel tag, TFM, tool version, commit. 2.3.0 exists and is not adopted yet; adopting it is its own tested commit.
 
+**Amendment, 2026-08-21 — "only the .NET SDK" was incomplete: it also needs a supported platform.** PicoGK 2.2.0 bundles native runtimes for `win-x64` and `osx-arm64` only; there is no `linux-x64` payload in the package (`obj/project.assets.json`, `runtimeTargets`). Linux restores and builds the managed assembly fine and then fails at the first `new Library(...)`, so a Linux CI job would go green on build and red on test for a reason the log does not explain. CI therefore runs on `windows-latest`, matching the development machine; a macOS arm64 runner would serve equally. The consequence worth naming: **a contributor on Linux cannot run the test suite at all**, only `dotnet build` and `dotnet format`. That is a property of the pinned dependency, not a choice this project made, and it is the cost side of ADR-0001's "geometry is solved and we inherit its constraints wholesale". Revisit if LEAP 71 ships a Linux runtime.
+
 ---
 
 ## ADR-0009 — What the MCP surface may execute, and what it may only propose
@@ -299,3 +301,42 @@ Three states, deliberately not two:
 The proposal now carries the machine and its worst residual in the origin string alongside the material, so a reader six months later can ask "was the printer any good when this was taken?" without taking it on trust.
 
 **Cost, stated plainly.** Three extra CLI arguments on the propose path, and a cross-repo file read. The alternative was a machine fault permanently filed as a material property.
+
+---
+
+## ADR-0013 — A filament reference is an identity, never a source of values
+
+**Date:** 2026-08-21
+**Status:** accepted
+
+**Context.** `--material pla` is a label, not an identity. Two spools from two brands are both `pla`, so a compensation measured on one is eligible for the other, and `compensate`'s own caveat has said the quiet part since ADR-0011: *"shrinkage varies by spool, geometry and cooling."* `CompareRun` says it too, in a comment: *"compensation is per material and per spool — the ADRs said so from the start, and nothing enforced it."* ADR-0012 then closed the machine half of that sentence and left the spool half open. The profile-key gate compares free text against free text; `pla` measured, `pla` targeted, two different filaments, no complaint.
+
+The Open Filament Database (Open Filament Collective, facilitated by SimplyPrint; MIT; static REST API; dated dataset releases) catalogues brands → materials → product lines → colour variants → spool sizes → stores, and its UUIDs are what the OpenPrintTag NFC spec consumes — which is also what AdvancedStudio's CFS/RFID material tracking reads. There is a ready-made, permissively licensed identifier for exactly the thing this pipeline could not name.
+
+**The trap this ADR mainly exists to close.** The catalogue is easy to mistake for a source of engineering values — the awesome-3d-printing entry that surfaced it describes it as carrying "print settings". It does not. It has no shrinkage figures, no dimensional tolerances, no mechanical properties. Adopting it *as a data source* would be the invented-material-property failure the project rules forbid, wearing a citation. So the rule is stated before the mechanism:
+
+> **No number reached through a filament reference may enter a model run.** Values come from `data/` with a citation to a vendor TDS or to a measurement. A reference identifies which spool; it never says anything about how that spool behaves.
+
+In particular, this does **not** discharge the `TODO(source)` on `data/materials/pla-generic.json`. Only a vendor TDS or a measurement does that, and it remains open.
+
+**Options considered.**
+
+1. *Require a reference on every measurement.* Rejected. Most real filament is uncatalogued, and refusing to record a measurement for want of a catalogue entry blocks work without making any measurement truer.
+2. *Store the vendor and colour as free text.* Rejected. It is the same problem one layer down — free text does not join to anything, and two spellings of one spool are two spools.
+3. *Resolve references against the catalogue API at run time.* Rejected outright. That puts a network call inside a deterministic run and makes a recorded result depend on a remote service's availability and current contents. A reference is an opaque recorded string; ODC never dereferences it.
+4. *Record an optional, pinned, shape-validated reference.* Accepted.
+
+**Decision.** A `FilamentRef` is `catalog:dataset_version:path[#uuid]`, canonical text form, validated for shape and refused loudly when malformed:
+
+- `catalog` must be `open-filament-database` — the only one understood. An unknown catalogue is refused rather than stored uninterpreted, because a reference nothing can resolve looks like provenance and is not.
+- `dataset_version` is **required**, and `latest` / `main` / `HEAD` are refused by name. The catalogue renames and retires entries; a reference without the release it was read from is a lookup that used to work.
+- `path` must be a full variant path (`brands/{b}/materials/{M}/filaments/{f}/variants/{v}`). A brand- or material-level path is refused: shrinkage varies between colours of one product line, so the variant is the unit that matters.
+- `uuid` is optional and must parse as a UUID if given.
+
+It is optional everywhere it appears — on `data/` material entries, and on `compare --filament-ref`. Where `--material` is **required** and its absence refuses the compensation, an absent reference does not. The asymmetry is deliberate and pinned by a test: without a material the compensation cannot be filed at all, whereas without a spool it is merely a compensation for "some PLA" — which is what every compensation was before this ADR.
+
+**Schema bumps.** `odc/comparison/0.1` → `0.2` and `odc/compensation/0.1` → `0.2`, each gaining `inputs.filament_ref`, recorded as `"undeclared"` when absent so a reader can tell "no spool named" from "field missing". Records written under `0.1` keep loading and read as undeclared; a schema bump that silently invalidated history would be worse than the gap it closed.
+
+**`odc/provenance/0.2` is deliberately not bumped.** Design provenance carries no material and gains no field here — a design is not printed in anything at design time; the material is a property of the print. Adding a filament reference to `EnclosureRun`, `CradleRun` or `CalibrationBlockRun` would be a field nothing sets and nothing reads. It also means the peers consuming provenance sidecars — OpenBuildCore's capability check, the BINGO contract — see no change at all.
+
+**Consequences.** A compensation can now name the spool it came from, and the studio proposal's origin string carries it, so a profile keyed `pla` that was measured on one specific spool says so to whoever reads it next. The profile-key gate is unchanged and still matches on material — tightening it to demand a matching reference would refuse every uncatalogued spool, which is most of them. That gate stays a material check; the reference is evidence for a human, not another automated refusal. Revisit if the catalogue's coverage ever makes the stricter gate reasonable.

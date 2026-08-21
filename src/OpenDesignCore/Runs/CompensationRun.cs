@@ -17,6 +17,14 @@ public sealed record CompensationRunResult
 
     /// <summary>The material the measured part was printed in, from the comparison.</summary>
     public required string Material { get; init; }
+
+    /// <summary>
+    /// The catalogued filament variant, if the comparison named one, else
+    /// "undeclared". Optional where <see cref="Material"/> is required: a
+    /// missing material makes the compensation meaningless, a missing spool
+    /// only makes it less precise.
+    /// </summary>
+    public required string FilamentRef { get; init; }
 }
 
 /// <summary>
@@ -69,10 +77,11 @@ public static class CompensationRun
         DimensionalReport oReport = OParseReport(abComparison, strPath);
         CompensationProposal oProposal = CompensationProposal.OJudge(oReport, fMaxAxisSpreadPct);
         string strMaterial = StrParseMaterial(abComparison);
+        string strFilamentRef = StrParseFilamentRef(abComparison);
 
         Dictionary<string, object?> oRecord = new()
         {
-            ["schema"] = "odc/compensation/0.1",
+            ["schema"] = "odc/compensation/0.2",
             ["model"] = StrModelId,
             ["inputs"] = new Dictionary<string, object?>
             {
@@ -80,6 +89,7 @@ public static class CompensationRun
                 ["comparison_sha256"] = strComparisonSha256,
                 ["max_axis_spread_pct"] = StrF3(fMaxAxisSpreadPct),
                 ["material"] = strMaterial,
+                ["filament_ref"] = strFilamentRef,
             },
             ["verdict"] = oProposal.Verdict.ToString(),
             ["actionable"] = oProposal.Actionable,
@@ -143,7 +153,29 @@ public static class CompensationRun
             RecordSha256 = strRecordHash,
             Proposal = oProposal,
             Material = strMaterial,
+            FilamentRef = strFilamentRef,
         };
+    }
+
+    /// <summary>
+    /// The catalogued filament variant from the comparison, or "undeclared".
+    ///
+    /// Absent is allowed here where an absent material is refused, and the
+    /// asymmetry is deliberate: without a material the compensation cannot be
+    /// filed at all, whereas without a spool it can — it is simply a
+    /// compensation for "some PLA" rather than for one identified spool, which
+    /// is what every compensation was before ADR-0013. Records written under
+    /// schema odc/comparison/0.1 predate the field and read as "undeclared"
+    /// rather than failing.
+    /// </summary>
+    private static string StrParseFilamentRef(byte[] abComparison)
+    {
+        using JsonDocument oDoc = JsonDocument.Parse(abComparison);
+        return oDoc.RootElement.GetProperty("inputs")
+            .TryGetProperty("filament_ref", out JsonElement oRef)
+            && oRef.GetString() is { Length: > 0 } strRef
+                ? strRef
+                : "undeclared";
     }
 
     /// <summary>
@@ -256,8 +288,16 @@ public static class CompensationRun
                 // The machine rides along too. A reader six months from now
                 // asking "was the printer any good when this was measured?"
                 // should not have to take it on trust.
-                ["origin"] = $"odc-comparison:{oResult.ComparisonSha256} ({oResult.Material}, "
-                             + $"machine {oMachine.MachineId} worst axis residual "
+                // The spool rides along when one was named. A profile keyed
+                // "pla" that was measured on one specific spool should say so:
+                // the next person to wonder whether the number transfers to a
+                // different brand can see that it might not. The prefix is
+                // unchanged — AdvancedStudio matches on `odc-comparison:<sha>`.
+                ["origin"] = $"odc-comparison:{oResult.ComparisonSha256} ({oResult.Material}"
+                             + (oResult.FilamentRef == "undeclared"
+                                 ? ", spool undeclared"
+                                 : $", spool {oResult.FilamentRef}")
+                             + $", machine {oMachine.MachineId} worst axis residual "
                              + $"{oMachine.WorstResidualPct?.ToString("F3", CultureInfo.InvariantCulture)} %)",
             },
         };

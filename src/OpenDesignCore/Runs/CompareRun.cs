@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Numerics;
+using OpenDesignCore.Data;
 using OpenDesignCore.Import;
 using OpenDesignCore.Provenance;
 using OpenDesignCore.Verification;
@@ -61,7 +62,8 @@ public static class CompareRun
         string strCommit,
         string strMaterial,
         float fMeasuredZLowMm = 0f,
-        float fNominalZLowMm = 0f)
+        float fNominalZLowMm = 0f,
+        FilamentRef? oFilamentRef = null)
     {
         // Compensation is per material and per spool — the ADRs said so from
         // the start, and nothing enforced it. The material was never captured
@@ -163,7 +165,8 @@ public static class CompareRun
             fAccuracyMm: fInstrumentAccuracyMm,
             strArtifactsDir: strArtifactsDir, strLedgerPath: strLedgerPath,
             strCommit: strCommit, fFirstLayerOffsetMm: fFirstLayerOffset,
-            strMaterial: strMaterial.Trim().ToLowerInvariant());
+            strMaterial: strMaterial.Trim().ToLowerInvariant(),
+            oFilamentRef: oFilamentRef);
     }
 
     public static CompareRunResult Execute(
@@ -175,7 +178,8 @@ public static class CompareRun
         string strLedgerPath,
         string strCommit,
         string strMaterial,
-        float fScanAccuracyMm = 0f)
+        float fScanAccuracyMm = 0f,
+        FilamentRef? oFilamentRef = null)
     {
         // Required on this path too. The material is a property of the printed
         // part, not of the instrument that measured it, so a scan needs it
@@ -213,7 +217,8 @@ public static class CompareRun
             fAccuracyMm: fScanAccuracyMm,
             strArtifactsDir: strArtifactsDir, strLedgerPath: strLedgerPath,
             strCommit: strCommit,
-            strMaterial: strMaterial.Trim().ToLowerInvariant());
+            strMaterial: strMaterial.Trim().ToLowerInvariant(),
+            oFilamentRef: oFilamentRef);
     }
 
     /// <summary>
@@ -236,11 +241,12 @@ public static class CompareRun
         string strLedgerPath,
         string strCommit,
         double? fFirstLayerOffsetMm = null,
-        string strMaterial = "")
+        string strMaterial = "",
+        FilamentRef? oFilamentRef = null)
     {
         Dictionary<string, object?> oRecord = new()
         {
-            ["schema"] = "odc/comparison/0.1",
+            ["schema"] = "odc/comparison/0.2",
             ["model"] = StrModelId,
             ["voxel_size_mm"] = StrF3(fVoxelSizeMm),
             ["inputs"] = new Dictionary<string, object?>
@@ -255,6 +261,13 @@ public static class CompareRun
                 // describes one material; without this the pipeline cannot
                 // stop a PLA measurement reaching a PETG profile.
                 ["material"] = strMaterial.Length > 0 ? strMaterial : "undeclared",
+                // Which spool, not just which material (ADR-0013). "pla" is a
+                // label two brands share; shrinkage is not shared with it. This
+                // stays optional — most filament is not catalogued, and
+                // demanding a reference would block the measurement without
+                // making it truer. Identity only: no value here came from the
+                // catalogue.
+                ["filament_ref"] = oFilamentRef?.ToString() ?? "undeclared",
                 ["declared_units"] = eUnits.ToString().ToLowerInvariant(),
                 ["declared_scan_accuracy_mm"] =
                     fAccuracyMm > 0 ? StrF3(fAccuracyMm) : "undeclared",

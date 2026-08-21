@@ -19,6 +19,7 @@
 - [[openpartscore]] — canonical parts registry; schema v0; cited entries; codegen bindings planned
 - [[opencircuitcore]] — electronics engine; KiCad-direct (atopile dropped, ADR-0003); netlist-as-source
 - [[openbuildcore]] — inventory + ideation + machines; quantity-aware exclusive matching; print time only from a measured throughput (ADR-0005)
+- [[open-filament-database]] — MIT filament catalogue; spool identity for ADR-0013; an identity source, never a value source (2026-08-21)
 
 ## Sources
 - [[bingo-landscape-2026]] — authoritative market layer: churn disease, five commandments, gap matrix (2026-08-15)
