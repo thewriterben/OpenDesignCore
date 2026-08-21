@@ -94,8 +94,8 @@ in Y; X and Z looked healthy.
 
 ## 1. Make the block
 
-```
-dotnet run --project src/OpenDesignCore -c Release -- \
+```powershell
+dotnet run --project src/OpenDesignCore -c Release -- `
   run-calibration-block --instrument-accuracy-mm 0.02
 ```
 
@@ -133,8 +133,8 @@ material and measuring something else:
 
 You can move the sliced job to the printer through the studio:
 
-```
-dotnet run --project src/OpenDesignCore -c Release -- \
+```powershell
+dotnet run --project src/OpenDesignCore -c Release -- `
   handoff --run <id> --stage <staging dir> --upload <name>.gcode
 ```
 
@@ -164,11 +164,11 @@ what the unequal X and Y are for.
 
 ## 4. Compare
 
-```
-dotnet run --project src/OpenDesignCore -c Release -- \
-  compare --design artifacts/b7/b74407de...stl --units mm --voxel-mm 0.2 \
-          --measured 39.86x59.79x4.05x25.10 \
-          --nominal-step-z-mm 4 --instrument-accuracy-mm 0.02 \
+```powershell
+dotnet run --project src/OpenDesignCore -c Release -- `
+  compare --design artifacts/b7/b74407de...stl --units mm --voxel-mm 0.2 `
+          --measured 39.86x59.79x4.05x25.10 `
+          --nominal-step-z-mm 4 --instrument-accuracy-mm 0.02 `
           --material pla
 ```
 
@@ -188,8 +188,8 @@ deviation figure. An earlier version of this got that wrong and demanded
 
 ## 5. Judge whether a compensation is defensible
 
-```
-dotnet run --project src/OpenDesignCore -c Release -- \
+```powershell
+dotnet run --project src/OpenDesignCore -c Release -- `
   compensate --comparison <report sha256> --max-axis-spread-pct 0.15
 ```
 
@@ -213,10 +213,10 @@ correct −0.36%. Roughly half the compensation you need.
 
 ## 6. Propose it to the profile
 
-```
-  ... compensate --comparison <sha> --max-axis-spread-pct 0.15 \
-      --propose-to-profile pla \
-      --machines ../OpenBuildCore/example/machines.json --machine-id k2-plus \
+```powershell
+  ... compensate --comparison <sha> --max-axis-spread-pct 0.15 `
+      --propose-to-profile pla `
+      --machines ../OpenBuildCore/example/machines.json --machine-id k2-plus `
       --studio http://localhost:8770
 ```
 

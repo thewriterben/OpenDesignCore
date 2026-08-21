@@ -91,24 +91,39 @@ Two habits worth keeping, both cheap:
 
 ### 5. Run the loop
 
-```
-cd OpenDesignCore
+Use the wrapper, which chains the two commands so the comparison hash is never
+copied by hand — that copy is where a measurement gets attached to the wrong
+print:
 
-dotnet run --project src/OpenDesignCore -c Release -- ^
-  compare --design artifacts/b7/b74407dedcd54f8737b70dbe6d185d19c8d50278cefa8ed6f76e47a886c72b0b.stl ^
-          --units mm --voxel-mm 0.2 ^
-          --measured <X>x<Y>x<Zlow>x<Zhigh> ^
-          --nominal-step-z-mm 4 --instrument-accuracy-mm 0.02 ^
+```powershell
+cd F:\Documents\GitHub\OpenDesignCore
+.\examples\calibration-loop\measure.ps1 -X 39.98 -Y 59.97 -ZLow 4.01 -ZHigh 25.02 -Material pla
+```
+
+Add `-ProposeToProfile pla` once step 6 is done and the machine record exists.
+`-InstrumentAccuracyMm` defaults to 0.02 and `-MaxAxisSpreadPct` to 0.15;
+override either if your caliper or your process says otherwise.
+
+Or run the two commands yourself:
+
+```powershell
+cd F:\Documents\GitHub\OpenDesignCore
+
+dotnet run --project src/OpenDesignCore -c Release -- `
+  compare --design artifacts/b7/b74407dedcd54f8737b70dbe6d185d19c8d50278cefa8ed6f76e47a886c72b0b.stl `
+          --units mm --voxel-mm 0.2 `
+          --measured <X>x<Y>x<Zlow>x<Zhigh> `
+          --nominal-step-z-mm 4 --instrument-accuracy-mm 0.02 `
           --material pla
 ```
 
 Then, with the hash it prints:
 
-```
-dotnet run --project src/OpenDesignCore -c Release -- ^
-  compensate --comparison <hash> --max-axis-spread-pct 0.15 ^
-             --propose-to-profile pla ^
-             --machines ../OpenBuildCore/example/machines.json --machine-id <k2 id> ^
+```powershell
+dotnet run --project src/OpenDesignCore -c Release -- `
+  compensate --comparison <hash> --max-axis-spread-pct 0.15 `
+             --propose-to-profile pla `
+             --machines ../OpenBuildCore/example/machines.json --machine-id k2-plus `
              --studio http://localhost:8770
 ```
 
@@ -137,8 +152,8 @@ found good", your residuals are just your measured deviations. **"Verified and
 found good" is a complete and valid record** — most of the time it is the one
 you want.
 
-```
-cd OpenBuildCore && python scripts/validate.py     # expect: all valid
+```powershell
+cd ..\OpenBuildCore; python scripts/validate.py    # expect: all valid
 ```
 
 ---
