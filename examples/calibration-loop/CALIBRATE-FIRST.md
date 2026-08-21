@@ -57,6 +57,39 @@ and you get a number that says *"PLA shrinks −0.4%"* when it actually means
 *"my flow ratio is 3% high"* — a printer setting, permanently filed under the
 name of a plastic, with a provenance hash making it look sourced.
 
+#### Calibrating flow with the instrument you already have
+
+Creality Print and Orca both ship a flow test that prints nine blocks at −20 to
++20 and asks you to pick the best-looking one. It works, and its answer depends
+on who is looking. An unrepeatable judgement sitting upstream of a recorded
+number is worth avoiding when the alternative costs one small print.
+
+The objective method uses a caliper, which is the instrument this loop already
+declares an accuracy for:
+
+1. Slice a 20–30 mm cube with **1 perimeter, 0 % infill, 0 top layers**. A
+   single wall means the wall thickness *is* the extrusion width.
+2. Print it at the temperature you will actually use. Flow is only calibrated
+   for the temperature it was calibrated at — which is why temperature comes
+   first, and why leaving a known-good profile's temperature alone is a
+   legitimate way to satisfy that step.
+3. Measure the wall in the **middle of each of the four faces**, away from
+   corners and away from the first and last layers. Average them.
+4. Read your profile's **external perimeter line width** — do not assume it
+   equals the nozzle diameter. On a 0.4 mm nozzle these slicers commonly
+   default to 0.42 mm.
+
+```
+new_flow_ratio = current_flow_ratio × (line_width ÷ measured_wall_thickness)
+```
+
+Repeat until measured and target agree within about 0.02 mm — one caliper
+division, and the same accuracy figure the rest of the loop is declared against.
+Two passes is usually enough.
+
+Record the resulting ratio somewhere you will find it again. It belongs with the
+material, not the machine: it is a property of this filament on this printer.
+
 The machine gate in `compensate` catches the machine version of that mistake and
 is currently blind to this one. Noted at the bottom.
 
