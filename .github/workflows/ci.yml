@@ -48,6 +48,19 @@ jobs:
       - name: Test
         run: dotnet test OpenDesignCore.sln -c Release --no-build
 
+      # Reference cases report their measured deviation even when they pass
+      # (tests/reference/README.md), but that output only surfaces at detailed
+      # verbosity, and running the whole suite that way buries it under 133
+      # tests. This re-runs the reference cases alone so the figure lands in the
+      # log on every build. Tightening a bound is supposed to be an informed
+      # commit; that requires the numbers to have been written down somewhere
+      # other than one developer's terminal.
+      - name: Reference figures
+        run: >
+          dotnet test OpenDesignCore.sln -c Release --no-build
+          --filter "FullyQualifiedName~OpenDesignCore.Tests.Reference"
+          --logger "console;verbosity=detailed"
+
       # Determinism check: same inputs, same voxel size, same pinned versions
       # must produce byte-identical artifacts (ADR-0003). Two runs into
       # separate artifact stores and ledgers, then compare the content
