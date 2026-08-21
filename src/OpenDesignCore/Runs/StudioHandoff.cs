@@ -85,7 +85,7 @@ public static class StudioHandoff
         }
         else
         {
-            using HttpClient oHttp = new() { Timeout = TimeSpan.FromSeconds(5) };
+            using HttpClient oHttp = StudioClient.OCreate();
 
             // 2. Verify the studio answers.
             try

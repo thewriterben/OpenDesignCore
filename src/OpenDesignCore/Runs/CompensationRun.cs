@@ -273,7 +273,7 @@ public static class CompensationRun
                 + "printed.");
         }
 
-        using HttpClient oHttp = new() { Timeout = TimeSpan.FromSeconds(5) };
+        using HttpClient oHttp = StudioClient.OCreate();
         Dictionary<string, object?> oBody = new()
         {
             ["action"] = "profile_update",
