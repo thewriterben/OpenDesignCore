@@ -38,6 +38,6 @@ platform support.
 
 ## Reference tests
 
-`tests/reference/` holds cases with known answers — analytic solutions or published results. Any solver or numerical algorithm needs at least one. See the README in that directory for the three rules that keep them from decaying into regression tests: the expected value is derived rather than recorded, the tolerance is argued rather than tuned, and the measured error is reported even on a pass.
+`tests/reference/` holds cases with known answers — analytic solutions or published results. Any solver or numerical algorithm needs at least one. See the README in that directory: it says what each case must record and the rules that keep a reference case from decaying into a regression test.
 
 They compile into `OpenDesignCore.Tests`, so `dotnet test` runs everything in one command.
