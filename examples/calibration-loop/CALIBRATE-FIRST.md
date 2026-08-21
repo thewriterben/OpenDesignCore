@@ -104,10 +104,51 @@ is currently blind to this one. Noted at the bottom.
 
 ### 3. Print the block clean
 
+**Layer height is not a free choice, and this is the trap most likely to cost
+you a print.** `compare` measures against the exported STL's bounding box. It
+knows nothing about the slicer quantising the part to whole layers. If the
+shelf at 4 mm or the tall face at 25 mm does not land exactly on a layer
+boundary, the part is short or tall *by construction*, and that error is
+indistinguishable from shrinkage in the reading.
+
+Computed against the Creality Print K2 Plus profiles, all of which use a 0.2 mm
+initial layer:
+
+| Layer height | Shelf (4 mm) | Tall face (25 mm) |
+|---|---|---|
+| 0.08 | +0.04 | exact |
+| 0.12 | +0.04 | +0.04 |
+| 0.16 | +0.04 | exact |
+| **0.20** | **exact** | **exact** |
+| 0.24 | +0.04 | −0.08 |
+| 0.28 | +0.12 | +0.12 |
+
+**Use 0.20 mm.** It is the only one where both features are exact. At 0.24 the
+span error alone is −0.12 mm over a 21 mm span — −0.57 %, the same size as real
+PLA shrinkage and pointing the same way.
+
+Then:
+
 - shrinkage / XY compensation **OFF** — otherwise you are measuring the
   compensation, not the material
+- **elephant-foot compensation 0** — it reshapes geometry, and nothing should
+  be silently reshaping the thing you are about to measure
+- **scale 100 %, no auto-orient, no auto-rotate.** The transposition check
+  catches swapped *readings*; it cannot know the part was turned on the plate
+- otherwise **use the profile you actually print production parts with** —
+  walls, infill, speeds. A shrinkage figure derived from 5 walls and 40 % infill
+  describes prints made that way, and applying it to 2-wall 10 % parts is a
+  different number
+- brim off if adhesion allows; it leaves a lip on the face you measure diagonals
+  across
 - the material and spool you actually want to characterise
 - let it cool completely; warm plastic is still moving
+
+**Measuring around the seam without fighting it:** take three readings per
+dimension and keep the **smallest**. A seam, a blob or a caliper held at an
+angle can only ever make an external dimension read *larger* — never smaller —
+so the minimum is the least contaminated reading you took. That is also the
+cheap explanation for the +0.5 mm Y outlier on the first run through this loop.
 
 ### 4. Measure
 
