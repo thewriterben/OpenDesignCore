@@ -1,0 +1,21 @@
+; Line endings only. Deliberately not a style configuration.
+;
+; `.gitattributes` pins every text file to LF in the repository. `dotnet format`
+; had nothing telling it that, so it fell back to the platform default — CRLF on
+; Windows — and demanded CRLF newlines in a tree git had checked out as LF. The
+; result was a format check that passed on a developer machine whose working copy
+; happened to carry CRLF and failed on a Windows CI runner, for the same commit.
+;
+; Same inputs, same versions, different answer depending on the machine. That is
+; the failure mode this project exists to refuse, and it was living in the build.
+;
+; Nothing here configures C# style. Adding rules to this file changes what the
+; formatter enforces across the whole repository, so a rule earns its place the
+; same way anything else does.
+
+root = true
+
+[*]
+end_of_line = lf
+insert_final_newline = true
+charset = utf-8
