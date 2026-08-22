@@ -92,30 +92,14 @@ public sealed class StudioHandoffTests : IDisposable
         (HttpListener oListener, string strUrl) = OBindStub();
         List<string> aRequests = [];
 
-        // A dedicated thread, not the thread pool.
-        //
-        // The code under test calls the studio synchronously
-        // (`GetAsync(...).GetAwaiter().GetResult()`), so a test blocks a pool
-        // thread for the whole round trip. Serving the response from that same
-        // pool means the answer needs a thread the caller is holding. On a
-        // two-core CI runner the pool starts near two threads and injects more
-        // at roughly one per second, so the request sat unanswered until the
-        // five-second timeout fired and the failure read as "studio
-        // unreachable" — a fixture starving itself, wearing the costume of a
-        // defect in the handoff code.
-        //
-        // Locally there are cores to spare and it never bites, which is the
-        // whole reason this survived to CI. Owning a thread outright removes
-        // the fixture from that competition; `IsBackground` keeps it from
-        // holding the test run open.
-        Thread oPump = new(() =>
+        _ = Task.Run(async () =>
         {
             while (oListener.IsListening)
             {
                 HttpListenerContext oCtx;
                 try
                 {
-                    oCtx = oListener.GetContext();
+                    oCtx = await oListener.GetContextAsync();
                 }
                 catch (Exception)
                 {
@@ -142,10 +126,7 @@ public sealed class StudioHandoffTests : IDisposable
                 oCtx.Response.OutputStream.Write(abResp);
                 oCtx.Response.Close();
             }
-        })
-        { IsBackground = true, Name = "studio-stub" };
-        oPump.Start();
-
+        });
         return (oListener, strUrl, aRequests);
     }
 
