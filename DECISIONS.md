@@ -133,7 +133,7 @@ The failure mode this is avoiding is well documented in the LLM Wiki thread itse
 ## ADR-0007 — OpenDesignCore is an engine among peers, not the platform umbrella
 
 **Date:** 2026-08-15
-**Status:** accepted
+**Status:** accepted; the *peer enumeration* is superseded in part by ADR-0014 (the decision itself stands)
 
 **Context.** The stated vision is a Computational Engineering system spanning the OBC ecosystem and Project BINGO: 3D scanning for fit, circuit/PCB design with BOM generation and component sourcing, inventory-driven building and ideation, and fabrication both local and networked. That is a multi-domain platform. This repository's ARCHITECTURE.md deliberately scopes it to one path: requirements → model evaluation on PicoGK → validated artifact + provenance. The two are in tension, and an ecosystem survey (2026-08-15, `wiki/concepts/ecosystem-map.md`) showed the surrounding repos have already converged on a composition pattern: MCP as the seam, Oh-Ben-Claw's registry as component ground truth, propose-only writes for anything that moves hardware, and evidence/provenance chains per repo.
 
@@ -340,3 +340,40 @@ It is optional everywhere it appears — on `data/` material entries, and on `co
 **`odc/provenance/0.2` is deliberately not bumped.** Design provenance carries no material and gains no field here — a design is not printed in anything at design time; the material is a property of the print. Adding a filament reference to `EnclosureRun`, `CradleRun` or `CalibrationBlockRun` would be a field nothing sets and nothing reads. It also means the peers consuming provenance sidecars — OpenBuildCore's capability check, the BINGO contract — see no change at all.
 
 **Consequences.** A compensation can now name the spool it came from, and the studio proposal's origin string carries it, so a profile keyed `pla` that was measured on one specific spool says so to whoever reads it next. The profile-key gate is unchanged and still matches on material — tightening it to demand a matching reference would refuse every uncatalogued spool, which is most of them. That gate stays a material check; the reference is evidence for a human, not another automated refusal. Revisit if the catalogue's coverage ever makes the stricter gate reasonable.
+
+---
+
+## ADR-0014 — A mechanism engine is a peer domain, and ADR-0007's peer list is a snapshot rather than a closed set
+
+**Date:** 2026-08-23
+**Status:** accepted
+**Supersedes:** ADR-0007, in part — its peer *enumeration* only. ADR-0007's decision (this repo is an engine among peers, not the umbrella) is untouched and is the reason this ADR is scoped as narrowly as it is.
+
+**Context.** ADR-0007 enumerated the platform's peers on 2026-08-15 as *electronics engine (kernel choice pending its own ADR), registry and planning (Oh-Ben-Claw), local fabrication (AdvancedStudio), networked fabrication and settlement (Project BINGO), device codegen (Accelerapp)*. That list was accurate the day it was written and has not been true for some time: the electronics engine became OpenCircuitCore, "registry and planning" split into OpenPartsCore and OpenBuildCore, and a mechanism repo appeared on 2026-08-22.
+
+The staleness was not inert. Two repos cited that enumeration as granting them peer status when it does not name them — OpenBuildCore's README ("Fourth peer in the platform (OpenDesignCore ADR-0007)") and ClawBot's, which said the same thing with "Fifth". ClawBot [reported this against itself](https://github.com/thewriterben/OpenDesignCore/issues/15) and stopped citing ADR-0007; OpenBuildCore's was corrected separately. A citation pointing at a document that does not say the thing being cited is the failure this platform's whole discipline exists to prevent, and it had propagated twice from one stale list.
+
+**The substantive question, separated from the bookkeeping.** Whether a *mechanism* — links, joints, actuators, and what they can reach — is a peer domain at all, or a machine kind belonging inside an existing repo. The argument that it is distinct is about data shape rather than territory:
+
+- **Reachability is not containment.** OpenBuildCore answers "can this be made" with `envelope_mm` and axis-aligned containment. For a serial chain past two joints the reachable set is non-convex, frequently holed at the base, and can be disconnected across configuration branches. Every box either claims points the arm cannot reach or disclaims points it can, with no conservative choice available — so the containment test is not merely imprecise here, it is structurally the wrong predicate.
+- **Capacity is a function of pose.** A printer's material list does not change when the gantry moves; an arm's usable payload falls with extension, because shoulder torque is force times moment arm. A scalar `payload_kg` is true at one configuration and misleading everywhere else.
+- **A mechanism straddles PD-2.** A design is shareable reference data; the robot on your bench is owned state; one partway built is an OpenBuildCore project. Nothing else in the ecosystem sits on both sides of that line.
+- **It is not this repo either.** ODC holds deterministic geometry with provenance. A provenance record describes an artifact, not an articulation — there is no joint, no limit, and no actuator in it. Absorbing articulation here is precisely the domain expansion ADR-0007 refused.
+
+**Options considered.**
+
+1. *Decline; a mechanism is a machine kind inside OpenBuildCore.* Rejected on the first bullet above. The containment predicate is wrong in kind, and a wrong predicate that returns a confident boolean is worse than a missing feature.
+2. *Fold articulation into OpenDesignCore as a geometry variant.* Rejected. ADR-0007 exists to stop this repo absorbing domains, and reach and torque are not geometry.
+3. *Re-enumerate the platform's full peer set here, correcting every drift at once.* **Rejected, and the reason matters more than the option.** OpenPartsCore and OpenCircuitCore assert peer status nowhere — not in their READMEs, not in their ADRs. Deciding it for them in this file would be this repo acting as the umbrella that ADR-0007 explicitly refused to be. OpenBuildCore shows the correct shape: its *own* ADR-0001 decides it is a fourth peer, "under ADR-0007's engine-among-peers shape". The shape is this repo's to publish; occupying it is each repo's own decision.
+4. *Accept a mechanism peer domain, and say plainly what ADR-0007's list is.* Accepted.
+
+**Decision.** Two parts, deliberately small.
+
+1. **A mechanism engine is a peer domain**, on the data-shape argument above. ClawBot occupies it. It may cite this ADR for that status, which is what it has lacked since it was created.
+2. **ADR-0007's peer enumeration is a snapshot of 2026-08-15 and is not a closed set.** It may not be cited as granting or withholding peer status to any repo. A repo's peer status is decided in that repo's own ADRs, under the shape ADR-0007 established.
+
+What this does **not** decide: the status of OpenPartsCore, OpenCircuitCore, or any other repo — see option 3. Nor does it discharge ClawBot's own ADR-0001 admission that it is "justified by a data shape rather than by demand: nothing is asking for it yet". That remains true and remains recorded. This ADR says the domain is a peer domain, not that anything currently requires one.
+
+**Consequences.** ClawBot's README may state its status with a citation that supports it, replacing "by the shape of the argument in ADR-0001, not by anyone's blessing". The wiki's `[[clawbot]]` entity page and `ecosystem-map` drop "peer status unsettled" and cite this ADR instead; `wiki/log.md` records the change, per the ingest rule. OpenBuildCore's README needs no further change — it already cites its own ADR-0001, which is the pattern this ADR endorses.
+
+The two citation defects this ADR grew out of were both caught by reading, not by tooling. Nothing here prevents the third: no check verifies that a README's cross-repo citation says what the README claims it says, and after this ADR there is one more document worth citing incorrectly.
