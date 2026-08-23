@@ -1,10 +1,10 @@
 ---
 title: ClawBot
 type: entity
-updated: 2026-08-22
-sources: [ClawBot/README.md, ClawBot/DECISIONS.md, ClawBot/ROADMAP.md, ClawBot/CLAUDE.md, ClawBot/Knowledge/]
+updated: 2026-08-23
+sources: [ClawBot/README.md, ClawBot/DECISIONS.md, ClawBot/ROADMAP.md, ClawBot/CLAUDE.md, ClawBot/Knowledge/, DECISIONS.md]
 ---
-The mechanism model: links, joints, actuators, and what they can reach. Open\*Core-shaped and built to the same rules, though **whether it is a fifth peer is unsettled** — see the note at the end, and [OpenDesignCore#15](https://github.com/thewriterben/OpenDesignCore/issues/15).
+The mechanism model: links, joints, actuators, and what they can reach. Open\*Core-shaped and built to the same rules. **It occupies the mechanism peer domain**, decided by this repo's ADR-0014 on 2026-08-23 — which settles the domain, not the demand; see the note at the end.
 
 **Why not a machine kind inside [[openbuildcore]]** (its ADR-0001), which is the argument worth reading first, because it is about data shape rather than taste. OBC answers "can this part be made" with `envelope_mm` and axis-aligned containment. For a serial mechanism past two joints the reachable set is **non-convex, frequently holed at the base, and can be disconnected across configuration branches** — every box either claims points it cannot reach or disclaims points it can, with no conservative choice available. And a printer's material list does not change when the gantry moves, while an arm's usable payload falls with extension because shoulder torque is force times moment arm. A robot is also on *both* sides of PD-2: a design is shareable reference data, a robot on your bench is owned state, and one partway built is an OBC project.
 
@@ -26,4 +26,6 @@ Its `Knowledge/` wiki deliberately matches this one's conventions rather than in
 
 **Status:** pre-alpha. Four schemas, 21 ADRs, six stdlib scripts, an MCP surface, a Rust binding; 152 Python and 35 Rust tests, run by CI. `data/` holds **one** real record — a Dynamixel XM430-W350 whose `continuous_torque_nm` is `null` because ROBOTIS names the stall/continuous distinction and then publishes only stall. **No robot record**, because one needs a real mechanism with real datasheets. Apache-2.0. Repo: https://github.com/thewriterben/ClawBot (public).
 
-**Open, and recorded rather than smoothed over:** its own ADR-0001 admits the repo is "justified by a data shape rather than by demand: nothing is asking for it yet." Its README cited this repo's ADR-0007 as making it the fifth peer until 2026-08-22, when it stopped — ADR-0007 enumerates the peers and does not name it, and a citation pointing at a document that does not support it is worse than none. Whether the platform's peer set should grow is a decision nobody has made, and this page describes what exists rather than settling it.
+**Settled, and what remains open.** ADR-0014 (2026-08-23) decides that a mechanism engine is a peer domain and that ClawBot occupies it — the argument being the data-shape one above rather than anything about merit. It also records that ADR-0007's peer list is a 2026-08-15 snapshot and may not be cited as granting peer status, which is the defect [#15](https://github.com/thewriterben/OpenDesignCore/issues/15) was opened about: ClawBot's README cited it until 2026-08-22, and [[openbuildcore]]'s until 2026-08-23.
+
+What ADR-0014 explicitly does **not** discharge: ClawBot's own ADR-0001 admits the repo is "justified by a data shape rather than by demand: nothing is asking for it yet." That is still true. The domain is a peer domain; nothing currently requires one.

@@ -373,3 +373,33 @@ the admission. Nothing read here contradicts that. The one phrase in the ecosyst
 closest to a request — [[project-bingo]]'s README listing "the perception/reach work still
 spec-only" among its stand-ins — is BINGO describing its own unbuilt half, in its own domain, and
 is not one.
+
+## [2026-08-23] decision | ADR-0014 settles the mechanism peer domain, and retires a stale list
+
+Source: `DECISIONS.md` ADR-0014. Recording a decision this repo made, not ingesting an outside
+source — so this entry describes consequences rather than takeaways.
+
+**What was decided.** A mechanism engine is a peer domain and [[clawbot]] occupies it. The
+argument is data shape, restated on its page: a serial chain's reachable set is non-convex,
+frequently holed and sometimes disconnected, so [[openbuildcore]]'s `envelope_mm` containment is
+the wrong *predicate* rather than an imprecise one; and payload falls with extension, so a scalar
+is true at one pose and misleading elsewhere.
+
+**The second half is the one that will matter more often.** ADR-0007's peer enumeration is now
+recorded as a 2026-08-15 snapshot that may not be cited as granting peer status. It had already
+been miscited twice — [[clawbot]]'s README until 2026-08-22, [[openbuildcore]]'s until
+2026-08-23 — both claiming an ordinal from a list that names neither. ADR-0007's decision itself
+is untouched; only its Status line gained a supersession pointer, which `DECISIONS.md`'s own rule
+requires.
+
+**Deliberately not decided:** the status of [[openpartscore]] or [[opencircuitcore]], neither of
+which claims peer status anywhere. Settling it for them here would make this repo the umbrella
+ADR-0007 refused to be. [[openbuildcore]] shows the right shape — its *own* ADR-0001 decides it
+is a fourth peer under ADR-0007's engine-among-peers shape.
+
+**Conflict, still standing:** [[clawbot]]'s ADR-0001 admits "nothing is asking for it yet", and
+ADR-0014 does not claim otherwise. A peer domain with no demand is what the record now says, on
+both pages.
+
+**Lint note.** Nothing checks that a cross-repo citation says what the citing README claims. Both
+defects above were found by reading. There is now one more document worth citing incorrectly.
