@@ -12,7 +12,7 @@ sources:
 
 # Ecosystem map
 
-Eight repos, one shape: **brains, bodies, fabrication, and settlement**, converging on MCP as the universal seam.
+Eight repos, one shape: **brains, bodies, fabrication, and settlement**, converging on MCP as the universal seam. A ninth, [[clawbot]], appeared 2026-08-22 and is listed below with its status marked open — it is Open\*Core-shaped and built to these rules, and whether the platform's peer set should grow to include it is a decision nobody has made.
 
 | Repo | Role | Stack | The reusable asset |
 |---|---|---|---|
@@ -24,6 +24,7 @@ Eight repos, one shape: **brains, bodies, fabrication, and settlement**, converg
 | [[advancedstudio]] | Fabrication execution | Python FastAPI + MCP | K2 Plus control, calibration, material profiles, RAG KB; **reads-execute / writes-propose** MCP safety pattern |
 | [[project-bingo]] | Distributed manufacturing protocol | Python stdlib (v3) | Asset graph with **royalties settled at fabrication**, node agents (Klipper/Bambu/OctoPrint/LinuxCNC), capability tiers 0–3 (Tier 3 = PCB assembly), proof-of-fabrication |
 | [[opendesigncore]] | Deterministic engineering core | C#/.NET on PicoGK | Requirements → validated geometry + provenance; the only repo with a rigorous determinism/provenance contract |
+| [[clawbot]] | Mechanism model | Python stdlib + Rust binding | Links, joints, actuators and what they can reach; **derived answers that carry their assumptions in the value** — and a Rust binding that turns the platform's refusals into compile errors. Peer status unsettled (see the page). |
 
 ## The convergence
 
