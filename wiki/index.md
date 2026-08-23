@@ -18,6 +18,7 @@
 - [[project-bingo]] — distributed-manufacturing protocol; royalties at fabrication
 - [[openpartscore]] — canonical parts registry; schema v0; cited entries; codegen bindings planned
 - [[opencircuitcore]] — electronics engine; KiCad-direct (atopile dropped, ADR-0003); netlist-as-source
+- [[clawbot]] — mechanism model; reach and capacity derived per-pose, never declared; peer status open (2026-08-22)
 - [[openbuildcore]] — inventory + ideation + machines; quantity-aware exclusive matching; print time only from a measured throughput (ADR-0005)
 - [[open-filament-database]] — MIT filament catalogue; spool identity for ADR-0013; an identity source, never a value source (2026-08-21)
 

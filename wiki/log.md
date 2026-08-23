@@ -321,3 +321,55 @@ Read the sibling `awesome-3d-printingODC` repo — a fork of `ad-si/awesome-3d-p
 **A finding that came from reading the lockfile rather than the docs.** PicoGK 2.2.0 ships natives for `win-x64` and `osx-arm64` only. ADR-0008's "CI needs only the .NET SDK" was true and incomplete; a Linux job builds green and dies at the first `Library`. CI is Windows, and a Linux contributor cannot run the test suite at all. Amended in the ADR rather than written as a new one — it is a consequence nobody had checked, not a decision anybody made.
 
 **Rejected, and written down so it is not relitigated:** community print-settings sites (FilamentProfilesHub, Filwiz) as data sources — uncited, straight through the grounding rule; browser mesh-repair tools at the import boundary — repairing a scan silently is exactly the degradation ADR-0003's spirit forbids; slicer-side infill optimisation — someone else's domain, already under ROADMAP "Not ever".
+
+## [2026-08-22] ingest | ClawBot, and a citation that pointed at this repo without support
+
+A ninth repo appeared in the ecosystem and this wiki did not know: **zero** mentions of
+[[clawbot]] in [[ecosystem-map]], no entity page, nothing in the index. Written up now from its
+README, DECISIONS, ROADMAP and its own `Knowledge/` wiki.
+
+**What brought it here was a defect on its side, not ours.** Its README opened with "Fifth peer
+in the platform (OpenDesignCore ADR-0007)", and **ADR-0007 does not name it** — the peer list
+there reads electronics engine, [[oh-ben-claw]], [[advancedstudio]], [[project-bingo]],
+[[accelerapp]]. A citation pointing at a document that does not say the thing being cited is the
+failure this platform's discipline exists to prevent, and it was sitting in the README of a repo
+that keeps saying so. It stopped citing it the same day. Filed as issue #15.
+
+**ADR-0007 is not being amended, and that is this repo's own rule rather than a judgement
+call.** `DECISIONS.md` opens "don't edit a past entry to reflect a change of mind — write a new
+one that supersedes it." ADR-0007 correctly records a decision made 2026-08-15, when ClawBot did
+not exist. Whether the peer set should grow is a *new* decision and nobody has made it, so the
+map and the entity page describe what exists and mark the status open. **A wiki describes; an ADR
+decides.** Keeping those apart is the whole reason this could be written without settling
+anything.
+
+**What it is.** Links, joints, actuators and what they can reach. Its ADR-0001 argues from data
+shape rather than taste: a reachable set is non-convex and frequently holed, so
+[[openbuildcore]]'s `envelope_mm` containment test is structurally wrong for a mechanism, and
+payload varies with pose because shoulder torque is force times moment arm. It carries no
+`reach_mm` and no scalar `payload_kg` — the same "if nobody measured it and it cannot be derived
+from something that was, say so" discipline as OBC's print time.
+
+**It consumes this repo, and the interesting part is a refusal.** A link may be an
+`artifact_sha256`, and its manifest emitter **will not** convert one into an OBC `make`
+requirement, because it stores the hash and never resolves it and therefore has no bounding box
+— inventing a `size_mm` would be a fabricated number inside a document that validates. Those go
+to `can-print --from-sidecar` instead, which judges the real geometry. Second consumer of
+`artifact.bbox_mm` after [[openbuildcore]], and the first to decline to use it.
+
+**Two things worth borrowing back.** Its ADR-0007 ran the URDF round trip its ADR-0005 had only
+claimed, and found that *structure* survives while *absence* does not — `urdfdom` refuses a
+revolute joint with no `<limit>`, so a record honest about unsourced travel has no valid URDF at
+all, and on import missing bounds silently become `0`. The general lesson is the one PD-1 cost
+four hours for, at a different layer: a claim about a converter is cheap to write and expensive
+to leave unchecked. And its Rust binding turns refusals into **compile errors** — distinct
+`Radians`/`Degrees` types so a degrees-taking consumer cannot be handed radians, and no
+conversion at all from `StallTorque` to `ContinuousTorque` — with `compile_fail` doctests that
+execute guarantees which otherwise could only live in a comment.
+
+**Conflict, recorded rather than resolved:** its own ADR-0001 admits the repo is "justified by a
+data shape rather than by demand: nothing is asking for it yet", and its ecosystem page repeats
+the admission. Nothing read here contradicts that. The one phrase in the ecosystem that comes
+closest to a request — [[project-bingo]]'s README listing "the perception/reach work still
+spec-only" among its stand-ins — is BINGO describing its own unbuilt half, in its own domain, and
+is not one.
