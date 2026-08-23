@@ -182,10 +182,23 @@ public sealed class StudioHandoffTests : IDisposable
                   requests accepted {Volatile.Read(ref _nAccepted)}
                   responses written {Volatile.Read(ref _nAnswered)}
                   pump fault        {strFault}
+                  thread pool       {ThreadPool.ThreadCount} live, {ThreadPool.PendingWorkItemCount} queued, floor {StrMinThreads()}
                   requests seen     {(aSeen.Count == 0 ? "(none)" : string.Join(" | ", aSeen))}
 
                 {StrReading()}
                 """;
+        }
+
+        /// <summary>
+        /// Pool depth, because "no request ever arrived" points at the client, and
+        /// the client blocks a pool thread while needing pool threads to send. If a
+        /// failure ever shows a starved pool here, that is the reading — no fifth
+        /// theory required. See TestHostThreadPool.
+        /// </summary>
+        private static string StrMinThreads()
+        {
+            ThreadPool.GetMinThreads(out int nWorker, out int nCompletionPort);
+            return $"{nWorker}w/{nCompletionPort}io";
         }
 
         private string StrReading()
