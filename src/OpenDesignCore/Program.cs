@@ -225,7 +225,7 @@ if (args is ["compare", ..])
         CompareRunResult oResult;
         if (bHasMeasured)
         {
-            float[] aM = CompareRun.AParseMeasured(strMeasured!);
+            float[][] aM = CompareRun.AParseMeasured(strMeasured!);
             // Four readings: X, Y, then the shelf and the tall face. The
             // nominal shelf height must be declared, because the design STL
             // knows its overall height but not where the step was put.
@@ -253,14 +253,17 @@ if (args is ["compare", ..])
                 return 2;
             }
 
+            static MeasuredReadings OReadings(float[] a) => new() { Values = a };
+
             oResult = CompareRun.ExecuteMeasured(
                 strDesign, eCmpUnits, fCmpVoxel,
-                aM[0], aM[1], aM.Length == 4 ? aM[3] : aM[2], fAccuracy,
+                OReadings(aM[0]), OReadings(aM[1]),
+                OReadings(aM.Length == 4 ? aM[3] : aM[2]), fAccuracy,
                 oOpts.GetValueOrDefault("artifacts", "artifacts"),
                 oOpts.GetValueOrDefault("ledger", "ledger.db"),
                 StrGitCommit(),
                 strMaterial: strMaterial,
-                fMeasuredZLowMm: aM.Length == 4 ? aM[2] : 0f,
+                oMeasuredZLow: aM.Length == 4 ? OReadings(aM[2]) : null,
                 fNominalZLowMm: aM.Length == 4 ? fZLowNominal : 0f,
                 oFilamentRef: oCmpFilament);
 
@@ -270,6 +273,14 @@ if (args is ["compare", ..])
                     "  note: a single Z reading contains the first-layer squish, which is a "
                     + "constant rather than a percentage. Use a stepped block and four "
                     + "readings to separate them.");
+            }
+            if (aM.All(a => a.Length == 1))
+            {
+                Console.WriteLine(
+                    "  note: one reading per dimension, so the uncertainty is the declared "
+                    + "instrument accuracy alone. Repeated readings (comma-separated, e.g. "
+                    + "40.00,40.02,40.01) let the surface's own spread widen it where the "
+                    + "surface is the limit — see CALIBRATE-FIRST.md.");
             }
         }
         else
@@ -299,9 +310,16 @@ if (args is ["compare", ..])
             Console.WriteLine($"  spool      {oDeclaredFilament}");
         foreach (AxisDeviation oAxis in oResult.Report.Axes)
         {
+            // The uncertainty is only printed when it says something the
+            // declared accuracy does not: a spread wider than the instrument
+            // means the surface, not the caliper, limits this axis (ADR-0015).
+            string strSpread = oAxis.ObservedSpreadMm > oResult.Report.ScanAccuracyMm
+                ? $"  [readings spread {oAxis.ObservedSpreadMm:F3} mm > instrument "
+                  + $"{oResult.Report.ScanAccuracyMm:F3} mm — the surface is the limit here]"
+                : "";
             Console.WriteLine(
                 $"  {oAxis.Axis}  design {oAxis.DesignMm,8:F3}  scan {oAxis.ScanMm,8:F3}  "
-                + $"dev {oAxis.DeviationMm,7:F3} mm ({oAxis.DeviationPct,6:F2} %)");
+                + $"dev {oAxis.DeviationMm,7:F3} mm ({oAxis.DeviationPct,6:F2} %){strSpread}");
         }
         Console.WriteLine($"  max |deviation| {oResult.Report.MaxAbsDeviationMm:F3} mm; "
             + $"mean {oResult.Report.MeanDeviationPct:F2} %, spread {oResult.Report.DeviationPctSpread:F2} %");
@@ -311,10 +329,10 @@ if (args is ["compare", ..])
         // the constant-instead-of-parameter the tolerance rule forbids.
         Console.WriteLine(oResult.Report.WithinScanAccuracy switch
         {
-            true => "  within the declared scanner accuracy — no compensation implied",
-            false => "  deviation exceeds the declared scanner accuracy; run `compensate` "
-                + "--comparison <hash> --max-axis-spread-pct <v> to judge whether one "
-                + "factor is defensible",
+            true => "  within each axis's measurement uncertainty — no compensation implied",
+            false => "  deviation exceeds the measurement uncertainty on at least one axis; "
+                + "run `compensate` --comparison <hash> --max-axis-spread-pct <v> to judge "
+                + "whether one factor is defensible",
             null => "  no --scan-accuracy-mm declared: cannot say whether this deviation is "
                 + "real or instrument error. Declare it, or treat the numbers as indicative only.",
         });
@@ -392,14 +410,16 @@ if (args is ["run-calibration-block", ..])
         Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
         Console.WriteLine($"  stl        {oResult.ArtifactPath}");
         Console.WriteLine();
-        Console.WriteLine("  Print, cool, then take FOUR readings:");
+        Console.WriteLine("  Print, cool, then measure FOUR dimensions, three readings each:");
         Console.WriteLine("    X and Y across the flat faces, a few mm up from the bed.");
         Console.WriteLine("    Z twice: bed to shelf, and bed to the tall face. Both contain the");
         Console.WriteLine("    same first-layer squish, so their difference contains none.");
+        Console.WriteLine("    Give all three readings per dimension, comma-separated — the spread");
+        Console.WriteLine("    between them is the surface's own uncertainty and the tool uses it.");
         Console.WriteLine();
         Console.WriteLine($"    compare --design {oResult.ArtifactPath} --units mm \\");
         Console.WriteLine($"            --voxel-mm {fBlockVoxel:F4} \\");
-        Console.WriteLine("            --measured <X>x<Y>x<Zlow>x<Zhigh> \\");
+        Console.WriteLine("            --measured <X1,X2,X3>x<Y1,Y2,Y3>x<Zlow...>x<Zhigh...> \\");
         Console.WriteLine($"            --instrument-accuracy-mm {fInstrAcc}");
         return 0;
     }
@@ -578,6 +598,7 @@ Console.WriteLine("       OpenDesignCore run-calibration-block --instrument-accu
 Console.WriteLine("                                            [--x-mm <v>] [--y-mm <v>] [--z-mm <v>] [--voxel-mm <v>]");
 Console.WriteLine("       OpenDesignCore compare --design <stl> --units <u> --voxel-mm <v>");
 Console.WriteLine("                              (--scan <stl> | --measured <X>x<Y>x<Zlow>x<Zhigh> --material <m>)");
+Console.WriteLine("                              (each measured dimension takes 1..n comma-separated readings)");
 Console.WriteLine("                              [--nominal-step-z-mm <v>] [--instrument-accuracy-mm <v>]");
 Console.WriteLine("                              [--filament-ref <catalog>:<dataset-version>:<path>[#uuid]]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");

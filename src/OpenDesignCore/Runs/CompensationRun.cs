@@ -351,6 +351,16 @@ public static class CompensationRun
                 Axis = oAxis.GetProperty("axis").GetString()!,
                 DesignMm = FParse(oAxis, "design_mm"),
                 ScanMm = FParse(oAxis, "scan_mm"),
+                // 0.3 (ADR-0015). Absent on 0.1/0.2 records, where a single
+                // reading was all there was — zero is what that honestly
+                // implied, not a default hiding an unknown. If this were
+                // dropped here, a spread the comparison recorded would
+                // silently vanish on the way into the verdict — the exact
+                // laundering the field exists to prevent.
+                ObservedSpreadMm = oAxis.TryGetProperty("observed_spread_mm", out JsonElement oSp)
+                    && double.TryParse(oSp.GetString(), NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out double fSp)
+                    ? fSp : 0.0,
             });
         }
 

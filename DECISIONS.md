@@ -377,3 +377,33 @@ What this does **not** decide: the status of OpenPartsCore, OpenCircuitCore, or 
 **Consequences.** ClawBot's README may state its status with a citation that supports it, replacing "by the shape of the argument in ADR-0001, not by anyone's blessing". The wiki's `[[clawbot]]` entity page and `ecosystem-map` drop "peer status unsettled" and cite this ADR instead; `wiki/log.md` records the change, per the ingest rule. OpenBuildCore's README needs no further change — it already cites its own ADR-0001, which is the pattern this ADR endorses.
 
 The two citation defects this ADR grew out of were both caught by reading, not by tooling. Nothing here prevents the third: no check verifies that a README's cross-repo citation says what the README claims it says, and after this ADR there is one more document worth citing incorrectly.
+
+---
+
+## ADR-0015 — Measurement uncertainty is max(instrument, observed spread), derived per axis from the readings themselves
+
+**Date:** 2026-08-24
+**Status:** accepted
+
+**Context.** `compare` judges significance against `--instrument-accuracy-mm`, a single declared figure used as the uncertainty on every axis. That is only correct when the surface being measured is flatter than the instrument, and a printed face is not a datum plane. On the first real run of the calibration loop, three readings per surface showed vertical walls spreading 0.02–0.03 mm and a layer-20 shelf 0.01 mm — at or under the caliper's 0.02 mm — while the final-layer top face spread **0.08 mm**, four times the declared accuracy, on exactly the surface the Z scale is read from. With the effect at 0.10 mm and the noise at 0.08, the available Z answers ran from −0.43 % to zero depending on where the jaw landed. Two figures were entered and both withdrawn (one a transcription error, one never measured); a human had to notice the top face was not flat.
+
+The failure is structural, not procedural: a declared accuracy that is too optimistic does not understate error bars, it **reports an unresolvable deviation as a real finding** — and CALIBRATE-FIRST.md had asked for three readings per dimension since it was written, while the tool accepted one number and threw the other two away. The information that would have refused the figure was collected and then discarded at the command line.
+
+**Options considered.**
+
+1. *Tell the caller to declare a larger accuracy when the surface is rough.* Rejected. That makes the uncertainty a judgement call entered as if it were an instrument property, in a field whose name says instrument — an invented number wearing a declared one's clothes.
+2. *Refuse any axis read off a top face.* Rejected. The tool cannot know which face a reading came from, and the shelf top measured *better* than the vertical walls — the surface, not the orientation, is the variable.
+3. *Take the readings and derive the spread per axis.* Accepted.
+
+**Decision.** `--measured` accepts comma-separated repeated readings per dimension (`40.00,40.02,40.01x…`); a single reading per dimension remains valid. Per axis:
+
+- the **measured value is the mean** of that axis's readings — matching the flow-calibration procedure the docs already state;
+- the **uncertainty is `max(declared instrument accuracy, observed spread)`**, spread being max − min. Repeated readings can widen an axis's uncertainty; they can never narrow it below the declared accuracy, because tight repetition proves repeatability, not accuracy;
+- the **z-span's spread is the sum of the two face spreads** — the span is a difference, and the extreme answers pair opposite extremes;
+- significance is judged **per axis** against that axis's uncertainty, in the report's `WithinScanAccuracy` and in every verdict gate. A rough top face widens Z's uncertainty without saying anything about X and Y, which come off vertical walls — the same scoping rule that keeps Z out of the XY verdict.
+
+**The spread is recorded, not consumed.** Comparison schema `odc/comparison/0.2` → `0.3`: each axis carries `observed_spread_mm` and `uncertainty_mm`, and the manual path records `raw_readings_mm` keyed by the label each set was taken under. `compensate` re-reads the spread from the stored record, so the widened uncertainty survives into a verdict made later — dropping it at either hop would launder an unresolvable deviation back into a finding. Records written under 0.1/0.2 still load; an absent spread reads as zero, which is what a single reading honestly was.
+
+**A tension resolved rather than hidden.** CALIBRATE-FIRST.md advised "take three readings and keep the smallest", on the sound ground that seam and blob contamination only ever inflates an external dimension. That was the right rule for a tool that took one number. It is superseded by giving the tool all three: a contaminated reading now shows up as spread and widens the uncertainty toward refusal, which is the correct outcome — the remedy for a blob under the jaw is re-measuring off the seam, not laundering the set through a statistic. The doc keeps the physics and drops the pre-minimising.
+
+**Consequences.** Run against the real Z case, the tool now refuses the figure by itself: mean deviation 0.045 mm under a 0.09 mm spread is not a finding, and the refusal names the surface rather than the instrument so the reader knows the fix is a flatter top face, not a better caliper. Verdict messages distinguish which side of the max() limited each axis. The single-reading path is unchanged in behaviour and honestly weaker, and the CLI says so. What this does not do: detect a surface problem from one reading (nothing can), or validate that the mean of three readings is closer to truth than any of them — the readings are the caller's; the tool's contract is only that it no longer discards them.

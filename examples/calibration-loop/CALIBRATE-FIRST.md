@@ -145,10 +145,17 @@ Then:
 - let it cool completely; warm plastic is still moving
 
 **Measuring around the seam without fighting it:** take three readings per
-dimension and keep the **smallest**. A seam, a blob or a caliper held at an
-angle can only ever make an external dimension read *larger* — never smaller —
-so the minimum is the least contaminated reading you took. That is also the
-cheap explanation for the +0.5 mm Y outlier on the first run through this loop.
+dimension, **away from the seam**, and give `compare` all three
+(comma-separated: `40.00,40.02,40.01x…`). A seam, a blob or a caliper held at
+an angle can only ever make an external dimension read *larger* — never
+smaller — which is why this used to say "keep the smallest": when the tool
+took one number, the minimum was the least contaminated pick. That was also
+the cheap explanation for the +0.5 mm Y outlier on the first run through this
+loop. Now the tool takes the readings themselves, a blob shows up as spread,
+and a spread wider than the caliper's accuracy makes the axis refuse rather
+than resolve. If one reading is obviously seam-contaminated, the answer is to
+re-measure off the seam — not to launder the set through a statistic, and not
+to feed the tool a pre-minimised number that hides what the surface did.
 
 ### The spread between your three readings is the real uncertainty
 
@@ -159,8 +166,11 @@ surface is flatter than the instrument.**
 A printed face is not a datum plane. If three readings across one face spread
 further apart than your caliper's stated accuracy, the surface is what you are
 measuring, not the machine — and the honest uncertainty is the spread, not the
-0.02 mm on the caliper's box. The tool cannot detect this. It takes the declared
-figure at face value.
+0.02 mm on the caliper's box. As of ADR-0015 the tool derives this itself:
+give it the readings and each axis's uncertainty becomes
+`max(declared accuracy, observed spread)`, recorded in the comparison and
+honoured by `compensate`. It can only see what it is given — one reading per
+dimension still means the declared figure stands in alone.
 
 Which surface, specifically: **the last layer printed.** On the calibration
 block that is the tall top face, and it is where pillowing and top-surface
@@ -343,19 +353,16 @@ to turn it into a number.
    A `flow_calibrated` fact belongs somewhere in the material or profile record,
    and `--propose-to-profile` should want it.
 
-3. **`--instrument-accuracy-mm` is the wrong name for what it does.** It is used
-   as the uncertainty on every dimension, but the true uncertainty is
-   `max(instrument, surface)` and the surface is often worse — four times worse
-   on the one measured run above. The tool has no way to know, and a declared
-   figure that is too optimistic makes a refusal look like a finding: an
-   unresolvable deviation gets reported as a real one.
-
-   The fix is to take the readings rather than a single number. `compare` could
-   accept the three readings per axis it already asks for in the docs, derive
-   the per-axis spread, and use `max(declared_instrument, observed_spread)` as
-   that axis's uncertainty — which would have refused the Z figure by itself
-   instead of needing a human to notice. Passing one pre-minimised number per
-   axis throws away exactly the information that would have caught it.
+3. ~~**`--instrument-accuracy-mm` is the wrong name for what it does.**~~ →
+   **closed 2026-08-24 (ADR-0015).** `--measured` now takes comma-separated
+   repeated readings per dimension; each axis's uncertainty is
+   `max(declared instrument accuracy, observed spread)`, the spread and raw
+   readings are recorded in the comparison (`odc/comparison/0.3`), and
+   `compensate` reads them back out of the stored record — so the widened
+   uncertainty survives into the verdict rather than being a command-line
+   courtesy. Run against the Z case above, the tool now refuses the figure by
+   itself. A single reading per dimension still works and falls back to the
+   declared accuracy, which is what one reading honestly supports.
 
 Sources for the calibration ordering:
 [OrcaSlicer calibration guide (Obico)](https://www.obico.io/blog/orcaslicer-comprehensive-calibration-guide/) ·
