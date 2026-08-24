@@ -403,3 +403,10 @@ both pages.
 
 **Lint note.** Nothing checks that a cross-repo citation says what the citing README claims. Both
 defects above were found by reading. There is now one more document worth citing incorrectly.
+
+## [2026-08-23] ingest | OBCSlicer entity + AdvancedStudio update
+
+New entity [[obcslicer]]: the slicing layer built and physically proven today (field spec to
+two-material K2 print, human-approved, hash-chained). [[advancedstudio]] updated: the "no
+slicer" gap is filled up to the propose boundary; noted that TTL-expired proposals leave no
+jobs row, which sits oddly against its own ADR-0003 ledger rationale.

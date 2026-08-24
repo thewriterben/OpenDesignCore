@@ -15,6 +15,7 @@
 - [[clawcam]] — camera nodes + gateway; MCP approval model
 - [[accelerapp]] — YAML spec → firmware/SDK/UI; enclosure generator; cost analyzer
 - [[advancedstudio]] — K2 Plus studio + MCP; propose-only writes; calibration
+- [[obcslicer]] — slicing layer: fields → multi-material Orca projects → provenance-attested G-code → propose-only handoff; first physical print 2026-08-23
 - [[project-bingo]] — distributed-manufacturing protocol; royalties at fabrication
 - [[openpartscore]] — canonical parts registry; schema v0; cited entries; codegen bindings planned
 - [[opencircuitcore]] — electronics engine; KiCad-direct (atopile dropped, ADR-0003); netlist-as-source
