@@ -160,27 +160,49 @@ public sealed record CompensationProposal
                 + "good enough to act on.");
         }
 
-        if (oReport.WithinScanAccuracy == true)
-        {
-            return OWith(ECompensationVerdict.WithinScannerNoise,
-                $"Largest deviation {oReport.MaxAbsDeviationMm:F3} mm is within the declared "
-                + $"scanner accuracy of {oReport.ScanAccuracyMm:F3} mm. There is nothing here "
-                + "to compensate: a setting derived from this would be compensating for the "
-                + "instrument, not the print.");
-        }
-
-        // Per-axis significance, checked before the axes are compared to each
-        // other. WithinScanAccuracy above tests only the LARGEST deviation, so
-        // it passes as soon as *one* axis is real — which is exactly how a
-        // real reading got averaged with a non-reading on the first print.
         double fAxisNoise = oReport.ScanAccuracyMm;
         double fXAbs = Math.Abs(oX.DeviationMm);
         double fYAbs = Math.Abs(oY.DeviationMm);
-        if (fXAbs <= fAxisNoise || fYAbs <= fAxisNoise)
+        bool bXQuiet = fXAbs <= fAxisNoise;
+        bool bYQuiet = fYAbs <= fAxisNoise;
+
+        // Scoped to X and Y, deliberately.
+        //
+        // This used to read oReport.WithinScanAccuracy, which is computed over
+        // EVERY axis including Z. A part measuring dead on nominal in X and Y
+        // with a 0.100 mm z-span deviation therefore failed the test — Z's
+        // deviation disqualified an XY verdict, in a file whose stated rule is
+        // that Z is never folded into XY. The judgement about whether an XY
+        // shrinkage factor is warranted can only be about X and Y.
+        //
+        // Found on a real print: X 40.000/40.000, Y 60.000/60.000, z-span
+        // -0.48 %. The correct answer is "nothing to compensate in XY"; what
+        // came back was AxisNotSignificant.
+        if (bXQuiet && bYQuiet)
         {
-            string strWeak = fXAbs <= fAxisNoise ? "X" : "Y";
-            double fWeak = fXAbs <= fAxisNoise ? fXAbs : fYAbs;
-            double fStrong = fXAbs <= fAxisNoise ? fYAbs : fXAbs;
+            return OWith(ECompensationVerdict.WithinScannerNoise,
+                $"X deviated {fXAbs:F3} mm and Y {fYAbs:F3} mm, both within the declared "
+                + $"instrument accuracy of {fAxisNoise:F3} mm. There is nothing here to "
+                + "compensate: a setting derived from this would be compensating for the "
+                + "instrument, not the print. "
+                + (fZ is double fZq
+                    ? $"Z deviated {fZq:F3} % and is reported separately — it has its own "
+                      + "causes and no XY shrinkage factor addresses it."
+                    : "")
+                + " If you expected a shrinkage figure, the deviation is smaller than this "
+                + "caliper can resolve; a larger block shows the same percentage as more "
+                + "millimetres.");
+        }
+
+        // Exactly one axis quiet. XOR, not OR: the message below asserts that
+        // the other axis "is real", and under the old OR that sentence was
+        // emitted even when both axes were silent, producing the self-refuting
+        // "The other axis moved 0.000 mm and is real".
+        if (bXQuiet ^ bYQuiet)
+        {
+            string strWeak = bXQuiet ? "X" : "Y";
+            double fWeak = bXQuiet ? fXAbs : fYAbs;
+            double fStrong = bXQuiet ? fYAbs : fXAbs;
             return OWith(ECompensationVerdict.AxisNotSignificant,
                 $"{strWeak} deviated {fWeak:F3} mm, which is within the instrument's "
                 + $"{fAxisNoise:F3} mm accuracy — that axis has no measured deviation at all. "
