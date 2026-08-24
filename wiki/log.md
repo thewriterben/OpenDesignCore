@@ -403,3 +403,39 @@ both pages.
 
 **Lint note.** Nothing checks that a cross-repo citation says what the citing README claims. Both
 defects above were found by reading. There is now one more document worth citing incorrectly.
+
+## [2026-08-23] ingest | OBCSlicer entity + AdvancedStudio update
+
+New entity [[obcslicer]]: the slicing layer built and physically proven today (field spec to
+two-material K2 print, human-approved, hash-chained). [[advancedstudio]] updated: the "no
+slicer" gap is filled up to the propose boundary; noted that TTL-expired proposals leave no
+jobs row, which sits oddly against its own ADR-0003 ledger rationale.
+
+## [2026-08-24] lint | Cross-session audit: git drift, owed changelog entries, stale roadmap lines
+
+Audit across every session that has touched this platform since 2026-08-15. Findings, each fixed
+in this pass or named as still open:
+
+**Git drift from parallel sessions.** Local `main` carried `87a1063`, an earlier draft of the
+studio-stub instrumentation that PR #18 merged as `1a1a52f` — same code, minus the wiki entries.
+Two sessions produced the same work; one pushed, one committed locally. Local `main` reset to
+`origin/main`, nothing unique lost (verified by diff before the reset, not after). Second drift:
+PR #19 merged `client-pool-starvation` and the branch then gained three more commits (XY-scoped
+verdict, measurement-uncertainty doc, the OBCSlicer wiki entity) that never got a second PR.
+Third: `artifact-bbox-provenance` (2026-08-16, the walkthrough machine-capability step) was
+finished, pushed, and never merged at all — stranded for eight days. Both merged in this pass.
+
+**Two commits owed CHANGELOG entries** — `7a23168` and `56a1bc2` changed verdict code and shipped
+docs with no changelog line, against the definition of done. Entries written, marked as owed.
+
+**ROADMAP had gone stale in the usual direction** — claims that were true when written and
+quietly superseded: "AdvancedStudio has no upload/slicer" (upload 2026-08-16, [[obcslicer]]
+2026-08-23), "validated against synthetic prints only" (first real print measured 2026-08-24),
+and the shipped-peers list missing [[clawbot]] and [[obcslicer]]. Same failure mode as the two
+stale-roadmap corrections already logged on 2026-08-15; this is the third and fourth instance,
+and the pattern is that a roadmap line rots the moment the work moves to a different repo.
+
+**Open and recorded rather than fixed:** `compare`'s per-axis observed-spread flaw
+(open-questions #15, ROADMAP), the Z axis pending an optimised profile, OpenBuildCore's
+`k2-axes-verified` branch unmerged pending that Z answer, and a non-zero compensation still
+unvalidated on hardware (#14, narrowed).

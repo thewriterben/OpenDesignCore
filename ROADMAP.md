@@ -13,7 +13,7 @@ The single end-to-end path from ARCHITECTURE.md, working for real — as the **t
 - [x] Validation gate: emptiness + bounding-box-vs-expected within 2 voxels, before export; voxel-derived meshes are closed by construction (2026-08-15)
 - [x] Export binary STL with canonical-JSON provenance sidecar (SHA-256, byte-compatible with BINGO's `canonical_json`); both content-addressed into `artifacts/` (2026-08-15)
 - [x] Reference test: same-inputs rerun produces byte-identical artifact + sidecar hashes; cross-machine golden pinning deferred until a second machine exists (2026-08-15)
-- [x] Handoff: `handoff --run <id>` stages STL + sidecar to a slicing workspace (hash-named), verifies studio-core answers, optionally proposes `print_start` via `/api/propose` (propose-only; human approves in the dashboard) and records the confirmation id; every handoff is a ledger row. Live print pending: studio-core running + slicing (AdvancedStudio has no upload/slicer — surveyed 2026-08-15, gaps filed in wiki) (2026-08-15)
+- [x] Handoff: `handoff --run <id>` stages STL + sidecar to a slicing workspace (hash-named), verifies studio-core answers, optionally proposes `print_start` via `/api/propose` (propose-only; human approves in the dashboard) and records the confirmation id; every handoff is a ledger row. ~~Live print pending: studio-core running + slicing (AdvancedStudio has no upload/slicer — surveyed 2026-08-15)~~ → upload landed 2026-08-16 (studio ADR-0002, `handoff --upload`), the slicing gap is filled by **OBCSlicer** up to the propose boundary (first physical two-material print 2026-08-23, human-approved, hash-chained — see `wiki/entities/obcslicer.md`) (2026-08-15)
 
 ## Next
 
@@ -25,19 +25,23 @@ Only after Now runs end to end for someone other than me.
 
 - [x] Platform walkthrough: `examples/platform-walkthrough` runs all four peers in one chain — inventory → electronics → board → enclosure → staged; every gate live (2026-08-15)
 - [x] Board→enclosure co-design proven end to end: `kicad-cli pcb export stl` → ODC mesh boundary → cradle fitted to real board geometry (run 3, 2026-08-15)
-- [x] Scan-compare: `compare` measures per-axis deviation between a design and a scan of the printed part, distinguishes uniform from anisotropic shrinkage, and judges significance against a **declared** scanner accuracy. Validated against synthetic prints only — a real print and scan is still outstanding (2026-08-15)
+- [x] Scan-compare: `compare` measures per-axis deviation between a design and a scan of the printed part, distinguishes uniform from anisotropic shrinkage, and judges significance against a **declared** scanner accuracy. ~~Validated against synthetic prints only~~ → first real print measured 2026-08-24 (comparison `82d9050e8676`): X and Y dead on nominal, the loop correctly refused to compensate (2026-08-15)
+- [ ] **`compare` per-axis observed spread** — the flaw the first real measurement exposed (2026-08-24, CHANGELOG). `--instrument-accuracy-mm` is used as the uncertainty on every axis, when the truth is `max(declared, observed spread)`: the docs already ask for three readings per axis and the tool throws two away. Taking all three would have refused the unmeasurable Z figure on its own. Build this before the next measurement run.
+- [ ] **Z axis has no number, deliberately, until an optimised profile exists.** Z is read off the final printed layer (0.08 mm spread against a 0.02 mm caliper); the loop's resolution is capped by the print quality it measures, so profile first, then reprint and re-measure. See `examples/calibration-loop/CALIBRATE-FIRST.md` and OpenBuildCore's `k2-axes-verified` record (`axis_calibration: partial`).
 
 ## Not yet
 
 Good ideas that are not this quarter's problem. Adding to this list is a valid outcome of a discussion.
 
 - BINGO integration: ODC provenance records referenced from fabrication evidence (contract drafted, see `wiki/concepts/bingo-odc-provenance-contract.md`)
-- ~~Feeding a measured compensation back into slicer profiles automatically~~ → done 2026-08-16 (ADR-0011): `compensate` judges whether a comparison justifies one and proposes it to AdvancedStudio's profile store, which computes the setting. Still needs a real print and scan to validate the number rather than the plumbing.
+- ~~Feeding a measured compensation back into slicer profiles automatically~~ → done 2026-08-16 (ADR-0011): `compensate` judges whether a comparison justifies one and proposes it to AdvancedStudio's profile store, which computes the setting. The refusal side is now validated on a real print (2026-08-24: in-plane deviation was genuinely zero and the loop said so); a *non-zero* compensation making the next print measurably better is still unvalidated.
 - ~~Cross-machine golden fixtures — rerun byte-identity is proven on one machine only~~ → **first cross-machine evidence, 2026-08-21.** The CI determinism step and a local run produced the *same* enclosure STL hash, `7b1c8fb9dcdb7436b2d6893960e66906477ea5e34dc43e3f4c71e2786b1aa02b`, on two different machines. Provenance hashes differ, correctly — the sidecar records the commit. **What this does not yet show:** both machines are Windows x64 on the same pinned stack, and it is one model at one voxel size. macOS arm64 is untested and is where a difference would most plausibly appear. A pinned golden fixture is now worth writing; it was not before, because there was nothing to compare against.
 
 Shipped since this list was written, and now peers rather than plans:
 electronics (OpenCircuitCore), parts registry (OpenPartsCore), inventory and
-ideation (OpenBuildCore).
+ideation (OpenBuildCore), mechanism modelling (ClawBot, the fifth peer domain —
+ADR-0014), and slicing (OBCSlicer, field spec → multi-material G-code →
+propose-only handoff).
 
 ## Open questions
 

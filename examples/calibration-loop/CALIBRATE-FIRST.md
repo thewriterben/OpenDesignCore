@@ -150,6 +150,55 @@ angle can only ever make an external dimension read *larger* — never smaller �
 so the minimum is the least contaminated reading you took. That is also the
 cheap explanation for the +0.5 mm Y outlier on the first run through this loop.
 
+### The spread between your three readings is the real uncertainty
+
+`--instrument-accuracy-mm` asks for your caliper's accuracy, and this loop
+treats that as the uncertainty on every dimension. **That is only true when the
+surface is flatter than the instrument.**
+
+A printed face is not a datum plane. If three readings across one face spread
+further apart than your caliper's stated accuracy, the surface is what you are
+measuring, not the machine — and the honest uncertainty is the spread, not the
+0.02 mm on the caliper's box. The tool cannot detect this. It takes the declared
+figure at face value.
+
+Which surface, specifically: **the last layer printed.** On the calibration
+block that is the tall top face, and it is where pillowing and top-surface
+blobs live. Real numbers from one run:
+
+| Surface | Spread across 3 readings |
+|---|---|
+| Vertical walls (X) | 0.02 mm |
+| Vertical walls (Y) | 0.03 mm |
+| Shelf top — finished at layer 20, printed over afterwards | 0.01 mm |
+| **Tall top — the final layer** | **0.08 mm** |
+
+The walls and the shelf are at caliper accuracy. The final layer is four times
+worse, and the Z scale is read from it.
+
+**What that does to Z.** The span is 0.10 mm from nominal and the surface noise
+is 0.08 mm, so the answer depends on where the jaw lands:
+
+```
+25.12 − 4.21 = 20.91   →  −0.43 %
+25.20 − 4.20 = 21.00   →   0.00 %
+```
+
+The available answers run from "half a percent short" to "perfect". **There is
+no honest Z figure on a part like this**, and the right move is to record
+nothing for that axis rather than pick.
+
+So: **the loop's resolution is capped by the print quality it is measuring.**
+That makes an optimised profile a prerequisite, not a refinement. A stock vendor
+profile is tuned for appearance and speed and will not hold a flat top face; if
+you need engineering tolerances you were never going to use it anyway, and you
+cannot measure your way to them through it. X and Y survive a rough top face
+because they are read off vertical walls. Z does not.
+
+If your Z readings spread more than your caliper's accuracy, stop, fix the top
+surface — flow, cooling, top-layer count, ironing — and reprint. Measuring
+harder will not help.
+
 ### 4. Measure
 
 Caliper jaws flat, closed with the thumb wheel only, square to the face.
@@ -293,6 +342,20 @@ to turn it into a number.
    mode, one layer down — and nothing currently asks whether it was calibrated.
    A `flow_calibrated` fact belongs somewhere in the material or profile record,
    and `--propose-to-profile` should want it.
+
+3. **`--instrument-accuracy-mm` is the wrong name for what it does.** It is used
+   as the uncertainty on every dimension, but the true uncertainty is
+   `max(instrument, surface)` and the surface is often worse — four times worse
+   on the one measured run above. The tool has no way to know, and a declared
+   figure that is too optimistic makes a refusal look like a finding: an
+   unresolvable deviation gets reported as a real one.
+
+   The fix is to take the readings rather than a single number. `compare` could
+   accept the three readings per axis it already asks for in the docs, derive
+   the per-axis spread, and use `max(declared_instrument, observed_spread)` as
+   that axis's uncertainty — which would have refused the Z figure by itself
+   instead of needing a human to notice. Passing one pre-minimised number per
+   axis throws away exactly the information that would have caught it.
 
 Sources for the calibration ordering:
 [OrcaSlicer calibration guide (Obico)](https://www.obico.io/blog/orcaslicer-comprehensive-calibration-guide/) ·
