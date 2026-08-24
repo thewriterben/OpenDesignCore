@@ -18,6 +18,34 @@ public sealed record CompareRunResult
 }
 
 /// <summary>
+/// Repeated caliper readings of one dimension, mm.
+///
+/// The docs have always asked for three readings per dimension; the tool used
+/// to accept one number and threw the other two away, which meant the declared
+/// instrument accuracy stood in for the uncertainty even when the readings
+/// themselves said it was larger. The spread (max − min) is the surface's own
+/// statement about how measurable it is, and it travels with the mean rather
+/// than being discarded at the command line (ADR-0015).
+/// </summary>
+public sealed record MeasuredReadings
+{
+    public required IReadOnlyList<float> Values { get; init; }
+
+    public double MeanMm => Values.Average(f => (double)f);
+    public double SpreadMm => Values.Count > 1 ? Values.Max() - Values.Min() : 0.0;
+
+    public static MeasuredReadings OSingle(float fValueMm) => new() { Values = [fValueMm] };
+
+    public void Validate(string strLabel)
+    {
+        if (Values.Count == 0)
+            throw new ArgumentException($"{strLabel} needs at least one reading.");
+        if (Values.Any(f => f <= 0))
+            throw new ArgumentException($"{strLabel} readings must all be > 0.");
+    }
+}
+
+/// <summary>
 /// Closes the loop: design → print → scan → measured deviation, recorded.
 ///
 /// The result is a comparison record, not an artifact — nothing new is
@@ -49,6 +77,8 @@ public static class CompareRun
     /// is mostly infill. The comparison record carries the design's volume
     /// and states the measured volume as absent rather than equal.
     /// </summary>
+    /// <summary>Single-reading convenience: one number per dimension, spread zero,
+    /// uncertainty falls back to the declared instrument accuracy.</summary>
     public static CompareRunResult ExecuteMeasured(
         string strDesignStlPath,
         Mesh.EStlUnit eUnits,
@@ -62,6 +92,31 @@ public static class CompareRun
         string strCommit,
         string strMaterial,
         float fMeasuredZLowMm = 0f,
+        float fNominalZLowMm = 0f,
+        FilamentRef? oFilamentRef = null)
+        => ExecuteMeasured(
+            strDesignStlPath, eUnits, fVoxelSizeMm,
+            MeasuredReadings.OSingle(fMeasuredXMm),
+            MeasuredReadings.OSingle(fMeasuredYMm),
+            MeasuredReadings.OSingle(fMeasuredZMm),
+            fInstrumentAccuracyMm, strArtifactsDir, strLedgerPath, strCommit,
+            strMaterial,
+            fMeasuredZLowMm > 0 ? MeasuredReadings.OSingle(fMeasuredZLowMm) : null,
+            fNominalZLowMm, oFilamentRef);
+
+    public static CompareRunResult ExecuteMeasured(
+        string strDesignStlPath,
+        Mesh.EStlUnit eUnits,
+        float fVoxelSizeMm,
+        MeasuredReadings oMeasuredX,
+        MeasuredReadings oMeasuredY,
+        MeasuredReadings oMeasuredZ,
+        float fInstrumentAccuracyMm,
+        string strArtifactsDir,
+        string strLedgerPath,
+        string strCommit,
+        string strMaterial,
+        MeasuredReadings? oMeasuredZLow = null,
         float fNominalZLowMm = 0f,
         FilamentRef? oFilamentRef = null)
     {
@@ -85,8 +140,10 @@ public static class CompareRun
                 + "instrument accuracy a deviation cannot be told from instrument error, and "
                 + "the comparison would be recorded as unresolvable anyway.");
         }
-        if (fMeasuredXMm <= 0 || fMeasuredYMm <= 0 || fMeasuredZMm <= 0)
-            throw new ArgumentException("Measured dimensions must all be > 0.");
+        oMeasuredX.Validate("X");
+        oMeasuredY.Validate("Y");
+        oMeasuredZ.Validate("Z");
+        oMeasuredZLow?.Validate("Z-low");
 
         DimensionalReport oReport;
         string strDesignHash;
@@ -106,41 +163,71 @@ public static class CompareRun
             // the bed and carry the same first-layer squish, so their
             // difference carries none — which is the only way a caliper can
             // give a Z shrinkage that is not contaminated by the first layer.
-            bool bHasSpan = fMeasuredZLowMm > 0 && fNominalZLowMm > 0;
+            bool bHasSpan = oMeasuredZLow is not null && fNominalZLowMm > 0;
 
             // Before deriving anything: are these readings even assignable to
             // the labels they were given? The block's axes are unequal so that
             // a transposition is detectable, and until now nothing detected
-            // one. Checked on the RAW readings, because a Z-low/Z-high swap
+            // one. Checked on the per-axis MEANS, because a Z-low/Z-high swap
             // disappears into the span the moment the difference is taken —
             // it flips the sign, and a negative span would then be compared
             // against a positive design span as though it meant something.
             List<Reading> aReadings =
             [
-                new("X", vecDesign.X, fMeasuredXMm),
-                new("Y", vecDesign.Y, fMeasuredYMm),
+                new("X", vecDesign.X, oMeasuredX.MeanMm),
+                new("Y", vecDesign.Y, oMeasuredY.MeanMm),
             ];
             if (bHasSpan)
             {
-                aReadings.Add(new("Z-low", fNominalZLowMm, fMeasuredZLowMm));
-                aReadings.Add(new("Z-high", vecDesign.Z, fMeasuredZMm));
+                aReadings.Add(new("Z-low", fNominalZLowMm, oMeasuredZLow!.MeanMm));
+                aReadings.Add(new("Z-high", vecDesign.Z, oMeasuredZ.MeanMm));
             }
             else
             {
-                aReadings.Add(new("Z", vecDesign.Z, fMeasuredZMm));
+                aReadings.Add(new("Z", vecDesign.Z, oMeasuredZ.MeanMm));
             }
             MeasurementAssignment.Assert(aReadings);
 
             double fZDesign = bHasSpan ? vecDesign.Z - fNominalZLowMm : vecDesign.Z;
-            double fZMeasured = bHasSpan ? fMeasuredZMm - fMeasuredZLowMm : fMeasuredZMm;
+            double fZMeasured = bHasSpan
+                ? oMeasuredZ.MeanMm - oMeasuredZLow!.MeanMm
+                : oMeasuredZ.MeanMm;
+
+            // The span's spread is the SUM of the two faces' spreads, not
+            // their max: the span is a difference, and the extreme answers
+            // come from pairing one face's highest reading with the other's
+            // lowest. (max_high − min_low) − (min_high − max_low) is exactly
+            // spread_high + spread_low.
+            double fZSpread = bHasSpan
+                ? oMeasuredZ.SpreadMm + oMeasuredZLow!.SpreadMm
+                : oMeasuredZ.SpreadMm;
+
+            static IReadOnlyList<double>? ARaw(MeasuredReadings o) =>
+                o.Values.Count > 1 ? o.Values.Select(f => (double)f).ToList() : null;
 
             oReport = new DimensionalReport
             {
                 Axes =
                 [
-                    new() { Axis = "x", DesignMm = vecDesign.X, ScanMm = fMeasuredXMm },
-                    new() { Axis = "y", DesignMm = vecDesign.Y, ScanMm = fMeasuredYMm },
-                    new() { Axis = bHasSpan ? "z-span" : "z", DesignMm = fZDesign, ScanMm = fZMeasured },
+                    new()
+                    {
+                        Axis = "x", DesignMm = vecDesign.X, ScanMm = oMeasuredX.MeanMm,
+                        ObservedSpreadMm = oMeasuredX.SpreadMm, ReadingsMm = ARaw(oMeasuredX),
+                    },
+                    new()
+                    {
+                        Axis = "y", DesignMm = vecDesign.Y, ScanMm = oMeasuredY.MeanMm,
+                        ObservedSpreadMm = oMeasuredY.SpreadMm, ReadingsMm = ARaw(oMeasuredY),
+                    },
+                    new()
+                    {
+                        Axis = bHasSpan ? "z-span" : "z",
+                        DesignMm = fZDesign, ScanMm = fZMeasured,
+                        ObservedSpreadMm = fZSpread,
+                        // A span is a derived value; its raw readings are the
+                        // two face sets, recorded in the record's inputs.
+                        ReadingsMm = bHasSpan ? null : ARaw(oMeasuredZ),
+                    },
                 ],
                 DesignVolumeCubicMm = fDesignVolume,
                 // Not measured, and deliberately not inferred from the extents:
@@ -152,11 +239,29 @@ public static class CompareRun
         }
 
         double? fFirstLayerOffset = null;
-        if (fMeasuredZLowMm > 0 && fNominalZLowMm > 0)
+        if (oMeasuredZLow is not null && fNominalZLowMm > 0)
         {
             AxisDeviation oZ = oReport.Axes.Single(a => a.Axis == "z-span");
             double fScale = oZ.ScanMm / oZ.DesignMm;
-            fFirstLayerOffset = fMeasuredZLowMm - (fNominalZLowMm * fScale);
+            fFirstLayerOffset = oMeasuredZLow.MeanMm - (fNominalZLowMm * fScale);
+        }
+
+        // The raw readings, keyed by the label they were taken under. This is
+        // what makes the recorded spread auditable rather than asserted — and
+        // it preserves the z-low/z-high sets the span was derived from.
+        Dictionary<string, IReadOnlyList<float>> oRaw = new()
+        {
+            ["x"] = oMeasuredX.Values,
+            ["y"] = oMeasuredY.Values,
+        };
+        if (oMeasuredZLow is not null)
+        {
+            oRaw["z-low"] = oMeasuredZLow.Values;
+            oRaw["z-high"] = oMeasuredZ.Values;
+        }
+        else
+        {
+            oRaw["z"] = oMeasuredZ.Values;
         }
 
         return ORecord(
@@ -166,7 +271,8 @@ public static class CompareRun
             strArtifactsDir: strArtifactsDir, strLedgerPath: strLedgerPath,
             strCommit: strCommit, fFirstLayerOffsetMm: fFirstLayerOffset,
             strMaterial: strMaterial.Trim().ToLowerInvariant(),
-            oFilamentRef: oFilamentRef);
+            oFilamentRef: oFilamentRef,
+            oRawReadings: oRaw);
     }
 
     public static CompareRunResult Execute(
@@ -242,11 +348,16 @@ public static class CompareRun
         string strCommit,
         double? fFirstLayerOffsetMm = null,
         string strMaterial = "",
-        FilamentRef? oFilamentRef = null)
+        FilamentRef? oFilamentRef = null,
+        IReadOnlyDictionary<string, IReadOnlyList<float>>? oRawReadings = null)
     {
         Dictionary<string, object?> oRecord = new()
         {
-            ["schema"] = "odc/comparison/0.2",
+            // 0.3: axes carry observed_spread_mm and uncertainty_mm, and the
+            // manual path records its raw readings (ADR-0015). Records written
+            // under 0.1/0.2 still load; an absent spread reads as zero, which
+            // is what a single reading honestly was.
+            ["schema"] = "odc/comparison/0.3",
             ["model"] = StrModelId,
             ["voxel_size_mm"] = StrF3(fVoxelSizeMm),
             ["inputs"] = new Dictionary<string, object?>
@@ -271,6 +382,15 @@ public static class CompareRun
                 ["declared_units"] = eUnits.ToString().ToLowerInvariant(),
                 ["declared_scan_accuracy_mm"] =
                     fAccuracyMm > 0 ? StrF3(fAccuracyMm) : "undeclared",
+                // The readings behind each measured value, keyed by the label
+                // they were taken under (x, y, z or z-low/z-high). What makes
+                // a recorded spread auditable. A scan has extents rather than
+                // readings, and says so instead of omitting the key.
+                ["raw_readings_mm"] = oRawReadings is null
+                    ? "not-applicable-scan-extents"
+                    : oRawReadings.ToDictionary(
+                        kv => kv.Key,
+                        kv => (object?)kv.Value.Select(f => (object?)StrF3(f)).ToList()),
             },
             ["axes"] = oReport.Axes.Select(a => (object?)new Dictionary<string, object?>
             {
@@ -279,6 +399,15 @@ public static class CompareRun
                 ["scan_mm"] = StrF3(a.ScanMm),
                 ["deviation_mm"] = StrF3(a.DeviationMm),
                 ["deviation_pct"] = StrF3(a.DeviationPct),
+                // max − min across this axis's readings; zero when there was
+                // one. For z-span it is the SUM of the two faces' spreads,
+                // because the extreme spans pair opposite extremes.
+                ["observed_spread_mm"] = StrF3(a.ObservedSpreadMm),
+                // max(declared accuracy, observed spread) — the number a
+                // deviation must exceed to be a finding (ADR-0015). Undeclared
+                // accuracy means no uncertainty statement is possible.
+                ["uncertainty_mm"] = oReport.AccuracyDeclared
+                    ? StrF3(oReport.FUncertaintyMm(a)) : "undeclared",
             }).ToList(),
             ["summary"] = new Dictionary<string, object?>
             {
@@ -352,27 +481,41 @@ public static class CompareRun
     }
 
     /// <summary>
-    /// Parse a measured triple or quadruple in mm.
+    /// Parse a measured triple or quadruple in mm, each dimension one reading
+    /// or a comma-separated list of repeated readings.
     ///
-    /// Three values are X, Y and a single bed-referenced Z. Four are X, Y and
-    /// two heights — the shelf and the tall face — from which a Z scale can be
-    /// derived without the first-layer offset, because both readings contain
+    /// Three dimensions are X, Y and a single bed-referenced Z. Four are X, Y
+    /// and two heights — the shelf and the tall face — from which a Z scale can
+    /// be derived without the first-layer offset, because both readings contain
     /// the same offset and their difference contains none.
+    ///
+    /// `40.00,40.02,40.01x60.01,59.99,60.00x4.00x25.00` is three readings on X
+    /// and Y and one on each height. The docs have asked for three readings
+    /// per dimension since the first run of this loop; this is where they stop
+    /// being thrown away (ADR-0015).
     /// </summary>
-    public static float[] AParseMeasured(string strText)
+    public static float[][] AParseMeasured(string strText)
     {
         string[] aParts = strText.Replace(" ", "").Split('x', StringSplitOptions.RemoveEmptyEntries);
         if (aParts.Length is not (3 or 4))
         {
             throw new ArgumentException(
-                $"--measured takes XxYxZ, or XxYxZlowxZhigh for a stepped block, got '{strText}'.");
+                $"--measured takes XxYxZ, or XxYxZlowxZhigh for a stepped block, got '{strText}'. "
+                + "Each dimension may be a comma-separated list of repeated readings.");
         }
 
-        float[] aValues = new float[aParts.Length];
+        float[][] aValues = new float[aParts.Length][];
         for (int i = 0; i < aParts.Length; i++)
         {
-            if (!float.TryParse(aParts[i], CultureInfo.InvariantCulture, out aValues[i]))
-                throw new ArgumentException($"--measured must be numeric, got '{strText}'.");
+            string[] aReadings = aParts[i].Split(',', StringSplitOptions.RemoveEmptyEntries);
+            if (aReadings.Length == 0)
+                throw new ArgumentException($"--measured has an empty dimension in '{strText}'.");
+            aValues[i] = new float[aReadings.Length];
+            for (int j = 0; j < aReadings.Length; j++)
+            {
+                if (!float.TryParse(aReadings[j], CultureInfo.InvariantCulture, out aValues[i][j]))
+                    throw new ArgumentException($"--measured must be numeric, got '{strText}'.");
+            }
         }
         return aValues;
     }

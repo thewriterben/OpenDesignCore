@@ -439,3 +439,25 @@ and the pattern is that a roadmap line rots the moment the work moves to a diffe
 (open-questions #15, ROADMAP), the Z axis pending an optimised profile, OpenBuildCore's
 `k2-axes-verified` branch unmerged pending that Z answer, and a non-zero compensation still
 unvalidated on hardware (#14, narrowed).
+
+## [2026-08-24] build | ADR-0015: uncertainty is max(instrument, observed spread), and the tool derives it
+
+Open-questions #15, closed the same day it was filed. `--measured` accepts comma-separated
+repeated readings per dimension; per axis, the measured value is their mean and the uncertainty
+is `max(declared instrument accuracy, max − min of the readings)`. The z-span's spread is the sum
+of its two faces' spreads, because a span's extreme answers pair opposite extremes. Judged per
+axis everywhere — the same scoping rule that keeps Z out of the XY verdict now keeps a rough top
+face from either vetoing or flattering the walls.
+
+Two properties worth the entry. **The spread persists**: `odc/comparison/0.3` records
+`observed_spread_mm`, `uncertainty_mm` and the raw readings, and `compensate` re-reads them from
+the stored record — a test pins the round trip, because dropping the spread at either hop would
+launder an unresolvable deviation back into a finding. And **"keep the smallest" is retired**:
+the doc's pre-minimising rule was correct for a tool that took one number; giving the tool all
+three turns a seam blob into visible spread and a refusal, which is the remedy pointing at the
+seam rather than at a statistic.
+
+Known answer, from the print that motivated it: mean Z deviation 0.045 mm under a 0.09 mm
+reading spread → refused, naming the surface. The Z number itself still waits on a profile that
+can hold a flat top face; what changed is that the tool now says so without a human noticing it
+first.

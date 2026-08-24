@@ -160,11 +160,26 @@ public sealed record CompensationProposal
                 + "good enough to act on.");
         }
 
-        double fAxisNoise = oReport.ScanAccuracyMm;
+        // Per axis, not one figure: the uncertainty is max(declared instrument
+        // accuracy, that axis's observed reading spread) — ADR-0015. The
+        // declared accuracy describes the caliper; the spread describes the
+        // surface the caliper's jaw landed on, and whichever is larger is the
+        // one actually limiting the measurement.
+        double fXNoise = oReport.FUncertaintyMm(oX);
+        double fYNoise = oReport.FUncertaintyMm(oY);
         double fXAbs = Math.Abs(oX.DeviationMm);
         double fYAbs = Math.Abs(oY.DeviationMm);
-        bool bXQuiet = fXAbs <= fAxisNoise;
-        bool bYQuiet = fYAbs <= fAxisNoise;
+        bool bXQuiet = fXAbs <= fXNoise;
+        bool bYQuiet = fYAbs <= fYNoise;
+
+        // Names which side of the max() won, so a refusal says whether to buy
+        // a better caliper or fix the top surface — different remedies.
+        string StrNoise(double fNoise, AxisDeviation oAxis) =>
+            oAxis.ObservedSpreadMm > oReport.ScanAccuracyMm
+                ? $"{fNoise:F3} mm (the readings spread {oAxis.ObservedSpreadMm:F3} mm — "
+                  + $"the surface, not the instrument's {oReport.ScanAccuracyMm:F3} mm, "
+                  + "is the limit)"
+                : $"{fNoise:F3} mm";
 
         // Scoped to X and Y, deliberately.
         //
@@ -181,10 +196,10 @@ public sealed record CompensationProposal
         if (bXQuiet && bYQuiet)
         {
             return OWith(ECompensationVerdict.WithinScannerNoise,
-                $"X deviated {fXAbs:F3} mm and Y {fYAbs:F3} mm, both within the declared "
-                + $"instrument accuracy of {fAxisNoise:F3} mm. There is nothing here to "
-                + "compensate: a setting derived from this would be compensating for the "
-                + "instrument, not the print. "
+                $"X deviated {fXAbs:F3} mm against an uncertainty of {StrNoise(fXNoise, oX)} "
+                + $"and Y {fYAbs:F3} mm against {StrNoise(fYNoise, oY)}. There is nothing here "
+                + "to compensate: a setting derived from this would be compensating for the "
+                + "measurement, not the print. "
                 + (fZ is double fZq
                     ? $"Z deviated {fZq:F3} % and is reported separately — it has its own "
                       + "causes and no XY shrinkage factor addresses it."
@@ -203,9 +218,10 @@ public sealed record CompensationProposal
             string strWeak = bXQuiet ? "X" : "Y";
             double fWeak = bXQuiet ? fXAbs : fYAbs;
             double fStrong = bXQuiet ? fYAbs : fXAbs;
+            string strWeakNoise = bXQuiet ? StrNoise(fXNoise, oX) : StrNoise(fYNoise, oY);
             return OWith(ECompensationVerdict.AxisNotSignificant,
-                $"{strWeak} deviated {fWeak:F3} mm, which is within the instrument's "
-                + $"{fAxisNoise:F3} mm accuracy — that axis has no measured deviation at all. "
+                $"{strWeak} deviated {fWeak:F3} mm against an uncertainty of "
+                + $"{strWeakNoise} — that axis has no measured deviation at all. "
                 + $"The other axis moved {fStrong:F3} mm and is real. Averaging a reading with "
                 + "a non-reading produces a number describing neither. Either the part is only "
                 + "deviating on one axis (which is not material shrinkage and a single XY "
@@ -221,7 +237,7 @@ public sealed record CompensationProposal
         // declared threshold against a spread without knowing that floor
         // invites a confident answer to an unanswerable question.
         double fSpreadNoisePct =
-            100.0 * fAxisNoise / oX.DesignMm + 100.0 * fAxisNoise / oY.DesignMm;
+            100.0 * fXNoise / oX.DesignMm + 100.0 * fYNoise / oY.DesignMm;
 
         // Machine fault before axis disagreement. Both present as an X/Y
         // spread, but only one of them has a slicer remedy, and sending
@@ -231,7 +247,7 @@ public sealed record CompensationProposal
         {
             (string strAxis, double fPct)? oOutlier = OFindLoneOutlier(
                 oX.DeviationPct, oY.DeviationPct,
-                100.0 * fAxisNoise / Math.Min(oX.DesignMm, oY.DesignMm));
+                Math.Max(100.0 * fXNoise / oX.DesignMm, 100.0 * fYNoise / oY.DesignMm));
 
             if (oOutlier is (string strBad, double fBadPct))
             {
@@ -289,9 +305,10 @@ public sealed record CompensationProposal
         }
 
         return OWith(ECompensationVerdict.Proposed,
-            $"X and Y agree within {fSpread:F3} points (limit {fMaxAxisSpreadPct:F3}) and the "
-            + $"deviation exceeds the declared scanner accuracy of {oReport.ScanAccuracyMm:F3} mm, "
-            + "so one XY factor is a defensible reading of this measurement.");
+            $"X and Y agree within {fSpread:F3} points (limit {fMaxAxisSpreadPct:F3}) and each "
+            + $"deviation exceeds its axis's uncertainty (X {StrNoise(fXNoise, oX)}, "
+            + $"Y {StrNoise(fYNoise, oY)}), so one XY factor is a defensible reading of this "
+            + "measurement.");
     }
 
     /// <summary>

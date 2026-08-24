@@ -9,6 +9,31 @@ public sealed record AxisDeviation
     public required string Axis { get; init; }
     public required double DesignMm { get; init; }
     public required double ScanMm { get; init; }
+
+    /// <summary>
+    /// Spread (max − min) across the repeated readings this axis was measured
+    /// with, mm. Zero when there was one reading — a scan, or a caller who
+    /// measured once — in which case the declared instrument accuracy is the
+    /// only uncertainty available and <see cref="DimensionalReport.FUncertaintyMm"/>
+    /// falls back to it.
+    ///
+    /// This exists because the declared accuracy describes the instrument, and
+    /// the instrument is not the only thing being measured: a printed face is
+    /// not a datum plane, and when three readings across one face spread wider
+    /// than the caliper's box figure, the surface is what is being measured.
+    /// The honest uncertainty is max(instrument, surface) — ADR-0015.
+    /// </summary>
+    public double ObservedSpreadMm { get; init; }
+
+    /// <summary>
+    /// The raw readings behind <see cref="ScanMm"/>, mm, when the axis was
+    /// measured more than once. Null for a scan or a single reading. Recorded
+    /// so the spread is auditable rather than asserted — and null for the
+    /// z-span axis, whose value is a difference of two reading sets that are
+    /// each recorded raw in the comparison record's inputs.
+    /// </summary>
+    public IReadOnlyList<double>? ReadingsMm { get; init; }
+
     public double DeviationMm => ScanMm - DesignMm;
     /// <summary>
     /// Signed percentage of the design dimension. Negative means the scan is
@@ -63,12 +88,31 @@ public sealed record DimensionalReport
     public bool AccuracyDeclared => ScanAccuracyMm > 0;
 
     /// <summary>
-    /// True when the largest deviation is at or below the declared scanner
-    /// accuracy — the measurement cannot tell a real difference from the
-    /// instrument. Null when no accuracy was declared: unknown, not false.
+    /// The uncertainty on one axis: whichever is larger of the declared
+    /// instrument accuracy and that axis's observed reading spread (ADR-0015).
+    ///
+    /// The declared figure is only the uncertainty when the surface is flatter
+    /// than the instrument. A final-layer top face spread 0.08 mm under a
+    /// 0.02 mm caliper on a real print; treating 0.02 as the uncertainty there
+    /// reported an unresolvable deviation as a real one.
+    /// </summary>
+    public double FUncertaintyMm(AxisDeviation oAxis) =>
+        Math.Max(ScanAccuracyMm, oAxis.ObservedSpreadMm);
+
+    /// <summary>
+    /// True when every axis's deviation is at or below that axis's uncertainty
+    /// — the measurement cannot tell a real difference from the instrument or
+    /// the surface it was read off. Null when no accuracy was declared:
+    /// unknown, not false.
+    ///
+    /// Per-axis rather than max-deviation-vs-declared-accuracy, because the
+    /// uncertainty is per-axis: a rough top face makes Z's readings spread
+    /// without saying anything about X and Y, which come off vertical walls.
     /// </summary>
     public bool? WithinScanAccuracy =>
-        AccuracyDeclared ? MaxAbsDeviationMm <= ScanAccuracyMm : null;
+        AccuracyDeclared
+            ? Axes.All(a => Math.Abs(a.DeviationMm) <= FUncertaintyMm(a))
+            : null;
 }
 
 /// <summary>
