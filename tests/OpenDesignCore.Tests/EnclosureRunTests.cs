@@ -18,19 +18,16 @@ public sealed class EnclosureRunTests : IDisposable
 
     public void Dispose() => Directory.Delete(_strTempDir, recursive: true);
 
-    private static string StrRepoDataDir()
-    {
-        DirectoryInfo? oDir = new(AppContext.BaseDirectory);
-        while (oDir is not null && !File.Exists(Path.Combine(oDir.FullName, "OpenDesignCore.sln")))
-            oDir = oDir.Parent;
-        Assert.NotNull(oDir);
-        return Path.Combine(oDir.FullName, "data");
-    }
+    private static string StrRepoDataDir() => Path.Combine(TestRegistry.StrRepoRoot(), "data");
 
-    private EnclosureRunResult OExecute(float fVoxelMm = 0.5f)
+    /// <summary>A fixture registry (ADR-0016), so the run does not depend on the sibling checkout.</summary>
+    private string StrRegistry() => TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore"));
+
+    private EnclosureRunResult OExecute(float fVoxelMm = 0.5f, string strPartId = TestRegistry.StrFixtureId)
         => EnclosureRun.Execute(
             strDataDir: StrRepoDataDir(),
-            strPartId: "parts/esp32-s3-wroom-1",
+            strPartsRegistryDir: StrRegistry(),
+            strPartId: strPartId,
             fVoxelSizeMm: fVoxelMm,
             fClearanceMm: 0.30f,
             fWallMm: 2.40f,
@@ -68,6 +65,66 @@ public sealed class EnclosureRunTests : IDisposable
         Assert.True(oRun.Passed);
     }
 
+    /// <summary>
+    /// ADR-0016: the part came from OpenPartsCore, and the record says which
+    /// checkout and which file, so the envelope can be traced back past this
+    /// repo. The citation recorded is the envelope's own, not the entry's.
+    /// </summary>
+    [Fact]
+    public void Sidecar_PinsTheRegistryEntryItReadTheEnvelopeFrom()
+    {
+        EnclosureRunResult oResult = OExecute();
+        JsonElement oInputs = OReadSidecar(oResult.ProvenanceSha256).GetProperty("inputs");
+
+        Assert.Equal(TestRegistry.StrFixtureId, oInputs.GetProperty("part_id").GetString());
+        Assert.Contains("envelope", oInputs.GetProperty("part_envelope_citation").GetString());
+
+        JsonElement oRegistry = oInputs.GetProperty("part_registry");
+        Assert.Equal("OpenPartsCore", oRegistry.GetProperty("repo").GetString());
+        Assert.Equal("unresolved", oRegistry.GetProperty("commit").GetString()); // fixture has no .git, and that is recorded, not hidden
+
+        string strFile = Path.Combine(StrRegistry(), "data", "electronic", "fixture-module.json");
+        Assert.Equal(
+            ArtifactStore.StrSha256(File.ReadAllBytes(strFile)),
+            oRegistry.GetProperty("file_sha256").GetString());
+    }
+
+    [Fact]
+    public void UnofferedPart_IsRefusedWithItsReason()
+    {
+        ArgumentException oEx = Assert.Throws<ArgumentException>(
+            () => OExecute(strPartId: TestRegistry.StrUnofferedId));
+        Assert.Contains("not offered", oEx.Message);
+        Assert.Contains("no envelope_mm", oEx.Message);
+    }
+
+    /// <summary>
+    /// Against the real sibling registry: the module the thin thread has
+    /// designed around since run 1, now read from where it belongs. Returns
+    /// early when the checkout is absent (repo convention for peer reads).
+    /// </summary>
+    [Fact]
+    public void ShippedRegistry_Esp32S3Wroom1_RunsAndRecordsACommit()
+    {
+        string? strRegistry = TestRegistry.StrSiblingRegistryOrNull();
+        if (strRegistry is null) return;
+
+        EnclosureRunResult oResult = EnclosureRun.Execute(
+            strDataDir: StrRepoDataDir(),
+            strPartsRegistryDir: strRegistry,
+            strPartId: "electronic/esp32-s3-wroom-1",
+            fVoxelSizeMm: 0.5f,
+            fClearanceMm: 0.30f,
+            fWallMm: 2.40f,
+            strArtifactsDir: Path.Combine(_strTempDir, "artifacts"),
+            strLedgerPath: Path.Combine(_strTempDir, "ledger.db"),
+            strCommit: "test-commit");
+
+        JsonElement oInputs = OReadSidecar(oResult.ProvenanceSha256).GetProperty("inputs");
+        Assert.Equal("18.00", oInputs.GetProperty("part_envelope_mm").GetProperty("x").GetString());
+        Assert.Matches("^[0-9a-f]{40}$", oInputs.GetProperty("part_registry").GetProperty("commit").GetString());
+    }
+
     [Fact]
     public void SameInputs_ProduceByteIdenticalArtifactAndSidecar()
     {
@@ -98,7 +155,7 @@ public sealed class EnclosureRunTests : IDisposable
         EnclosureRunResult oResult = OExecute(fVoxelMm);
         JsonElement oSidecar = OReadSidecar(oResult.ProvenanceSha256);
 
-        Assert.Equal("odc/provenance/0.2", oSidecar.GetProperty("schema").GetString());
+        Assert.Equal("odc/provenance/0.3", oSidecar.GetProperty("schema").GetString());
 
         JsonElement oEnvelope = oSidecar.GetProperty("inputs").GetProperty("part_envelope_mm");
         double dEx = FMm(oEnvelope, "x");

@@ -13,9 +13,11 @@ public sealed class DataValidationException : Exception
 }
 
 /// <summary>
-/// Loads the git-tracked reference data store (ADR-0006). Strict by design:
-/// unknown fields, missing required fields, uncited values, and non-positive
-/// dimensions all fail loudly with the file path in the message.
+/// Loads the git-tracked reference data store (ADR-0006) — materials from
+/// this repo's <c>data/</c>, parts from the OpenPartsCore registry
+/// (ADR-0016, via <see cref="PartsRegistry"/>). Strict by design for data
+/// this repo owns: unknown fields, missing required fields, uncited values,
+/// and non-positive dimensions all fail loudly with the file path in the message.
 /// </summary>
 public static class DataStore
 {
@@ -27,24 +29,38 @@ public static class DataStore
         AllowTrailingCommas = false,
     };
 
-    public static DataSet LoadAll(string strDataDir)
+    /// <param name="strDataDir">This repo's <c>data/</c> (materials).</param>
+    /// <param name="strPartsRegistryDir">An OpenPartsCore checkout (parts). See <see cref="PartsRegistry.StrResolveDir"/>.</param>
+    public static DataSet LoadAll(string strDataDir, string strPartsRegistryDir)
     {
         if (!Directory.Exists(strDataDir))
             throw new DataValidationException([$"data directory not found: {strDataDir}"]);
 
         List<string> aErrors = [];
-        List<PartEntry> aParts = LoadNamespace<PartEntry>(strDataDir, "parts", aErrors);
+        if (Directory.Exists(Path.Combine(strDataDir, "parts")))
+        {
+            aErrors.Add(
+                $"{Path.Combine(strDataDir, "parts")} exists, but parts are read from OpenPartsCore " +
+                "and a private copy would fork the registry (ADR-0016). Delete it.");
+        }
+
+        PartsRegistry.Loaded oRegistry = PartsRegistry.Load(strPartsRegistryDir, aErrors);
         List<MaterialEntry> aMaterials = LoadNamespace<MaterialEntry>(strDataDir, "materials", aErrors);
 
-        foreach (PartEntry oPart in aParts)
-            ValidatePart(oPart, aErrors);
         foreach (MaterialEntry oMaterial in aMaterials)
             ValidateMaterial(oMaterial, aErrors);
 
         if (aErrors.Count > 0)
             throw new DataValidationException(aErrors);
 
-        return new DataSet { Parts = aParts, Materials = aMaterials };
+        return new DataSet
+        {
+            Parts = oRegistry.Parts,
+            UnofferedParts = oRegistry.Unoffered,
+            Materials = aMaterials,
+            PartsRegistryDir = Path.GetFullPath(strPartsRegistryDir),
+            PartsRegistryCommit = oRegistry.Commit,
+        };
     }
 
     private static List<T> LoadNamespace<T>(string strDataDir, string strNamespace, List<string> aErrors)
@@ -80,15 +96,6 @@ public static class DataStore
             aErrors.Add($"{strId}: id must start with '{strNamespace}/'");
         if (string.IsNullOrWhiteSpace(oSource.Citation))
             aErrors.Add($"{strId}: empty citation — uncited values are invalid (ADR-0006)");
-    }
-
-    private static void ValidatePart(PartEntry oPart, List<string> aErrors)
-    {
-        ValidateCommon(oPart.Id, "parts", oPart.Source, aErrors);
-        if (oPart.EnvelopeMm.X <= 0 || oPart.EnvelopeMm.Y <= 0 || oPart.EnvelopeMm.Z <= 0)
-            aErrors.Add($"{oPart.Id}: envelope_mm dimensions must be positive");
-        if (oPart.ToleranceMm is <= 0)
-            aErrors.Add($"{oPart.Id}: tolerance_mm must be positive when present");
     }
 
     private static void ValidateMaterial(MaterialEntry oMaterial, List<string> aErrors)

@@ -28,6 +28,7 @@ public sealed class OdcTools
 
     private static string StrRoot => Environment.GetEnvironmentVariable("ODC_ROOT") ?? Environment.CurrentDirectory;
     private static string StrDataDir => Path.Combine(StrRoot, "data");
+    private static string StrPartsDir => PartsRegistry.StrResolveDir(StrRoot);
     private static string StrArtifactsDir => Path.Combine(StrRoot, "artifacts");
     private static string StrLedgerPath => Path.Combine(StrRoot, "ledger.db");
 
@@ -54,17 +55,23 @@ public sealed class OdcTools
     });
 
     [McpServerTool(Name = "list_parts")]
-    [Description("List parts in the cited reference data store, with envelopes in mm and their source citations.")]
+    [Description("List parts from the OpenPartsCore registry. `offered` entries carry a cited envelope in mm and can be passed to run_enclosure; `not_offered` entries exist in the registry but have no cited dimensions, and are listed so that absence is visible rather than silent.")]
     public static string ListParts()
     {
-        DataSet oData = DataStore.LoadAll(StrDataDir);
-        return StrJson(oData.Parts.Select(o => new
+        DataSet oData = DataStore.LoadAll(StrDataDir, StrPartsDir);
+        return StrJson(new
         {
-            id = o.Id,
-            name = o.Name,
-            envelope_mm = new { x = o.EnvelopeMm.X, y = o.EnvelopeMm.Y, z = o.EnvelopeMm.Z },
-            citation = o.Source.Citation,
-        }));
+            registry = new { repo = "OpenPartsCore", dir = oData.PartsRegistryDir, commit = oData.PartsRegistryCommit },
+            offered = oData.Parts.Select(o => new
+            {
+                id = o.Id,
+                name = o.Name,
+                envelope_mm = new { x = o.EnvelopeMm.X, y = o.EnvelopeMm.Y, z = o.EnvelopeMm.Z },
+                tolerance_mm = o.ToleranceMm,
+                envelope_citation = o.Source.Citation,
+            }),
+            not_offered = oData.UnofferedParts.Select(o => new { id = o.Id, reason = o.Reason }),
+        });
     }
 
     [McpServerTool(Name = "list_runs")]
@@ -98,18 +105,24 @@ public sealed class OdcTools
     }
 
     [McpServerTool(Name = "run_enclosure")]
-    [Description("Run the enclosure model around a part from the reference data store. Deterministic: writes a content-addressed STL, a provenance sidecar, and a ledger row. Voxel size is required and never defaulted.")]
+    [Description("Run the enclosure model around a part from the OpenPartsCore registry. Deterministic: writes a content-addressed STL, a provenance sidecar (recording the registry commit and the entry file's hash), and a ledger row. Voxel size is required and never defaulted.")]
     public static string RunEnclosure(
-        [Description("Part id, e.g. 'parts/esp32-s3-wroom-1'.")] string partId,
+        [Description("OpenPartsCore id of an offered part, e.g. 'electronic/esp32-s3-wroom-1' or 'boards/dfrobot-firebeetle2-esp32s3'. See list_parts.")] string partId,
         [Description("Voxel size in mm. Required; no default.")] double voxelMm,
         [Description("Clearance per side in mm (default 0.30).")] double clearanceMm = 0.30,
         [Description("Wall and floor thickness in mm (default 2.40).")] double wallMm = 2.40)
     {
         McpGuard.CheckVoxelSize((float)voxelMm);
 
-        DataSet oData = DataStore.LoadAll(StrDataDir);
-        PartEntry oPart = oData.Parts.FirstOrDefault(o => o.Id == partId)
-            ?? throw new McpGuardException($"Part '{partId}' not found. Call list_parts.");
+        DataSet oData = DataStore.LoadAll(StrDataDir, StrPartsDir);
+        PartEntry? oPart = oData.Parts.FirstOrDefault(o => o.Id == partId);
+        if (oPart is null)
+        {
+            UnofferedPart? oUnoffered = oData.UnofferedParts.FirstOrDefault(o => o.Id == partId);
+            throw new McpGuardException(oUnoffered is not null
+                ? $"Part '{partId}' is in the registry but not offered: {oUnoffered.Reason}. Call list_parts."
+                : $"Part '{partId}' not found. Call list_parts.");
+        }
         McpGuard.CheckVolume(
             oPart.EnvelopeMm.X + 2 * clearanceMm + 2 * wallMm,
             oPart.EnvelopeMm.Y + 2 * clearanceMm + 2 * wallMm,
@@ -117,7 +130,7 @@ public sealed class OdcTools
             (float)voxelMm);
 
         EnclosureRunResult oResult = EnclosureRun.Execute(
-            StrDataDir, partId, (float)voxelMm, (float)clearanceMm, (float)wallMm,
+            StrDataDir, StrPartsDir, partId, (float)voxelMm, (float)clearanceMm, (float)wallMm,
             StrArtifactsDir, StrLedgerPath, strCommit: "mcp");
 
         return StrJson(new
