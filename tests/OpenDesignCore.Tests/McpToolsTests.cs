@@ -12,12 +12,16 @@ namespace OpenDesignCore.Tests;
 public sealed class McpToolsTests : IDisposable
 {
     private readonly string _strPrevRoot = Environment.GetEnvironmentVariable("ODC_ROOT") ?? "";
+    private readonly string _strPrevRegistry =
+        Environment.GetEnvironmentVariable(OpenDesignCore.Data.PartsRegistry.StrEnvVar) ?? "";
     private readonly string _strTempDir =
         Directory.CreateTempSubdirectory("odc-mcp-tests").FullName;
 
     public void Dispose()
     {
         Environment.SetEnvironmentVariable("ODC_ROOT", _strPrevRoot.Length > 0 ? _strPrevRoot : null);
+        Environment.SetEnvironmentVariable(
+            OpenDesignCore.Data.PartsRegistry.StrEnvVar, _strPrevRegistry.Length > 0 ? _strPrevRegistry : null);
         Directory.Delete(_strTempDir, recursive: true);
     }
 
@@ -42,26 +46,52 @@ public sealed class McpToolsTests : IDisposable
             o => Assert.False(string.IsNullOrWhiteSpace(o.GetProperty("resolution_floor").GetString())));
     }
 
-    [Fact]
-    public void ListParts_ReadsTheCitedStoreAndCarriesCitations()
+    /// <summary>Point the tools at a fixture registry (ADR-0016) for the duration of a test.</summary>
+    private void UseFixtureRegistry()
     {
         Environment.SetEnvironmentVariable("ODC_ROOT", StrRepoRoot());
+        Environment.SetEnvironmentVariable(
+            OpenDesignCore.Data.PartsRegistry.StrEnvVar,
+            TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore")));
+    }
+
+    [Fact]
+    public void ListParts_SeparatesOfferedFromNotOfferedAndNamesTheRegistry()
+    {
+        UseFixtureRegistry();
 
         using JsonDocument oDoc = JsonDocument.Parse(OdcTools.ListParts());
-        JsonElement oPart = Assert.Single(
-            oDoc.RootElement.EnumerateArray(),
-            o => o.GetProperty("id").GetString() == "parts/esp32-s3-wroom-1");
+        JsonElement oRoot = oDoc.RootElement;
 
-        Assert.Equal(18.0, oPart.GetProperty("envelope_mm").GetProperty("x").GetDouble());
-        Assert.False(string.IsNullOrWhiteSpace(oPart.GetProperty("citation").GetString()));
+        Assert.Equal("OpenPartsCore", oRoot.GetProperty("registry").GetProperty("repo").GetString());
+
+        JsonElement oPart = Assert.Single(
+            oRoot.GetProperty("offered").EnumerateArray(),
+            o => o.GetProperty("id").GetString() == TestRegistry.StrFixtureId);
+        Assert.Equal(TestRegistry.FX, oPart.GetProperty("envelope_mm").GetProperty("x").GetDouble());
+        Assert.False(string.IsNullOrWhiteSpace(oPart.GetProperty("envelope_citation").GetString()));
+
+        JsonElement oUnoffered = Assert.Single(oRoot.GetProperty("not_offered").EnumerateArray());
+        Assert.Equal(TestRegistry.StrUnofferedId, oUnoffered.GetProperty("id").GetString());
+        Assert.Contains("no envelope_mm", oUnoffered.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public void RunEnclosure_RefusesAnUnofferedPartWithItsReason()
+    {
+        UseFixtureRegistry();
+        McpGuardException oEx = Assert.Throws<McpGuardException>(
+            () => OdcTools.RunEnclosure(TestRegistry.StrUnofferedId, voxelMm: 0.5));
+        Assert.Contains("not offered", oEx.Message);
+        Assert.Contains("list_parts", oEx.Message);
     }
 
     [Fact]
     public void RunEnclosure_RefusesVoxelSizeFinerThanTheMcpLimit()
     {
-        Environment.SetEnvironmentVariable("ODC_ROOT", StrRepoRoot());
+        UseFixtureRegistry();
         McpGuardException oEx = Assert.Throws<McpGuardException>(
-            () => OdcTools.RunEnclosure("parts/esp32-s3-wroom-1", voxelMm: 0.001));
+            () => OdcTools.RunEnclosure(TestRegistry.StrFixtureId, voxelMm: 0.001));
         Assert.Contains("finer than the MCP limit", oEx.Message);
     }
 

@@ -69,8 +69,10 @@ Same inputs, same voxel size, same pinned versions → byte-identical outputs.
 Four kinds of state, four stores, matched to requirement rather than to product. See ADR-0006.
 
 ```
-  data/          git-tracked TOML/JSON — materials, process constraints, model definitions
+  data/          git-tracked JSON — materials and process constraints this engine measures
                  schema-validated on load; every value carries a citation
+  ../OpenPartsCore/data/   parts, read at run time (ADR-0016) — never copied here; only
+                 entries with a cited envelope_mm are offered, the rest are named as not offered
   ledger.db      SQLite — append-only run and provenance records, written by code only
   artifacts/     content-addressed files — VDB fields, meshes, exports; hash-referenced
   wiki/          LLM Wiki pattern — engineering knowledge, rationale, ingested literature

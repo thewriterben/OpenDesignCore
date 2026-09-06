@@ -7,23 +7,33 @@ using OpenDesignCore.Verification;
 
 // Commands:
 //   (none)                      print tool + pinned-stack versions
-//   validate-data [dir]         load and validate the reference data store (default: ./data)
+//   validate-data [dir] [--parts <dir>]
+//                               load and validate the reference data store (default: ./data)
+//                               and the OpenPartsCore registry it reads parts from (ADR-0016)
 //   run-enclosure [options]     run the thin-thread enclosure model
-//     --part <id>               part id (default: parts/esp32-s3-wroom-1)
+//     --part <id>               OpenPartsCore id (default: electronic/esp32-s3-wroom-1)
 //     --voxel-mm <v>            voxel size in mm, required, no default (ADR-0003)
 //     --clearance-mm <v>        cavity clearance per side (default: 0.30)
 //     --wall-mm <v>             wall/floor thickness (default: 2.40)
 //     --data <dir>              data directory (default: data)
+//     --parts <dir>             OpenPartsCore checkout (default: $ODC_OPENPARTSCORE, else ../OpenPartsCore)
 //     --artifacts <dir>         artifact store (default: artifacts)
 //     --ledger <path>           ledger database (default: ledger.db)
 
 if (args is ["validate-data", .. string[] aRest])
 {
-    string strDataDir = aRest is [string strDir, ..] ? strDir : "data";
+    string strDataDir = aRest is [string strDir, ..] && !strDir.StartsWith("--", StringComparison.Ordinal) ? strDir : "data";
+    int nParts = Array.IndexOf(aRest, "--parts");
+    string strPartsDir = nParts >= 0 && nParts + 1 < aRest.Length
+        ? aRest[nParts + 1]
+        : PartsRegistry.StrResolveDir(Environment.CurrentDirectory);
     try
     {
-        DataSet oData = DataStore.LoadAll(strDataDir);
-        Console.WriteLine($"OK: {oData.Parts.Count} part(s), {oData.Materials.Count} material(s), all cited.");
+        DataSet oData = DataStore.LoadAll(strDataDir, strPartsDir);
+        Console.WriteLine(
+            $"OK: {oData.Parts.Count} part(s) with a cited envelope, {oData.UnofferedParts.Count} without " +
+            $"(from {oData.PartsRegistryDir} @ {oData.PartsRegistryCommit}); " +
+            $"{oData.Materials.Count} material(s), all cited.");
         return 0;
     }
     catch (DataValidationException e)
@@ -64,7 +74,8 @@ if (args is ["run-enclosure", ..])
     {
         EnclosureRunResult oResult = EnclosureRun.Execute(
             strDataDir: oOpts.GetValueOrDefault("data", "data"),
-            strPartId: oOpts.GetValueOrDefault("part", "parts/esp32-s3-wroom-1"),
+            strPartsRegistryDir: oOpts.GetValueOrDefault("parts", PartsRegistry.StrResolveDir(Environment.CurrentDirectory)),
+            strPartId: oOpts.GetValueOrDefault("part", "electronic/esp32-s3-wroom-1"),
             fVoxelSizeMm: fVoxelMm,
             fClearanceMm: FOpt("clearance-mm", 0.30f),
             fWallMm: FOpt("wall-mm", 2.40f),

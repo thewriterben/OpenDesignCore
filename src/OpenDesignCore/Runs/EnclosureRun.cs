@@ -29,6 +29,7 @@ public static class EnclosureRun
 
     public static EnclosureRunResult Execute(
         string strDataDir,
+        string strPartsRegistryDir,
         string strPartId,
         float fVoxelSizeMm,
         float fClearanceMm,
@@ -37,11 +38,16 @@ public static class EnclosureRun
         string strLedgerPath,
         string strCommit)
     {
-        DataSet oData = DataStore.LoadAll(strDataDir);
-        PartEntry oPart = oData.Parts.FirstOrDefault(o => o.Id == strPartId)
-            ?? throw new ArgumentException(
-                $"Part '{strPartId}' not found in {strDataDir}. Known: " +
-                string.Join(", ", oData.Parts.Select(o => o.Id)));
+        DataSet oData = DataStore.LoadAll(strDataDir, strPartsRegistryDir);
+        PartEntry? oPart = oData.Parts.FirstOrDefault(o => o.Id == strPartId);
+        if (oPart is null)
+        {
+            UnofferedPart? oUnoffered = oData.UnofferedParts.FirstOrDefault(o => o.Id == strPartId);
+            throw new ArgumentException(oUnoffered is not null
+                ? $"Part '{strPartId}' exists in {oData.PartsRegistryDir} but is not offered: {oUnoffered.Reason}."
+                : $"Part '{strPartId}' not found in {oData.PartsRegistryDir}. Offered: " +
+                  string.Join(", ", oData.Parts.Select(o => o.Id)));
+        }
 
         EnclosureShellParams oParams = new()
         {
@@ -80,7 +86,12 @@ public static class EnclosureRun
 
         Dictionary<string, object?> oSidecar = new()
         {
-            ["schema"] = "odc/provenance/0.2",
+            // 0.3: parts come from OpenPartsCore (ADR-0016). `part_registry`
+            // pins where the envelope was read from — the checkout's commit
+            // (or "unresolved") and the entry file's own hash, which pins the
+            // content even when the working tree is dirty. `part_envelope_citation`
+            // is the envelope's citation, not the entry's (OpenPartsCore ADR-0006).
+            ["schema"] = "odc/provenance/0.3",
             ["model"] = EnclosureShellModel.StrModelId,
             ["voxel_size_mm"] = StrMm(fVoxelSizeMm),
             ["inputs"] = new Dictionary<string, object?>
@@ -92,7 +103,13 @@ public static class EnclosureRun
                     ["y"] = StrMm(oPart.EnvelopeMm.Y),
                     ["z"] = StrMm(oPart.EnvelopeMm.Z),
                 },
-                ["part_source_citation"] = oPart.Source.Citation,
+                ["part_envelope_citation"] = oPart.Source.Citation,
+                ["part_registry"] = new Dictionary<string, object?>
+                {
+                    ["repo"] = "OpenPartsCore",
+                    ["commit"] = oData.PartsRegistryCommit,
+                    ["file_sha256"] = oPart.FileSha256,
+                },
                 ["clearance_mm"] = StrMm(fClearanceMm),
                 ["wall_mm"] = StrMm(fWallMm),
             },

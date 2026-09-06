@@ -461,3 +461,22 @@ Known answer, from the print that motivated it: mean Z deviation 0.045 mm under 
 reading spread → refused, naming the surface. The Z number itself still waits on a profile that
 can hold a flat top face; what changed is that the tool now says so without a human noticing it
 first.
+
+## [2026-09-06] decision | ADR-0016: parts read from OpenPartsCore, `data/parts/` deleted
+
+The thin thread's "registry component → enclosure" had run only around one module hand-copied
+into a private store, because the registry carried no dimensions. OpenPartsCore ADR-0006 (same
+day) gives an entry an optional `envelope_mm` with a citation of its own, preserved across
+re-ingest; this repo now reads it (`ODC_OPENPARTSCORE` or `../OpenPartsCore`), offers only
+entries that have one, and names the rest as not offered. Enclosure sidecars are
+`odc/provenance/0.3`: registry commit (read from `.git`, `"unresolved"` if none), entry file
+sha256, and the envelope's own citation.
+
+Known answer: run 40, an enclosure around `boards/dfrobot-firebeetle2-esp32s3` — 30.90 × 66.87 ×
+11.15 mm from a 25.5 × 61.47 × 8.45 mm bounding box of DFRobot's STEP model (hash in the
+citation). Nobody typed the envelope. 157 tests, build 0/0, format clean.
+
+Two corrections to the previous day's survey (`ODC-INTEGRATION.md`), found by reading the files:
+walkthrough run 10 was a *cradle* around OpenCircuitCore's board STL, not an envelope enclosure;
+and that board is not the benchtop body's board. Its option 2 (ship run 10's sidecar with the
+benchtop body) is dropped — it would have been a provenance record claiming a fit it never had.
