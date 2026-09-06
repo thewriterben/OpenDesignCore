@@ -80,7 +80,9 @@ internal static class TestRegistry
     /// </summary>
     public static string? StrSiblingRegistryOrNull()
     {
-        string strDir = Path.GetFullPath(Path.Combine(StrRepoRoot(), "..", "OpenPartsCore"));
+        // Same resolution the engine uses: the env var (which is how CI
+        // supplies a checkout that cannot be a sibling), else ../OpenPartsCore.
+        string strDir = OpenDesignCore.Data.PartsRegistry.StrResolveDir(StrRepoRoot());
         return Directory.Exists(Path.Combine(strDir, "data")) ? strDir : null;
     }
 }
