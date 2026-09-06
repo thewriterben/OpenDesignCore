@@ -17,6 +17,13 @@ jobs:
     # machine this project is developed on.
     runs-on: windows-latest
 
+    env:
+      # Parts come from OpenPartsCore at run time (ADR-0016); every step that
+      # loads data needs to find the checkout below — the tests, and the
+      # Determinism run-enclosure that failed on the first push after ADR-0016
+      # because this was set on the Test step alone.
+      ODC_OPENPARTSCORE: ${{ github.workspace }}/OpenPartsCore
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,8 +65,6 @@ jobs:
         run: dotnet format OpenDesignCore.sln --verify-no-changes --exclude external
 
       - name: Test
-        env:
-          ODC_OPENPARTSCORE: ${{ github.workspace }}/OpenPartsCore
         run: dotnet test OpenDesignCore.sln -c Release --no-build
 
       # Reference cases report their measured deviation even when they pass
