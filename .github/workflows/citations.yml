@@ -38,7 +38,20 @@ jobs:
           # submodule is upstream's to keep alive, not ours.
           submodules: false
 
-      - name: Build citation index from data/
+      # Parts are read from OpenPartsCore at run time (ADR-0016), so the
+      # citations a model run depends on live in that checkout as much as in
+      # data/. Check them here: a rotted datasheet link upstream grounds a
+      # number this engine builds around. `main`, not a pinned SHA — the
+      # engine records which registry commit each run used in its sidecar,
+      # and this job asks whether the current registry still resolves.
+      - uses: actions/checkout@v4
+        with:
+          repository: thewriterben/OpenPartsCore
+          ref: main
+          path: OpenPartsCore
+          submodules: false
+
+      - name: Build citation index from data/ and the OpenPartsCore registry
         run: |
           set -euo pipefail
           {
@@ -59,13 +72,26 @@ jobs:
             ' "$f" >> .citations.md
           done < <(find data -name '*.json' -print0 | sort -z)
 
+          # From the registry, only what this engine consumes: the envelope
+          # and its own source (OpenPartsCore ADR-0006). The rest of an entry
+          # is upstream's to keep alive; a rotted footprint link on a resistor
+          # is not a number this engine builds around.
+          while IFS= read -r -d '' f; do
+            jq -r --arg f "$f" '
+              select(has("envelope_mm"))
+              | [.envelope_mm | .. | objects | select(has("url")) | .url]
+              | unique[]
+              | "- [\($f)](\(.))"
+            ' "$f" >> .citations.md
+          done < <(find OpenPartsCore/data -name '*.json' -print0 | sort -z)
+
           echo "--- .citations.md ---"
           cat .citations.md
 
           if ! grep -q '^- \[' .citations.md; then
-            echo "No citation URLs found under data/. Either the data store is"
-            echo "empty or the extraction broke — failing rather than passing"
-            echo "a check that checked nothing."
+            echo "No citation URLs found under data/ or OpenPartsCore/data/."
+            echo "Either both stores are empty or the extraction broke —"
+            echo "failing rather than passing a check that checked nothing."
             exit 1
           fi
 
@@ -83,6 +109,7 @@ jobs:
             --retry-wait-time 5
             --exclude-path external
             --exclude-path .git
+            --exclude-path OpenPartsCore
             './.citations.md'
             './*.md'
             './wiki/**/*.md'

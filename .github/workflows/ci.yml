@@ -24,6 +24,18 @@ jobs:
           # StrGitCommit() reads the checked-out commit into provenance.
           fetch-depth: 0
 
+      # Parts come from OpenPartsCore at run time (ADR-0016). Without this
+      # checkout the tests that read the real registry return early and the
+      # suite is green while checking less than it says. `main` rather than a
+      # pinned SHA: the engine records the registry commit it used in every
+      # sidecar, and CI should tell us when the current registry breaks us.
+      - uses: actions/checkout@v4
+        with:
+          repository: thewriterben/OpenPartsCore
+          ref: main
+          path: OpenPartsCore
+          submodules: false
+
       - uses: actions/setup-dotnet@v4
         with:
           # Built with the 10.x SDK, targeting net9.0 (ADR-0008). The 9.0
@@ -46,6 +58,8 @@ jobs:
         run: dotnet format OpenDesignCore.sln --verify-no-changes --exclude external
 
       - name: Test
+        env:
+          ODC_OPENPARTSCORE: ${{ github.workspace }}/OpenPartsCore
         run: dotnet test OpenDesignCore.sln -c Release --no-build
 
       # Reference cases report their measured deviation even when they pass
