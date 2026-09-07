@@ -509,3 +509,14 @@ blocks on it (Blender Lab #42 / PR #48; fixed here in `OMeasure` with a closed r
 (2) `ODC_OPENPARTSCORE` is process-global, and xunit ran the fixture-registry MCP tests beside
 the shipped-registry DataStore tests — one class saw the other's registry. Every env-touching
 test class is now in one serialised collection.
+
+## [2026-09-07] finding | Every MCP refusal had been arriving as one sentence
+
+Driving `verify_artifact` from the live agent failed with "An error occurred invoking
+'verify_artifact'" — and so, it turned out, had every refusal this surface ever made: the SDK
+copies only an `McpException`'s message into the error result. `McpGuardException` now derives
+from it; two in-process protocol tests pin what a client reads. The live run that followed is the
+justification: qwen3:14b issued `verify_artifact` in the same turn as `run_enclosure` with an
+invented run id, read "run 1 not found", and called again with the real id — verification 68 over
+run 67, passed. A refusal a model can read is one it can recover from; one it cannot read ends the
+loop.
