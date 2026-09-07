@@ -27,6 +27,12 @@ Not used: `thewriterben/leap71ODC` is a fork of `leap71/leap71`, the organisatio
 | Microsoft.NET.Test.Sdk (tests only) | `[17.11.1]` | MIT | Test host |
 | xunit + xunit.runner.visualstudio (tests only) | `[2.9.2]` / `[2.8.2]` | Apache-2.0 | Test framework; reference tests are a repo invariant |
 
+## External processes (invoked, never linked)
+
+| Tool | Version seen | License | How consumed |
+|---|---|---|---|
+| Blender | 5.2.1 LTS (`ODC_BLENDER` / `--blender`) | GPL-3.0-or-later | `verify-artifact` spawns `blender --background --factory-startup --python <embedded script>` and reads one JSON line from its stdout (ADR-0017). Optional: absent means the command skips with exit 3. No Blender code is linked, vendored or imported, so its licence does not reach this repo. The embedded script's hash is in every record. |
+
 ## External catalogues (referenced, not consumed)
 
 | Catalogue | Pinned | License | How consumed |

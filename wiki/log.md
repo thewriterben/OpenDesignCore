@@ -480,3 +480,16 @@ Two corrections to the previous day's survey (`ODC-INTEGRATION.md`), found by re
 walkthrough run 10 was a *cradle* around OpenCircuitCore's board STL, not an envelope enclosure;
 and that board is not the benchtop body's board. Its option 2 (ship run 10's sidecar with the
 benchtop body) is dropped — it would have been a provenance record claiming a fit it never had.
+
+## [2026-09-07] decision | ADR-0017: verify-artifact — Blender as a second kernel
+
+Every sidecar number was measured by the kernel that made the artifact. `verify-artifact`
+runs Blender 5.2 headless over a run's STL (embedded, hashed script; no render, no save),
+compares extents, signed volume and manifoldness to the sidecar's claims against explicit
+tolerances, and records `odc/verification/0.1` + a ledger row. Bbox tolerance defaults to
+2 × voxel and says so; volume tolerance is required. No Blender → skipped, exit 3.
+
+Known answer: verification 52 over run 50 — bbox agrees to the hundredth, volume
+8843.81 vs 8854.27 (+0.12 %, a voxel shell at 0.3 mm), watertight. Trap recorded:
+Blender 5.2's `stl_import(global_scale=…)` accepts and ignores the argument; the script
+reads the extent and treats 1 unit = 1 mm.
