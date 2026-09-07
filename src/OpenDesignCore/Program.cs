@@ -593,6 +593,86 @@ if (args is ["handoff", ..])
     }
 }
 
+if (args is ["verify-artifact", ..])
+{
+    // Second opinion on a run's sidecar from Blender's mesh kernel (ADR-0017).
+    //   --run <id>               ledger run id of an STL-producing run (required)
+    //   --blender <exe>          Blender executable (default: $ODC_BLENDER); absent → skipped, exit 3
+    //   --volume-tol-pct <v>     required, no default: a default percentage is a number nobody measured
+    //   --bbox-tol-mm <v>        default 2 x the run's voxel size, recorded with that derivation
+    //   --artifacts / --ledger   as for run-enclosure
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+    if (!oOpts.TryGetValue("run", out string? strRun) || !long.TryParse(strRun, out long nRunId))
+    {
+        Console.Error.WriteLine("--run <ledger run id> is required.");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("volume-tol-pct", out string? strVolTol)
+        || !double.TryParse(strVolTol, System.Globalization.CultureInfo.InvariantCulture, out double fVolTol))
+    {
+        Console.Error.WriteLine(
+            "--volume-tol-pct is required and takes no default: two kernels count volume " +
+            "differently by about a voxel shell, and how much of that you accept is a " +
+            "decision, not a constant.");
+        return 2;
+    }
+    double? fBboxTol = null;
+    if (oOpts.TryGetValue("bbox-tol-mm", out string? strBboxTol))
+    {
+        if (!double.TryParse(strBboxTol, System.Globalization.CultureInfo.InvariantCulture, out double f))
+        {
+            Console.Error.WriteLine("--bbox-tol-mm must be a number.");
+            return 2;
+        }
+        fBboxTol = f;
+    }
+    string? strBlender = oOpts.GetValueOrDefault("blender") ?? Environment.GetEnvironmentVariable("ODC_BLENDER");
+    if (string.IsNullOrWhiteSpace(strBlender) || !File.Exists(strBlender))
+    {
+        // Skipped is honest; it is not a pass, and it writes no record.
+        Console.Error.WriteLine(
+            $"verify-artifact SKIPPED: no Blender at '{strBlender ?? "(unset)"}'. " +
+            "Pass --blender <exe> or set ODC_BLENDER. No verification record was written.");
+        return 3;
+    }
+
+    try
+    {
+        CrossCheckResult oResult = BlenderCrossCheck.Execute(
+            strArtifactsDir: oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            strLedgerPath: oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            nRunId: nRunId,
+            strBlenderExe: strBlender,
+            fVolumeTolPct: fVolTol,
+            fBboxTolMm: fBboxTol,
+            strCommit: StrGitCommit());
+
+        Console.WriteLine($"verification {oResult.VerificationRunId}: {(oResult.Passed ? "AGREES" : "DISAGREES")}  (Blender {oResult.Measurement.BlenderVersion})");
+        foreach (ClaimCheck c in oResult.Claims)
+        {
+            string strTol = c.ToleranceKind == "pct" ? $"{c.Tolerance:F3} %" : $"{c.Tolerance:F3} mm";
+            Console.WriteLine($"  {(c.Agrees ? "ok  " : "FAIL")} {c.Claim,-16} sidecar {c.Sidecar,10:F3}  blender {c.Blender,10:F3}  delta {c.Delta,8:F3}  tol {strTol}");
+        }
+        Console.WriteLine($"  {(oResult.Manifold ? "ok  " : "FAIL")} watertight        non-manifold {oResult.Measurement.NonManifoldEdges}, boundary {oResult.Measurement.BoundaryEdges}");
+        Console.WriteLine($"  record     sha256:{oResult.RecordSha256}");
+        return oResult.Passed ? 0 : 1;
+    }
+    catch (CrossCheckException e)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 string strTool = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
 string strPicoGK = typeof(PicoGK.Library).Assembly.GetName().Version?.ToString() ?? "unknown";
 
