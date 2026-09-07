@@ -8,6 +8,17 @@ using OpenDesignCore.Mcp;
 // artifacts/, and ledger.db are resolved beneath it.
 //
 // Logs go to stderr: stdout is the protocol channel.
+//
+// So does everything else that would have gone to Console.Out. PicoGK's
+// Library.Dispose writes "Disposing Library" / "Done Disposing Library" to the
+// console — cosmetic in the CLI, fatal here: it landed between two JSON-RPC
+// frames during run_enclosure and a strict client (Oh-Ben-Claw, 2026-09-06)
+// reported "unparseable MCP frame" and lost the stream for good. The SDK's
+// stdio transport writes to the raw standard-output stream, not Console.Out,
+// so redirecting Console.Out to stderr moves the noise without touching the
+// protocol. Verified by list_parts and run_enclosure through the redirected
+// process.
+Console.SetOut(Console.Error);
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
