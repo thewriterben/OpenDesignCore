@@ -55,9 +55,18 @@ public sealed class OdcTools
     });
 
     [McpServerTool(Name = "list_parts")]
-    [Description("List parts from the OpenPartsCore registry. `offered` entries carry a cited envelope in mm and can be passed to run_enclosure; `not_offered` entries exist in the registry but have no cited dimensions, and are listed so that absence is visible rather than silent.")]
-    public static string ListParts()
+    [Description("List parts from the OpenPartsCore registry. `offered` entries carry a cited envelope in mm and can be passed to run_enclosure. `not_offered` is the ids of entries that exist in the registry but have no cited dimensions, so absence is visible rather than silent; pass includeReasons=true to get each one's reason.")]
+    public static string ListParts(
+        [Description("Include the reason each not-offered entry is not offered (default false: ids only).")] bool includeReasons = false,
+        [Description("Include the full envelope citation for offered parts (default false: a 200-character excerpt).")] bool fullCitations = false)
     {
+        // Sized for an 8k-token model context (2026-09-06). The first shape of this
+        // answer carried every not-offered entry with its reason and every citation in
+        // full: ~4.9k tokens for a 104-entry registry. Fine for a harness with three tool
+        // schemas; inside the live agent, with twenty-seven schemas and a world-state
+        // block, it pushed the conversation past the context and the model stopped
+        // after this call instead of going on to run_enclosure. Absence stays visible
+        // — the count and the ids are always here — but the prose is opt-in.
         DataSet oData = DataStore.LoadAll(StrDataDir, StrPartsDir);
         return StrJson(new
         {
@@ -68,9 +77,15 @@ public sealed class OdcTools
                 name = o.Name,
                 envelope_mm = new { x = o.EnvelopeMm.X, y = o.EnvelopeMm.Y, z = o.EnvelopeMm.Z },
                 tolerance_mm = o.ToleranceMm,
-                envelope_citation = o.Source.Citation,
+                envelope_citation = fullCitations || o.Source.Citation.Length <= 200
+                    ? o.Source.Citation
+                    : o.Source.Citation[..200] + "… (fullCitations=true for the rest)",
             }),
-            not_offered = oData.UnofferedParts.Select(o => new { id = o.Id, reason = o.Reason }),
+            not_offered_count = oData.UnofferedParts.Count,
+            not_offered = includeReasons
+                ? oData.UnofferedParts.Select(o => (object)new { id = o.Id, reason = o.Reason })
+                : oData.UnofferedParts.Select(o => (object)o.Id),
+            not_offered_reason = includeReasons ? null : "no envelope_mm in the registry (absent means unknown); includeReasons=true for each entry",
         });
     }
 

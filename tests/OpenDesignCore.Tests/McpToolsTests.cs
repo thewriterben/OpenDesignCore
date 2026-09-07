@@ -71,9 +71,28 @@ public sealed class McpToolsTests : IDisposable
         Assert.Equal(TestRegistry.FX, oPart.GetProperty("envelope_mm").GetProperty("x").GetDouble());
         Assert.False(string.IsNullOrWhiteSpace(oPart.GetProperty("envelope_citation").GetString()));
 
+        // Compact by default: ids only, with the count and the one shared reason.
+        Assert.Equal(1, oRoot.GetProperty("not_offered_count").GetInt32());
+        JsonElement oUnoffered = Assert.Single(oRoot.GetProperty("not_offered").EnumerateArray());
+        Assert.Equal(TestRegistry.StrUnofferedId, oUnoffered.GetString());
+        Assert.Contains("includeReasons", oRoot.GetProperty("not_offered_reason").GetString());
+    }
+
+    /// <summary>
+    /// The verbose shape is opt-in. The first shape of list_parts was ~4.9k tokens
+    /// for the shipped registry and pushed an 8k-context agent past its window.
+    /// </summary>
+    [Fact]
+    public void ListParts_ReasonsAndFullCitationsAreOptIn()
+    {
+        UseFixtureRegistry();
+
+        using JsonDocument oDoc = JsonDocument.Parse(OdcTools.ListParts(includeReasons: true, fullCitations: true));
+        JsonElement oRoot = oDoc.RootElement;
         JsonElement oUnoffered = Assert.Single(oRoot.GetProperty("not_offered").EnumerateArray());
         Assert.Equal(TestRegistry.StrUnofferedId, oUnoffered.GetProperty("id").GetString());
         Assert.Contains("no envelope_mm", oUnoffered.GetProperty("reason").GetString());
+        Assert.Equal(JsonValueKind.Null, oRoot.GetProperty("not_offered_reason").ValueKind);
     }
 
     [Fact]
