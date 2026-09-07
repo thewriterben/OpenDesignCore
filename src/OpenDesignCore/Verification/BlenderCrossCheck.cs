@@ -236,6 +236,12 @@ public static class BlenderCrossCheck
         {
             ProcessStartInfo oPsi = new(strBlenderExe)
             {
+                // stdin is redirected and closed at once. Left inherited, Blender
+                // blocks on it when our own stdin is a pipe nobody closes -- which
+                // is exactly what an MCP host's stdin is. Same failure as the
+                // Blender Lab server's *_for_cli tools (found 2026-09-06) and as
+                // Oh-Ben-Claw's shell tool before Stdio::null().
+                RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -245,8 +251,12 @@ public static class BlenderCrossCheck
 
             using Process oProc = Process.Start(oPsi)
                 ?? throw new CrossCheckException("could not start Blender");
+            oProc.StandardInput.Close();
+            // stderr is drained concurrently so a chatty Blender cannot fill the
+            // pipe and deadlock against our sequential stdout read.
+            Task<string> oErrTask = oProc.StandardError.ReadToEndAsync();
             string strOut = oProc.StandardOutput.ReadToEnd();
-            string strErr = oProc.StandardError.ReadToEnd();
+            string strErr = oErrTask.GetAwaiter().GetResult();
             if (!oProc.WaitForExit((int)oTimeout.TotalMilliseconds))
             {
                 oProc.Kill(entireProcessTree: true);
