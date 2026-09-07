@@ -11,6 +11,7 @@ namespace OpenDesignCore.Tests;
 /// End-to-end thin-thread tests. These exercise the native PicoGK runtime
 /// (bundled in the NuGet package) headlessly via a scoped Library instance.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.StrName)]
 public sealed class EnclosureRunTests : IDisposable
 {
     private readonly string _strTempDir =

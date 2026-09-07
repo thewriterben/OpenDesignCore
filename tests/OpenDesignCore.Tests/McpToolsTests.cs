@@ -9,6 +9,7 @@ namespace OpenDesignCore.Tests;
 /// The tool methods and their guards. Transport is the SDK's business; what is
 /// ours is what the tools accept, refuse, and return.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.StrName)]
 public sealed class McpToolsTests : IDisposable
 {
     private readonly string _strPrevRoot = Environment.GetEnvironmentVariable("ODC_ROOT") ?? "";

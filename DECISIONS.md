@@ -449,3 +449,25 @@ Tolerances are parameters, not constants (project rule). The bounding-box tolera
 Blender absent means **skipped, exit 3, nothing written** — the same rule as a peer test with no peer checkout. A skip is not a pass and it is not silent.
 
 **Consequences.** Blender becomes an optional external process (DEPENDENCIES.md: GPL-3.0, invoked over stdio, never linked; its licence does not reach this repo). The artifact is never modified; disagreement is a record, and what to do about it is a person's call. Only STL artifacts are covered — the cross-check reads what Blender can import. It is not on the MCP surface: this is a human-run check on a run that already exists, and an agent that could verify its own output with a tolerance it chose would be laundering, not verifying. The first record is verification 52 over run 50, all claims agreeing. Thumbnails (BLENDER-INTEGRATION.md option 2) are deliberately not part of this: a record of numbers and a record of pixels are different claims.
+
+## ADR-0018 — The agent may ask for a second opinion; it may not set the bar
+
+**Date:** 2026-09-07
+**Status:** accepted — amends ADR-0017's "not on the MCP surface"
+
+**Context.** ADR-0017 kept `verify-artifact` off the MCP surface with one argument: an agent that could verify its own output with a tolerance it chose would be laundering, not verifying. The argument is about *who picks the tolerance*, not about who presses the button. Meanwhile the local model now drives `list_parts → run_enclosure` end to end (ODC-INTEGRATION.md option 5, Oh-Ben-Claw `[[mcp.servers]]`), and every artifact it produces goes unverified unless a person remembers to run the CLI afterwards. A cross-check that exists only when someone remembers is a cross-check most artifacts never get.
+
+The precondition for spawning Blender from an MCP host is the stdin fix (PR #25): a stdio server's child inherits the JSON-RPC pipe and blocks. Without that this ADR could not be honest about working.
+
+**Options.**
+
+1. Leave it off. ADR-0017 stands; verification stays a human act. Costs every unattended artifact its record.
+2. Expose `verify_artifact(runId)` with tolerances as parameters. Exactly the laundering ADR-0017 refused: the agent retries with a looser number until `passed` is true, and the record shows a tolerance nobody with judgement chose.
+3. Expose `verify_artifact(runId)` with tolerances **pinned by the operator** in the server's environment (`ODC_VERIFY_VOLUME_TOL_PCT`, required; `ODC_VERIFY_BBOX_TOL_MM`, optional, else 2 × voxel as before). The agent can request the measurement; it cannot vary the bar, and the record says so in `volume_tolerance_source` / `bbox_tolerance_source`: *declared by the operator (server environment); not choosable by the caller*.
+4. Read-only: list existing verification records over MCP. Honest, useless for unattended runs.
+
+**Decision.** Option 3. The tool lives in its own type (`OdcVerifyTools`) and is **registered only when** `ODC_BLENDER` points at a file and `ODC_VERIFY_VOLUME_TOL_PCT` parses — the server logs why when it does not. An agent is never shown a tool it cannot call, and "not configured" is an absent tool rather than a tool that refuses, so it costs nothing in every model's context. There is still no default volume tolerance anywhere: an unset operator value means no tool, not a guessed number.
+
+The tool's signature is `(runId)` and a test asserts exactly that, so adding a tolerance parameter later is a deliberate act against a named alarm, not a drift.
+
+**Consequences.** ADR-0017's reasoning survives intact — the tolerance is chosen by a person with the machine in front of them, once, and recorded per run as theirs. What changes is that the person chooses it in advance rather than at each run. A failed check is recorded and returned with the instruction not to re-run for a different answer; the inputs are the same and so would be the record. The CLI path is unchanged and still says *declared by the caller*. Operators who do not want agents triggering Blender at all leave the variable unset. Thumbnails remain out of scope, for ADR-0017's reason.

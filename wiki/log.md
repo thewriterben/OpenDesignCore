@@ -493,3 +493,19 @@ Known answer: verification 52 over run 50 — bbox agrees to the hundredth, volu
 8843.81 vs 8854.27 (+0.12 %, a voxel shell at 0.3 mm), watertight. Trap recorded:
 Blender 5.2's `stl_import(global_scale=…)` accepts and ignores the argument; the script
 reads the extent and treats 1 unit = 1 mm.
+
+## [2026-09-07] decision | ADR-0018: verify_artifact on MCP, tolerances pinned by the operator
+
+ADR-0017 kept verification off the MCP surface because an agent choosing its own
+tolerance would be laundering. The tolerance is the point, not the button: `verify_artifact(runId)`
+now exists over MCP, but `ODC_VERIFY_VOLUME_TOL_PCT` / `ODC_VERIFY_BBOX_TOL_MM` come from the
+server's environment, the record's `*_tolerance_source` names the operator, and the tool is not
+registered at all when they (or `ODC_BLENDER`) are absent. A test pins the signature to `(runId)`.
+Probe over stdio: 7 tools unconfigured, 8 configured; verification 56 over run 50 in 2.3 s; a
+smuggled `volumeTolPct=50` is ignored and the record still says 1 %.
+
+Two traps: (1) a stdio MCP host's children inherit its stdin — the JSON-RPC pipe — and Blender
+blocks on it (Blender Lab #42 / PR #48; fixed here in `OMeasure` with a closed redirected stdin);
+(2) `ODC_OPENPARTSCORE` is process-global, and xunit ran the fixture-registry MCP tests beside
+the shipped-registry DataStore tests — one class saw the other's registry. Every env-touching
+test class is now in one serialised collection.

@@ -10,6 +10,7 @@ namespace OpenDesignCore.Tests;
 /// test against the real thing that returns early when Blender is not installed —
 /// the repo's convention for checks that need a neighbour.
 /// </summary>
+[Collection(ProcessEnvironmentCollection.StrName)]
 public sealed class BlenderCrossCheckTests
 {
     // Run 50 (2026-09-07): the FireBeetle 2 tray, voxel 0.30 mm. Sidecar and

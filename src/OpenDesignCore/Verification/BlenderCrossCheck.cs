@@ -110,6 +110,14 @@ public static class BlenderCrossCheck
 {
     public const string StrModelId = "blender-crosscheck/0.1";
     public const string StrSchema = "odc/verification/0.1";
+
+    /// <summary>
+    /// Who set a tolerance is part of the record (ADR-0018). The CLI's caller
+    /// declares it per invocation; over MCP it is pinned by the operator's
+    /// environment and the agent cannot vary it.
+    /// </summary>
+    public const string StrDeclaredByCaller = "declared by the caller";
+    public const string StrDeclaredByOperator = "declared by the operator (server environment); not choosable by the caller";
     private const string StrResultPrefix = "__ODC_RESULT__";
     private const string StrErrorPrefix = "__ODC_ERROR__";
 
@@ -162,7 +170,8 @@ public static class BlenderCrossCheck
         double fVolumeTolPct,
         string strBlenderExe,
         string strScriptSha256,
-        string strCommit)
+        string strCommit,
+        string strVolumeTolSource = StrDeclaredByCaller)
     {
         bool bManifold = BManifold(oMeasured);
         bool bPassed = bManifold && aClaims.All(c => c.Agrees);
@@ -178,7 +187,7 @@ public static class BlenderCrossCheck
                 ["bbox_tolerance_mm"] = StrF3(fBboxTolMm),
                 ["bbox_tolerance_source"] = strBboxTolSource,
                 ["volume_tolerance_pct"] = StrF3(fVolumeTolPct),
-                ["volume_tolerance_source"] = "declared by the caller",
+                ["volume_tolerance_source"] = strVolumeTolSource,
                 ["blender_exe"] = strBlenderExe,
                 ["measure_script_sha256"] = strScriptSha256,
             },
@@ -288,7 +297,8 @@ public static class BlenderCrossCheck
         string strBlenderExe,
         double fVolumeTolPct,
         double? fBboxTolMm,
-        string strCommit)
+        string strCommit,
+        string strTolSource = StrDeclaredByCaller)
     {
         using Ledger oLedger = new(strLedgerPath);
         RunRecord oRun = oLedger.ORunById(nRunId)
@@ -315,7 +325,7 @@ public static class BlenderCrossCheck
         if (fBboxTolMm is double f)
         {
             fBboxTol = f;
-            strBboxTolSource = "declared by the caller";
+            strBboxTolSource = strTolSource;
         }
         else
         {
@@ -327,7 +337,7 @@ public static class BlenderCrossCheck
         (_, string strScriptSha) = MeasureScript();
         Dictionary<string, object?> oRecord = OBuildRecord(
             nRunId, oClaims, oRun.ProvenanceSha256, oMeasured, aClaims,
-            fBboxTol, strBboxTolSource, fVolumeTolPct, strBlenderExe, strScriptSha, strCommit);
+            fBboxTol, strBboxTolSource, fVolumeTolPct, strBlenderExe, strScriptSha, strCommit, strTolSource);
 
         byte[] abRecord = CanonicalJson.Serialize(oRecord);
         string strRecordHash = ArtifactStore.StrStore(strArtifactsDir, abRecord, ".verification.json");

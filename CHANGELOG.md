@@ -4,6 +4,9 @@ Format: [Keep a Changelog](https://keepachangelog.com). Versioning: [SemVer](htt
 
 ## [Unreleased]
 
+### Added
+- **`verify_artifact` on the MCP surface — with the bar set by the operator, not the caller** (ADR-0018, amending ADR-0017). `verify_artifact(runId)` runs the Blender cross-check over a recorded run and returns the per-claim verdicts and record hash. It takes no tolerance parameters and a test asserts the signature: `ODC_VERIFY_VOLUME_TOL_PCT` (required) and `ODC_VERIFY_BBOX_TOL_MM` (optional, else 2 × voxel) come from the server's environment, and the record's `*_tolerance_source` says *declared by the operator (server environment); not choosable by the caller*. The tool is registered only when `ODC_BLENDER` exists and the volume tolerance parses — otherwise it is absent and the server logs why, so a model never sees a tool it cannot call and a skipped check is not a pass. Needs the stdin fix below to work from an MCP host at all. Eight tools now.
+
 ### Fixed
 - **`verify-artifact` no longer inherits stdin into Blender.** The child's stdin is redirected and closed at once, and stderr is drained concurrently with stdout. Left inherited, Blender blocks at startup whenever our own stdin is a pipe nobody closes — which is exactly what an MCP host's stdin is, so this would have hung the moment verification reached the MCP surface. Same mechanism as Blender Lab's own `*_for_cli` tools (their issue #42 / PR #48, reproduced here 2026-09-06) and as Oh-Ben-Claw's shell tool before `Stdio::null()`. Checked by running `verify-artifact` with stdin held open by a parent process: verification 53 over run 50 in 2.1 s. From a terminal nothing changes.
 

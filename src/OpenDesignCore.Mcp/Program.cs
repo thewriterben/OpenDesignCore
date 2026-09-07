@@ -27,9 +27,24 @@ builder.Logging.AddConsole(options =>
     options.LogToStandardErrorThreshold = LogLevel.Trace;
 });
 
-builder.Services
+IMcpServerBuilder mcp = builder.Services
     .AddMcpServer()
     .WithStdioServerTransport()
     .WithTools<OdcTools>();
+
+// verify_artifact (ADR-0018) exists only when the operator has pinned its
+// tolerances and Blender is present. Not offered is an honest absence; a tool
+// that is listed and always refuses would be noise in every model's context.
+if (VerifyConfig.OFromEnvironment(out string strVerifyReason) is VerifyConfig oVerify)
+{
+    mcp.WithTools<OdcVerifyTools>();
+    Console.Error.WriteLine(
+        $"verify_artifact offered: blender={oVerify.BlenderExe} volume_tol_pct={oVerify.VolumeTolPct} "
+        + $"bbox_tol_mm={(oVerify.BboxTolMm is double f ? f.ToString(System.Globalization.CultureInfo.InvariantCulture) : "2 x voxel (derived per run)")}");
+}
+else
+{
+    Console.Error.WriteLine("verify_artifact not offered: " + strVerifyReason);
+}
 
 await builder.Build().RunAsync();
