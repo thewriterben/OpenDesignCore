@@ -3,6 +3,7 @@ using Xunit;
 
 namespace OpenDesignCore.Tests;
 
+[Collection(ProcessEnvironmentCollection.StrName)]
 public sealed class DataStoreTests : IDisposable
 {
     private readonly string _strTempDir =

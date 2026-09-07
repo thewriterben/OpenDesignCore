@@ -26,13 +26,13 @@ public sealed class OdcTools
 
     private static readonly JsonSerializerOptions s_oJson = new() { WriteIndented = false };
 
-    private static string StrRoot => Environment.GetEnvironmentVariable("ODC_ROOT") ?? Environment.CurrentDirectory;
-    private static string StrDataDir => Path.Combine(StrRoot, "data");
-    private static string StrPartsDir => PartsRegistry.StrResolveDir(StrRoot);
-    private static string StrArtifactsDir => Path.Combine(StrRoot, "artifacts");
-    private static string StrLedgerPath => Path.Combine(StrRoot, "ledger.db");
+    internal static string StrRoot => Environment.GetEnvironmentVariable("ODC_ROOT") ?? Environment.CurrentDirectory;
+    internal static string StrDataDir => Path.Combine(StrRoot, "data");
+    internal static string StrPartsDir => PartsRegistry.StrResolveDir(StrRoot);
+    internal static string StrArtifactsDir => Path.Combine(StrRoot, "artifacts");
+    internal static string StrLedgerPath => Path.Combine(StrRoot, "ledger.db");
 
-    private static string StrJson(object oValue) => JsonSerializer.Serialize(oValue, s_oJson);
+    internal static string StrJson(object oValue) => JsonSerializer.Serialize(oValue, s_oJson);
 
     [McpServerTool(Name = "list_models")]
     [Description("List the geometry models this engine can run, with their parameters and resolution-floor rule.")]

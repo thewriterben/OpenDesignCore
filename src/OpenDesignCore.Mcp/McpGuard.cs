@@ -1,6 +1,18 @@
+using ModelContextProtocol;
+
 namespace OpenDesignCore.Mcp;
 
-public sealed class McpGuardException(string strMessage) : Exception(strMessage);
+/// <summary>
+/// A refusal whose reason must reach the caller. Derives from
+/// <see cref="McpException"/> because that is the one exception type whose
+/// message the SDK copies into the error result; any other type is reported
+/// to the client as "An error occurred invoking '…'" and nothing else.
+/// Measured 2026-09-07 through mcpo and through Oh-Ben-Claw: every refusal
+/// this surface had ever made — unoffered part, run not found, AUTO units,
+/// voxel budget — had arrived as that one sentence since 2026-08-15. A refusal
+/// nobody can read is silent degradation wearing an error's clothes.
+/// </summary>
+public sealed class McpGuardException(string strMessage) : McpException(strMessage);
 
 /// <summary>
 /// Resource guards for the agent-facing surface. A caller that can name a
