@@ -589,3 +589,38 @@ where a list described a catalogue as holding "print settings" it does not hold.
 
 Questions 16 (raw layer for web sources) and 17 (scale reference in provenance) remain open and are
 Benji's calls — one is a schema change, one is an ADR.
+
+## [2026-09-11] decision+ingest | A raw layer for web sources, and a page that had to admit what it was
+
+Benji closed question 16: **archive outside `wiki/`**. Mutable, load-bearing pages now go to
+`research/raw/` as dated retrievals, cited by repo-relative path like every other raw source — the
+schema's "raw is immutable and lives outside the wiki" rule stays literally true instead of being
+rewritten. Permanent identifiers (arXiv, DOIs, git commits and tags) are cited directly and not
+archived; a second copy adds drift without adding a guarantee. Five OpenScan pages archived,
+`research/raw/README.md` written, `wiki/CLAUDE.md` gained a "Web sources" section, both source pages
+re-cited against the archives.
+
+**Doing it surfaced two things worth more than the decision.**
+
+**(1) An archive can lie by looking complete.** These files are *retrieval renderings* — the page as
+text at the moment it was read, not the original bytes. Two of the five were truncated by the fetch
+tool mid-article: the Macro Add-on post stops exactly at the header of the cost table it exists to
+present, and the Multivid post stops inside the folder-structure block. Both now carry a loud marker
+**at the truncation point** saying nothing past it was read. An archive that silently ends early is
+worse than no archive, because it converts "I never read this" into "I read this and it didn't say
+so".
+
+**(2) [[ai-cad-mcp-landscape-2026-09]] could not be archived, and that exposed how thin it is.** Most
+of its references were never fetched — they came from web-search result summaries; its arXiv and
+GitHub links were read as titles and abstracts, not in full. It now states its own standing on the
+page: **orientation-grade**, enough to justify a direction, not a value. The single load-bearing claim
+on it (Zoo.dev's model will not honour exact dimensions) is flagged inline as single-source and
+secondary. This sat unmarked next to [[openscan-2026-09]], which was fetched and read in full, and
+nothing distinguished them — a reader would reasonably have assumed the better one. **Evidence quality
+is not uniform across an ingest, and a page that does not say where it sits inherits the standing of
+its neighbours.** ClawBot's schema already states this discipline; this wiki was not practising it.
+
+Question 17's *shape* is also decided (declare the provenance class: `cad-export` | `metrology-scan` |
+`photogrammetry`, scale reference required only for the last). Reading `ScanImport.cs` narrowed it:
+`fPostScale` already exists and its doc comment already calls scale a provenance field, so the gap is
+a missing *declaration*, not a missing capability. ADR and implementation not started — plan first.

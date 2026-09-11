@@ -14,14 +14,30 @@ sources:
   - https://github.com/Anttwo/SuGaR ; https://arxiv.org/pdf/2506.24096 (MILo) ; https://github.com/ndming/GS-2M ; https://github.com/HanzhiChang/MeshSplat ; https://arxiv.org/pdf/2409.06765 (gsplat)
   - https://develop3d.com/3d-scanning/exploring-ais-role-in-scan-to-cad/ ; https://3dwonders.com/blogs/case-studies/how-reverse-engineering-with-3d-scanning-quicksurface-works-in-2026
 ---
-Landscape scan, retrieved 2026-09-11. Nothing here is a value. **Caveat on this page's own standing:**
-these are web pages, mutable, and this wiki's raw layer is repo-relative files — see [[open-questions]]
-item 16.
+Landscape scan, 2026-09-11. Nothing here is a value.
+
+**Where this page sits, stated plainly, because it is not where [[openscan-2026-09]] sits.** The
+OpenScan pages were *fetched and read in full*, then archived to `research/raw/`. This page was not.
+Its arXiv and GitHub references are cited by permanent identifier but were **not read in full** —
+titles, abstracts and summaries only. Its vendor and trade-press references (Snyk, ChatForest, Leo AI,
+nTop, LEAP 71, VoxelMatters, DEVELOP3D, 3D Wonders) were surfaced through **web-search result
+summaries and were not fetched at all**, so they are unarchived by the rule in `wiki/CLAUDE.md` and
+also unverified by this wiki.
+
+That makes this page **orientation-grade**: enough to justify a *decision about direction* — which
+line of work to ignore, what to expect from a tool category, where the field's attention is — and not
+enough to justify a *value*, a benchmark number, or a claim about what a specific tool does. Anything
+on this page that starts to carry weight should be re-sourced by fetching and archiving the original
+first. The one claim here doing real load-bearing work — that Zoo.dev's model will not honour exact
+dimensions — rests on a single secondary summary and is flagged again where it appears.
 
 **Text-to-geometry splits in two, and only one half is usable.** Direct ML geometry generation
 (Zoo.dev's open model) returns shape in seconds but *will not honour exact dimensions* — it
 approximates the description. That is disqualifying on its own terms here, and it is precisely the
-plausible-number failure ADR-0006's grounding rule exists to refuse. The credible line is **code
+plausible-number failure ADR-0006's grounding rule exists to refuse. **Single-source, secondary, and
+unverified:** this rests on one third-party survey, not on Zoo's own documentation or a test run. It
+is the load-bearing claim on this page, so if a decision ever turns on it, fetch the primary source
+and archive it first. The credible line is **code
 generation**: LLM emits CadQuery/Python, a deterministic kernel executes it (Text-to-CadQuery, 170K
 pairs, gains scaling with model size; CAD-Coder adds chain-of-thought and geometric-reward RL;
 Seek-CAD is training-free self-refinement; CADDesigner is an agent wrapper). Text2CAD-Bench and
