@@ -653,3 +653,20 @@ changed is that an unscaled reconstruction can no longer pass in silence.
 A known-answer test earned its keep here: `ObservedSpreadTests` pinned `odc/comparison/0.3` and
 failed the moment the schema moved, which is the difference between a test that says the code still
 does what it did and one that says it does the right thing.
+
+## [2026-09-11] lint | An open question that had been false for 27 days
+
+Question 6 said CLAUDE.md's "Verify with" block still had placeholders. It does not, and has not
+since the solution skeleton landed on 2026-08-15 — the same day the question was written, a few hours
+later. Closed as stale.
+
+Trivial to fix and worth the entry, because of what it is: **an open-questions list is a claim about
+the present**, and a stale entry in one is the same failure class as a stale README claim. It is just
+less visible, because a README claim gets checked against the code and a *question* gets read as
+something nobody has gotten to yet. Anyone who opened this file in the last month was told to go look
+for a placeholder that was not there. The lint operation exists for exactly this, and had not been run
+against this section since it was written.
+
+Not a new rule, just the existing one applied where it had not been: ODC's own CLAUDE.md says a
+documented-but-unreachable feature gets wired or deleted, and ClawBot's says do not leave a status
+claim standing after the code has moved past it. A stale question is the interrogative form of both.
