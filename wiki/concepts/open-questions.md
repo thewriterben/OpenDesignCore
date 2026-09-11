@@ -66,7 +66,20 @@ sources: []
     uniform across an ingest, and a page that does not say where it sits invites a reader to assume the
     best one.** Same discipline as ClawBot's `Knowledge/` schema states for its own pages.
 
-17. **A photogrammetric mesh needs its scale reference recorded, not just its units** (opened 2026-09-11).
+17. ~~**A photogrammetric mesh needs its scale reference recorded, not just its units**~~ → **closed
+    2026-09-11: ADR-0019 accepted and implemented.** Import declares `EScanOrigin`; photogrammetry
+    requires a scale reference and refuses without one, `cad-export` refuses *having* one, the rule sits
+    in `ScanProvenance.Validate` so CLI and MCP cannot drift, and both sidecars carry `scan_origin` /
+    `scan_scale_reference` present-and-null. 185 tests, nine new, six of them refusals.
+
+    **What implementing it added to the decision.** The scope was wrong when the question was written:
+    it named `run_cradle`, but `CompareRun` imports meshes too, and *that* is the dangerous path —
+    `compare → compensate` turns a deviation into a slicer profile setting, so a scale error there
+    becomes a provenance-stamped compensation applied to every future print in that material. A cradle
+    that does not fit announces itself; a silently wrong shrinkage figure does not. The refusal had to
+    live on both. Original text follows.
+
+~~17. **A photogrammetric mesh needs its scale reference recorded, not just its units** (opened 2026-09-11).
     `run_cradle` refusing `AUTO` is necessary and not sufficient: structure-from-motion recovers shape up
     to an unknown similarity transform, so a photogrammetry scan carries *no absolute size* unless a known
     reference was in the scene. A caller can today declare `mm` on a mesh whose scale came from nowhere,
@@ -88,8 +101,7 @@ sources: []
     doc comment already says "Scale and units are provenance fields" — so the mechanism exists and is
     simply *unrecorded*. `fPostScale = 1.0` on a photogrammetric mesh is a silent identity scaling,
     indistinguishable in the sidecar from a deliberate one. The gap is narrower than first written: not
-    a missing capability, a missing declaration. **ADR and implementation still to do.** See
-    [[openscan]].
+    a missing capability, a missing declaration.~~ See [[openscan]].
 
 18. ~~**No scanner accuracy may be declared until a benchmark methodology is read**~~ → **closed
     2026-09-11, the same day it was opened, by reading it.** The OpenScan Benchy page is not a metrology

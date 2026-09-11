@@ -19,7 +19,7 @@ The single end-to-end path from ARCHITECTURE.md, working for real — as the **t
 
 Only after Now runs end to end for someone other than me.
 
-- [x] Mesh→SDF import boundary (scan-to-fit): `run-cradle` — units declared never inferred (AUTO refused), raw scan content-addressed and hash-chained into the sidecar, foam-insert cradle model (`scan-cradle/0.1`) with floor `min(wall/2, clearance)`; v0 requires watertight meshes, stated loudly (2026-08-15)
+- [x] Mesh→SDF import boundary (scan-to-fit): `run-cradle` — units declared never inferred (AUTO refused), raw scan content-addressed and hash-chained into the sidecar, foam-insert cradle model (`scan-cradle/0.1`) with floor `min(wall/2, clearance)`; v0 requires watertight meshes, stated loudly (2026-08-15). **Units are not scale (ADR-0019, 2026-09-11):** a mesh now declares its origin (`cad-export` | `metrology-scan` | `photogrammetry`), and photogrammetry — scale-free by construction — must name the reference that gave it an absolute size or the import refuses. `compare --scan` declares it too, because that is the path where an unscaled mesh would have become a slicer setting.
 - [x] MCP surface for ODC itself: stdio server (`opendesigncore-mcp`), 7 tools — reads and deterministic runs execute, `handoff_to_studio` proposes only and no approval tool exists (ADR-0009); resource guards refuse pathological voxel sizes, volumes, and path escapes (2026-08-15)
 - [x] Registry contract: parts are read from OpenPartsCore, `data/parts/` deleted, envelope citation + registry commit + file hash in the sidecar (ADR-0016, OpenPartsCore ADR-0006). First board enclosure from a registry envelope nobody typed: run 40, FireBeetle 2 ESP32-S3 (2026-09-06)
 

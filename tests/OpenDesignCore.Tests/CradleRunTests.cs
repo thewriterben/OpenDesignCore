@@ -32,11 +32,21 @@ public sealed class CradleRunTests : IDisposable
         return strPath;
     }
 
-    private CradleRunResult OExecute(string strStl, float fVoxelMm = 0.4f, float fWallMm = 2.4f)
+    private CradleRunResult OExecute(
+        string strStl,
+        float fVoxelMm = 0.4f,
+        float fWallMm = 2.4f,
+        EScanOrigin eOrigin = EScanOrigin.MetrologyScan,
+        ScaleReference? oScaleRef = null)
         => CradleRun.Execute(
             strStlPath: strStl,
             eUnits: Mesh.EStlUnit.MM,
             fPostScale: 1.0f,
+            // The synthetic sphere stands in for an instrument scan: it has a
+            // real size and nothing had to establish it. Photogrammetry is
+            // exercised explicitly in the ADR-0019 tests below.
+            eOrigin: eOrigin,
+            oScaleRef: oScaleRef,
             fVoxelSizeMm: fVoxelMm,
             fClearanceMm: 0.40f,
             fWallMm: fWallMm,
@@ -70,6 +80,112 @@ public sealed class CradleRunTests : IDisposable
 
         using Ledger oLedger = new(StrLedgerPath);
         Assert.Equal("scan-cradle/0.1", Assert.Single(oLedger.ARuns()).Model);
+    }
+
+    // ---- ADR-0019: units are not scale -------------------------------------
+
+    [Fact]
+    public void Photogrammetry_WithoutAScaleReference_IsRefused()
+    {
+        string strScan = StrMakeScanStl();
+
+        // The mesh is watertight, the units are declared, the voxel size is
+        // legal — everything that used to be checked passes. What is missing is
+        // the thing that gave it an absolute size, and before ADR-0019 nothing
+        // asked.
+        ImportValidationException e = Assert.Throws<ImportValidationException>(
+            () => OExecute(strScan, eOrigin: EScanOrigin.Photogrammetry));
+
+        Assert.Contains("scale-free", e.Message);
+        Assert.Contains("Absence is UNKNOWN, not 1:1", e.Message);
+    }
+
+    [Fact]
+    public void Photogrammetry_WithAScaleReference_RecordsItInTheSidecar()
+    {
+        string strScan = StrMakeScanStl();
+        CradleRunResult oResult = OExecute(
+            strScan,
+            eOrigin: EScanOrigin.Photogrammetry,
+            oScaleRef: new ScaleReference
+            {
+                Description = "10 mm gauge block across the turntable, digital caliper",
+                LengthMm = 10.0,
+            });
+
+        string strSidecar = File.ReadAllText(ArtifactStore.StrPathFor(
+            StrArtifactsDir, oResult.ProvenanceSha256, ".provenance.json"));
+
+        Assert.Contains("\"scan_origin\":\"photogrammetry\"", strSidecar);
+        Assert.Contains("\"length_mm\":\"10.0000\"", strSidecar);
+        Assert.Contains("gauge block across the turntable", strSidecar);
+        Assert.Contains("\"schema\":\"odc/provenance/0.3\"", strSidecar);
+    }
+
+    [Fact]
+    public void CadExport_WithAScaleReference_IsRefused()
+    {
+        string strScan = StrMakeScanStl();
+
+        // Not a harmless extra field: recording a reference here asserts a
+        // measurement that was never made, against a mesh whose units were
+        // authoritative to begin with.
+        ImportValidationException e = Assert.Throws<ImportValidationException>(
+            () => OExecute(
+                strScan,
+                eOrigin: EScanOrigin.CadExport,
+                oScaleRef: new ScaleReference { Description = "caliper", LengthMm = 10.0 }));
+
+        Assert.Contains("units are authoritative", e.Message);
+    }
+
+    [Fact]
+    public void AScaleReference_WithoutAPositiveLength_IsRefused()
+    {
+        // The description is free text on purpose, so the measured length is
+        // the field that cannot be satisfied by typing a word.
+        Assert.Throws<ImportValidationException>(
+            () => new ScaleReference { Description = "a ruler, I think", LengthMm = 0 }.Validate());
+
+        Assert.Throws<ImportValidationException>(() => ScaleReference.OParse("0:a ruler"));
+        Assert.Throws<ImportValidationException>(() => ScaleReference.OParse("no-colon-here"));
+        Assert.Throws<ImportValidationException>(() => ScaleReference.OParse("10.0:   "));
+    }
+
+    [Fact]
+    public void ScaleReference_RoundTripsThroughItsSurfaceForm()
+    {
+        ScaleReference oRef = ScaleReference.OParse(
+            "10.5:gauge block across the turntable, digital caliper");
+
+        Assert.Equal(10.5, oRef.LengthMm);
+        Assert.Equal("gauge block across the turntable, digital caliper", oRef.Description);
+    }
+
+    [Fact]
+    public void MetrologyScan_NeedsNoScaleReference_ButMayCarryOne()
+    {
+        string strScan = StrMakeScanStl();
+
+        CradleRunResult oWithout = OExecute(strScan, eOrigin: EScanOrigin.MetrologyScan);
+        string strSidecar = File.ReadAllText(ArtifactStore.StrPathFor(
+            StrArtifactsDir, oWithout.ProvenanceSha256, ".provenance.json"));
+
+        // Present and null, not absent: a reader must be able to tell "none was
+        // needed" from "nobody said".
+        Assert.Contains("\"scan_origin\":\"metrology-scan\"", strSidecar);
+        Assert.Contains("\"scan_scale_reference\":null", strSidecar);
+    }
+
+    [Fact]
+    public void UnknownOriginString_IsRefusedRatherThanDefaulted()
+    {
+        Assert.False(ScanProvenance.BTryParseOrigin("photogrametry", out _));  // misspelled
+        Assert.False(ScanProvenance.BTryParseOrigin("", out _));
+        Assert.False(ScanProvenance.BTryParseOrigin(null, out _));
+        Assert.False(ScanProvenance.BTryParseOrigin("Photogrammetry", out _)); // case is exact
+        Assert.True(ScanProvenance.BTryParseOrigin("photogrammetry", out EScanOrigin e));
+        Assert.Equal(EScanOrigin.Photogrammetry, e);
     }
 
     [Fact]
@@ -136,7 +252,8 @@ public sealed class CradleRunTests : IDisposable
     {
         string strScan = StrMakeScanStl();
         Assert.Throws<ImportValidationException>(() => CradleRun.Execute(
-            strScan, Mesh.EStlUnit.AUTO, 1.0f, 0.4f, 0.4f, 2.4f, 0.45f,
+            strScan, Mesh.EStlUnit.AUTO, 1.0f, EScanOrigin.MetrologyScan, null,
+            0.4f, 0.4f, 2.4f, 0.45f,
             StrArtifactsDir, StrLedgerPath, "test-commit"));
     }
 

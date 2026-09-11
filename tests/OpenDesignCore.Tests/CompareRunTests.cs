@@ -1,4 +1,5 @@
 using System.Numerics;
+using OpenDesignCore.Import;
 using OpenDesignCore.Runs;
 using OpenDesignCore.Verification;
 using PicoGK;
@@ -34,12 +35,22 @@ public sealed class CompareRunTests : IDisposable
     }
 
     private CompareRunResult OExecute(
-        string strDesign, string strScan, float fVoxelMm = 0.2f, float fScanAccuracyMm = 0f)
+        string strDesign,
+        string strScan,
+        float fVoxelMm = 0.2f,
+        float fScanAccuracyMm = 0f,
+        EScanOrigin eScanOrigin = EScanOrigin.MetrologyScan,
+        ScaleReference? oScanScaleRef = null)
         => CompareRun.Execute(
             strDesign, strScan, Mesh.EStlUnit.MM, fVoxelMm,
             Path.Combine(_strTempDir, "artifacts"),
             Path.Combine(_strTempDir, "ledger.db"),
             "test-commit", "pla",
+            // The synthetic scan is a scaled copy of the design mesh, i.e. an
+            // instrument reading with a real size. Photogrammetry's scale
+            // requirement is exercised explicitly in the ADR-0019 tests.
+            eScanOrigin,
+            oScanScaleRef,
             fScanAccuracyMm);
 
     [Fact]

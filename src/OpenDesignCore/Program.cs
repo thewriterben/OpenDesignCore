@@ -129,6 +129,16 @@ if (args is ["run-cradle", ..])
         Console.Error.WriteLine("--voxel-mm is required and takes no default (ADR-0003).");
         return 2;
     }
+    if (!OpenDesignCore.Import.ScanProvenance.BTryParseOrigin(
+            oOpts.GetValueOrDefault("scan-origin"),
+            out OpenDesignCore.Import.EScanOrigin eScanOrigin))
+    {
+        Console.Error.WriteLine(
+            $"--scan-origin <{OpenDesignCore.Import.ScanProvenance.StrAccepted}> is required " +
+            "and takes no default (ADR-0019): declared units say how to read the file's numbers, " +
+            "not whether they were ever tied to a physical size.");
+        return 2;
+    }
 
     float FOpt(string strKey, float fDefault)
         => oOpts.TryGetValue(strKey, out string? s)
@@ -137,10 +147,17 @@ if (args is ["run-cradle", ..])
 
     try
     {
+        OpenDesignCore.Import.ScaleReference? oScaleRef =
+            oOpts.TryGetValue("scale-ref", out string? strScaleRef)
+                ? OpenDesignCore.Import.ScaleReference.OParse(strScaleRef)
+                : null;
+
         CradleRunResult oResult = CradleRun.Execute(
             strStlPath: strStl,
             eUnits: eUnits,
             fPostScale: FOpt("scale", 1.0f),
+            eOrigin: eScanOrigin,
+            oScaleRef: oScaleRef,
             fVoxelSizeMm: fVoxelMm,
             fClearanceMm: FOpt("clearance-mm", 0.30f),
             fWallMm: FOpt("wall-mm", 2.40f),
@@ -306,12 +323,40 @@ if (args is ["compare", ..])
                 return 2;
             }
 
+            if (!OpenDesignCore.Import.ScanProvenance.BTryParseOrigin(
+                    oOpts.GetValueOrDefault("scan-origin"),
+                    out OpenDesignCore.Import.EScanOrigin eCmpOrigin))
+            {
+                Console.Error.WriteLine(
+                    $"--scan-origin <{OpenDesignCore.Import.ScanProvenance.StrAccepted}> is "
+                    + "required and takes no default (ADR-0019). This is the path where scale "
+                    + "does damage: a deviation measured off an unscaled mesh becomes a "
+                    + "shrinkage figure, and `compensate` turns that into a slicer setting.");
+                return 2;
+            }
+
+            OpenDesignCore.Import.ScaleReference? oCmpScaleRef;
+            try
+            {
+                oCmpScaleRef = oOpts.TryGetValue("scale-ref", out string? strCmpScaleRef)
+                    ? OpenDesignCore.Import.ScaleReference.OParse(strCmpScaleRef)
+                    : null;
+                OpenDesignCore.Import.ScanProvenance.Validate(eCmpOrigin, oCmpScaleRef);
+            }
+            catch (OpenDesignCore.Import.ImportValidationException e)
+            {
+                Console.Error.WriteLine(e.Message);
+                return 2;
+            }
+
             oResult = CompareRun.Execute(
                 strDesign, strScanPath!, eCmpUnits, fCmpVoxel,
                 oOpts.GetValueOrDefault("artifacts", "artifacts"),
                 oOpts.GetValueOrDefault("ledger", "ledger.db"),
                 StrGitCommit(),
                 strScanMaterial,
+                eCmpOrigin,
+                oCmpScaleRef,
                 fAccuracy,
                 oCmpFilament);
         }
@@ -684,6 +729,8 @@ Console.WriteLine("usage: OpenDesignCore validate-data [dir]");
 Console.WriteLine("       OpenDesignCore run-enclosure --voxel-mm <v> [--part <id>] [--clearance-mm <v>]");
 Console.WriteLine("                                    [--wall-mm <v>] [--data <dir>] [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore run-cradle --stl <path> --units <mm|cm|m|in|ft> --voxel-mm <v>");
+Console.WriteLine("                                 --scan-origin <cad-export|metrology-scan|photogrammetry>");
+Console.WriteLine("                                 [--scale-ref <length-mm>:<what was measured, and how>]");
 Console.WriteLine("                                 [--clearance-mm <v>] [--wall-mm <v>] [--split <0..1>] [--scale <f>]");
 Console.WriteLine("       OpenDesignCore run-calibration-block --instrument-accuracy-mm <v>");
 Console.WriteLine("                                            [--x-mm <v>] [--y-mm <v>] [--z-mm <v>] [--voxel-mm <v>]");

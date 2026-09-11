@@ -174,7 +174,12 @@ public sealed class ObservedSpreadTests : IDisposable
         Assert.Contains("\"observed_spread_mm\":\"0.200\"", strRecord);
         Assert.Contains("\"uncertainty_mm\":\"0.200\"", strRecord);
         Assert.Contains("\"raw_readings_mm\"", strRecord);
-        Assert.Contains("odc/comparison/0.3", strRecord);
+        Assert.Contains("odc/comparison/0.4", strRecord);
+
+        // The manual path has no reconstruction to scale: a caliper reads the
+        // physical part. Recorded as present-and-null so a reader can tell that
+        // from "nobody said" (ADR-0019).
+        Assert.Contains("\"scan_origin\":null", strRecord);
 
         CompensationRunResult oComp = CompensationRun.Execute(
             StrArtifacts, StrLedger, oCmp.ReportSha256, 0.15, "test-commit");

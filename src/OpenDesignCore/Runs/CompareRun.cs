@@ -150,8 +150,11 @@ public static class CompareRun
 
         using (Library oLib = new(fVoxelSizeMm))
         {
+            // The design is this engine's own export: its units are
+            // authoritative and there is no scale to establish (ADR-0019).
             ScanImportResult oDesign = ScanImport.OImport(
-                oLib, strDesignStlPath, eUnits, 1.0f, strArtifactsDir);
+                oLib, strDesignStlPath, eUnits, 1.0f,
+                EScanOrigin.CadExport, null, strArtifactsDir);
             strDesignHash = oDesign.ScanSha256;
 
             Vector3 vecDesign = oDesign.Mesh.oBoundingBox().vecSize();
@@ -284,6 +287,8 @@ public static class CompareRun
         string strLedgerPath,
         string strCommit,
         string strMaterial,
+        EScanOrigin eScanOrigin,
+        ScaleReference? oScanScaleRef = null,
         float fScanAccuracyMm = 0f,
         FilamentRef? oFilamentRef = null)
     {
@@ -306,10 +311,20 @@ public static class CompareRun
             // Both sides go through the same strict import boundary: units
             // declared, never inferred, and each input content-addressed
             // before it is touched.
+            //
+            // The two sides get DIFFERENT origins on purpose (ADR-0019). The
+            // design is this engine's own export, so its units are
+            // authoritative. The scan is a measurement of a physical part, and
+            // if it came from photogrammetry its absolute size exists only
+            // because a reference put it there. This is the path where that
+            // matters most: a scale error here becomes a shrinkage figure, and
+            // `compensate` turns a shrinkage figure into a slicer setting.
             ScanImportResult oDesign = ScanImport.OImport(
-                oLib, strDesignStlPath, eUnits, 1.0f, strArtifactsDir);
+                oLib, strDesignStlPath, eUnits, 1.0f,
+                EScanOrigin.CadExport, null, strArtifactsDir);
             ScanImportResult oScan = ScanImport.OImport(
-                oLib, strScanStlPath, eUnits, 1.0f, strArtifactsDir);
+                oLib, strScanStlPath, eUnits, 1.0f,
+                eScanOrigin, oScanScaleRef, strArtifactsDir);
 
             strDesignHash = oDesign.ScanSha256;
             strScanHash = oScan.ScanSha256;
@@ -321,6 +336,7 @@ public static class CompareRun
             oReport, strDesignHash, strMeasuredBy: "scan",
             strScanHash: strScanHash, eUnits: eUnits, fVoxelSizeMm: fVoxelSizeMm,
             fAccuracyMm: fScanAccuracyMm,
+            eScanOrigin: eScanOrigin, oScanScaleRef: oScanScaleRef,
             strArtifactsDir: strArtifactsDir, strLedgerPath: strLedgerPath,
             strCommit: strCommit,
             strMaterial: strMaterial.Trim().ToLowerInvariant(),
@@ -349,7 +365,9 @@ public static class CompareRun
         double? fFirstLayerOffsetMm = null,
         string strMaterial = "",
         FilamentRef? oFilamentRef = null,
-        IReadOnlyDictionary<string, IReadOnlyList<float>>? oRawReadings = null)
+        IReadOnlyDictionary<string, IReadOnlyList<float>>? oRawReadings = null,
+        EScanOrigin? eScanOrigin = null,
+        ScaleReference? oScanScaleRef = null)
     {
         Dictionary<string, object?> oRecord = new()
         {
@@ -357,7 +375,9 @@ public static class CompareRun
             // manual path records its raw readings (ADR-0015). Records written
             // under 0.1/0.2 still load; an absent spread reads as zero, which
             // is what a single reading honestly was.
-            ["schema"] = "odc/comparison/0.3",
+            // 0.4: the measured side declares its origin and, when it was
+            // scale-free, the reference that gave it a size (ADR-0019).
+            ["schema"] = "odc/comparison/0.4",
             ["model"] = StrModelId,
             ["voxel_size_mm"] = StrF3(fVoxelSizeMm),
             ["inputs"] = new Dictionary<string, object?>
@@ -368,6 +388,22 @@ public static class CompareRun
                 // from a scan whose hash went missing.
                 ["scan_sha256"] = strScanHash.Length > 0 ? strScanHash : "none-measured-by-hand",
                 ["measured_by"] = strMeasuredBy,
+                // How the measured side came to exist, and — when it was
+                // scale-free by construction — what gave it an absolute size
+                // (ADR-0019). Null on the manual path: a caliper reads a
+                // physical part directly, so there is no reconstruction to
+                // scale. Absent would read as "nobody said", which is the
+                // distinction this field exists to make.
+                ["scan_origin"] = eScanOrigin is null
+                    ? null
+                    : ScanProvenance.StrOrigin(eScanOrigin.Value),
+                ["scan_scale_reference"] = oScanScaleRef is null
+                    ? null
+                    : new Dictionary<string, object?>
+                    {
+                        ["length_mm"] = StrF3(oScanScaleRef.LengthMm),
+                        ["description"] = oScanScaleRef.Description,
+                    },
                 // The material the part was printed in. A shrinkage figure
                 // describes one material; without this the pipeline cannot
                 // stop a PLA measurement reaching a PETG profile.
