@@ -22,6 +22,7 @@
 - [[clawbot]] — mechanism model; reach and capacity derived per-pose, never declared; mechanism peer domain per ADR-0014 (2026-08-23)
 - [[openbuildcore]] — inventory + ideation + machines; quantity-aware exclusive matching; print time only from a measured throughput (ADR-0005)
 - [[open-filament-database]] — MIT filament catalogue; spool identity for ADR-0013; an identity source, never a value source (2026-08-21)
+- [[openscan]] — open-source photogrammetry scanners; candidate for the capture half ROADMAP "Not ever" refuses; blocked on scale, not accuracy (2026-09-11)
 
 ## Sources
 - [[bingo-landscape-2026]] — authoritative market layer: churn disease, five commandments, gap matrix (2026-08-15)
@@ -32,3 +33,5 @@
 - [[obc-ai-agents-research]] — adopt/avoid decisions with confidence tags; MCP conformance, taint tracking
 - [[obc-prime-research-2026-07]] — embodied-AI survey; MCP-for-physical-actuation gap
 - [[advancedstudio-research-report]] — K2 two-API problem; slicer-side compensation; fit tolerances
+- [[openscan-2026-09]] — OpenScan devices + OpenScan3 beta firmware; the cited "benchmark" behind the accuracy figures contains no measurement, so the figures are unsourced (2026-09-11)
+- [[ai-cad-mcp-landscape-2026-09]] — text-to-CAD, MCP-for-CAD, Noyron/nTop, Gaussian-splatting reconstruction; first ingest sourced only to web pages (2026-09-11)
