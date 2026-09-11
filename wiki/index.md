@@ -34,4 +34,4 @@
 - [[obc-prime-research-2026-07]] — embodied-AI survey; MCP-for-physical-actuation gap
 - [[advancedstudio-research-report]] — K2 two-API problem; slicer-side compensation; fit tolerances
 - [[openscan-2026-09]] — OpenScan devices + OpenScan3 beta firmware; the cited "benchmark" behind the accuracy figures contains no measurement, so the figures are unsourced (2026-09-11)
-- [[ai-cad-mcp-landscape-2026-09]] — text-to-CAD, MCP-for-CAD, Noyron/nTop, Gaussian-splatting reconstruction; first ingest sourced only to web pages (2026-09-11)
+- [[ai-cad-mcp-landscape-2026-09]] — text-to-CAD, MCP-for-CAD, Noyron/nTop, Gaussian-splatting reconstruction; **orientation-grade** — mostly unfetched, states its own standing (2026-09-11)

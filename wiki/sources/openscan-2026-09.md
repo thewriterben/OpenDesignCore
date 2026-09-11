@@ -3,11 +3,11 @@ title: "Source: OpenScan project pages and blog (retrieved 2026-09-11)"
 type: source-summary
 updated: 2026-09-11
 sources:
-  - https://openscan.eu/ (retrieved 2026-09-11)
-  - https://openscan.eu/pages/openscan-benchy (retrieved 2026-09-11)
-  - https://blog.openscan.eu/posts/openscan3-beta-whats-new/ (2026-04-17, retrieved 2026-09-11)
-  - https://blog.openscan.eu/posts/openscan-macro-add-on-cost-of-open-source-hardware/ (2026-09-08, retrieved 2026-09-11)
-  - https://blog.openscan.eu/posts/multivid-devlog-1/ (2026-06-02, retrieved 2026-09-11)
+  - research/raw/openscan-home-2026-09-11.md
+  - research/raw/openscan-benchy-2026-09-11.md
+  - research/raw/openscan3-beta-whats-new-2026-09-11.md
+  - research/raw/openscan-macro-add-on-2026-09-11.md (truncated retrieval)
+  - research/raw/openscan-multivid-devlog-1-2026-09-11.md (truncated retrieval)
   - OpenScan3ODC/README.md, docs/ARCHITECTURE.md (local checkout, fork of OpenScan-org/OpenScan3)
 ---
 Open-source photogrammetry turntable scanners, GPL-3.0 firmware, Germany-based, operating as a

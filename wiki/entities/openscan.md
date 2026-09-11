@@ -3,9 +3,10 @@ title: OpenScan
 type: entity
 updated: 2026-09-11
 sources:
-  - https://openscan.eu/ (retrieved 2026-09-11)
-  - https://blog.openscan.eu/posts/openscan3-beta-whats-new/ ; https://blog.openscan.eu/posts/multivid-devlog-1/ ; https://blog.openscan.eu/posts/openscan-macro-add-on-cost-of-open-source-hardware/
-  - https://github.com/OpenScan-org
+  - research/raw/openscan-home-2026-09-11.md
+  - research/raw/openscan-benchy-2026-09-11.md
+  - research/raw/openscan3-beta-whats-new-2026-09-11.md
+  - https://github.com/OpenScan-org (git-hosted; permanent by identifier, not archived)
   - OpenScan3ODC/docs/ARCHITECTURE.md, docs/TASKS.md (local checkout)
 ---
 Open-source photogrammetry turntable scanners (Mini, Classic, Macro Add-on) with GPL-3.0 firmware.

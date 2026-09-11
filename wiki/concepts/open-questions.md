@@ -49,16 +49,22 @@ sources: []
 
 15. ~~**`compare` treats declared instrument accuracy as the whole uncertainty**~~ → **closed 2026-08-24, same day it was opened (ADR-0015).** `--measured` now takes comma-separated repeated readings per dimension; each axis's uncertainty is `max(declared accuracy, observed spread)`, the spread and raw readings are recorded in `odc/comparison/0.3`, and `compensate` re-reads them from the stored record so the widened uncertainty survives into the verdict. Run against the real Z case (readings spread 0.09 mm, mean deviation 0.045 mm), the tool refuses the figure by itself. What remains physical rather than tooling: the Z axis still has no number until an optimised profile can hold a flat top face — the tool now says so instead of a human having to; OpenBuildCore's record stays `axis_calibration: partial` until the reprint.
 
-16. **This wiki has no raw layer for web sources** (opened 2026-09-11). The schema says raw sources are
-    immutable, live outside `wiki/`, and are cited by repo-relative path. The OpenScan and AI-CAD ingests
-    are the first whose sources are *web pages*: mutable, unpinnable, citable only by URL plus a retrieval
-    date. [[openscan-2026-09]] and [[ai-cad-mcp-landscape-2026-09]] do exactly that and say so on the page.
-    Sibling `ClawBot/Knowledge/` solved this with a `raw/` tree *inside* its wiki — a deliberate divergence
-    from this instantiation, documented in its own schema. Options: mirror ClawBot's `raw/`; archive fetched
-    pages to a repo-relative path outside `wiki/`; or accept dated URLs as a second-class source class and
-    say so in the schema. **Not decided unilaterally** — the schema is the one file this wiki co-evolves
-    with the human. Until it is, treat a claim sourced only to a URL as weaker evidence than one sourced
-    to a file.
+16. ~~**This wiki has no raw layer for web sources**~~ → **closed 2026-09-11 (Benji): archive outside
+    `wiki/`.** Mutable, load-bearing pages are saved to `research/raw/` as dated retrievals and cited by
+    repo-relative path like every other raw source, which keeps the schema's "raw is immutable and lives
+    outside the wiki" rule literally true rather than rewriting it. Sources whose identifiers are
+    permanent by design — arXiv, DOIs, git commits and tags — are cited directly and **not** archived,
+    because a second copy adds drift without adding a guarantee. Five OpenScan pages archived; the schema
+    gained a "Web sources" section; both source pages re-cited against the archives.
+
+    **Two things the doing of it exposed.** (a) An archive is a *retrieval rendering*, not the page — so
+    each file says what it is, and where the fetch truncated, it says so **at the point of truncation**.
+    Two of the five are partial and are marked as such; a partial archive that reads as complete would be
+    worse than none. (b) [[ai-cad-mcp-landscape-2026-09]] could not be archived at all, because most of
+    its references were never fetched — they came from web-search summaries. That page now states its own
+    standing as orientation-grade: enough to justify a direction, not a value. **Evidence quality is not
+    uniform across an ingest, and a page that does not say where it sits invites a reader to assume the
+    best one.** Same discipline as ClawBot's `Knowledge/` schema states for its own pages.
 
 17. **A photogrammetric mesh needs its scale reference recorded, not just its units** (opened 2026-09-11).
     `run_cradle` refusing `AUTO` is necessary and not sufficient: structure-from-motion recovers shape up
@@ -67,9 +73,23 @@ sources: []
     and the sidecar will faithfully record a declaration that means less than it looks like — absence
     disguised as a value, which is the one failure mode this repo is built against. It does real damage in
     exactly one place: `compare` → `compensate` would turn a scale error into a slicer profile change.
-    Proposed shape: scan-derived imports carry the scale reference (bar, calibrated target, or measured
-    feature plus its measurement) as a required field; absence is UNKNOWN and refuses rather than defaults.
-    ADR before code. See [[openscan]].
+
+    **Shape decided 2026-09-11 (Benji): declare the provenance class.** Import takes a declared mesh
+    origin — `cad-export` | `metrology-scan` | `photogrammetry` — and requires a scale reference (bar,
+    calibrated target, or measured feature plus its measurement) *only* when the class is
+    `photogrammetry`; absence is UNKNOWN and refuses. A blanket requirement on every import was
+    rejected because the same path serves `kicad-cli pcb export stl`, where units are authoritative,
+    and ceremony that means nothing in context is ceremony people fill with noise — the failure
+    ClawBot's ADR-0026 names for a `how_determined` that states nothing. Gating only downstream in
+    `compare` was rejected because a scale error still produces a cradle that does not fit: it moves the
+    failure later and makes it more expensive.
+
+    **What reading the code changed.** `ScanImport.OImport` already takes an `fPostScale`, and its own
+    doc comment already says "Scale and units are provenance fields" — so the mechanism exists and is
+    simply *unrecorded*. `fPostScale = 1.0` on a photogrammetric mesh is a silent identity scaling,
+    indistinguishable in the sidecar from a deliberate one. The gap is narrower than first written: not
+    a missing capability, a missing declaration. **ADR and implementation still to do.** See
+    [[openscan]].
 
 18. ~~**No scanner accuracy may be declared until a benchmark methodology is read**~~ → **closed
     2026-09-11, the same day it was opened, by reading it.** The OpenScan Benchy page is not a metrology

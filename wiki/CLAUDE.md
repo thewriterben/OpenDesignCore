@@ -4,9 +4,29 @@ This directory is the LLM Wiki layer from ADR-0006 (proposed). It follows the LL
 
 ## Layers
 
-- **Raw sources** — immutable. They live *outside* this directory: research PDFs and docs in ProjectBINGO, Oh-Ben-Claw `Knowledge Base/`, AdvancedStudio `docs/Research-Report.md`, OBC-Prime docs, datasheets, papers. Cite them by repo-relative path. Never edit a source.
+- **Raw sources** — immutable. They live *outside* this directory: research PDFs and docs in ProjectBINGO, Oh-Ben-Claw `Knowledge Base/`, AdvancedStudio `docs/Research-Report.md`, OBC-Prime docs, datasheets, papers, and archived web retrievals in `research/raw/`. Cite them by repo-relative path. Never edit a source.
 - **Wiki** — this directory. Fully agent-owned. Rewrite pages freely as understanding improves.
 - **Schema** — this file. Co-evolve it with the human.
+
+## Web sources (added 2026-09-11, open question 16)
+
+A web page is not a raw source as this schema means the word: it is mutable, its owner can edit or
+delete it, and a claim resting on one is unverifiable the moment they do. So:
+
+- **Archive it, then cite the archive.** A mutable, load-bearing page — vendor page, shop listing,
+  blog post, docs page — is saved to `research/raw/` as a dated retrieval and cited by repo-relative
+  path, exactly like every other raw source. `research/raw/README.md` states what those files are.
+- **Do not archive what is already permanent.** arXiv IDs, DOIs, and git commits or tags pin their
+  own bytes; cite them directly. A second copy here would only add something that can drift.
+- **An archive is a retrieval rendering, not the page.** It is the text as read at that moment — not
+  the original HTML, not a screenshot. Where the fetch truncated, the file must say so *at the point
+  of truncation*, and nothing may be cited from beyond it. A partial archive that reads as complete
+  is worse than no archive at all.
+- **A URL with no archive is a weaker citation, and the page must say so.** Acceptable for context
+  and orientation; never sufficient for a claim another page relies on.
+
+None of this loosens the grounding rule below: an archived page is still a wiki-layer source, and a
+number in it still may not enter `data/` or a model run.
 
 ## The grounding rule (ADR-0006)
 
@@ -15,6 +35,8 @@ No number in a wiki page may enter a model run. Values used by code come from `d
 ## Structure
 
 ```
+research/
+  raw/           archived web retrievals, immutable, dated; see its README
 wiki/
   CLAUDE.md      this schema
   index.md       catalog of all pages, by category; updated on every ingest
