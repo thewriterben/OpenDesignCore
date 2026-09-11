@@ -1,7 +1,7 @@
 ---
 title: Open questions
 type: concept
-updated: 2026-08-24
+updated: 2026-09-11
 sources: []
 ---
 
@@ -48,3 +48,43 @@ sources: []
 14. **The compensation loop is plumbed but the number is unvalidated** (2026-08-16). ODC ADR-0011 and AdvancedStudio ADR-0001 connect a scan-measured deviation to a slicer profile value, with the origin recorded. Every refusal path is proven and the wire is proven against a running studio, but whether the resulting percentage makes the next print *better* needs a real print and a real scan — the same blocker as validating `compare` itself. ~~This is now the only thing between the platform and a closed loop~~ → **partially validated 2026-08-24 on a real print** (comparison `82d9050e8676`): with flow calibrated and the correct CFS lane, X and Y measured dead on nominal and the loop correctly refused to compensate — the refusal side works on hardware, not just in tests. Still open: a *non-zero* compensation improving the next print, which needs a part with a real in-plane deviation; and Z, which is unmeasurable until an optimised profile can hold a flat top face (see 15).
 
 15. ~~**`compare` treats declared instrument accuracy as the whole uncertainty**~~ → **closed 2026-08-24, same day it was opened (ADR-0015).** `--measured` now takes comma-separated repeated readings per dimension; each axis's uncertainty is `max(declared accuracy, observed spread)`, the spread and raw readings are recorded in `odc/comparison/0.3`, and `compensate` re-reads them from the stored record so the widened uncertainty survives into the verdict. Run against the real Z case (readings spread 0.09 mm, mean deviation 0.045 mm), the tool refuses the figure by itself. What remains physical rather than tooling: the Z axis still has no number until an optimised profile can hold a flat top face — the tool now says so instead of a human having to; OpenBuildCore's record stays `axis_calibration: partial` until the reprint.
+
+16. **This wiki has no raw layer for web sources** (opened 2026-09-11). The schema says raw sources are
+    immutable, live outside `wiki/`, and are cited by repo-relative path. The OpenScan and AI-CAD ingests
+    are the first whose sources are *web pages*: mutable, unpinnable, citable only by URL plus a retrieval
+    date. [[openscan-2026-09]] and [[ai-cad-mcp-landscape-2026-09]] do exactly that and say so on the page.
+    Sibling `ClawBot/Knowledge/` solved this with a `raw/` tree *inside* its wiki — a deliberate divergence
+    from this instantiation, documented in its own schema. Options: mirror ClawBot's `raw/`; archive fetched
+    pages to a repo-relative path outside `wiki/`; or accept dated URLs as a second-class source class and
+    say so in the schema. **Not decided unilaterally** — the schema is the one file this wiki co-evolves
+    with the human. Until it is, treat a claim sourced only to a URL as weaker evidence than one sourced
+    to a file.
+
+17. **A photogrammetric mesh needs its scale reference recorded, not just its units** (opened 2026-09-11).
+    `run_cradle` refusing `AUTO` is necessary and not sufficient: structure-from-motion recovers shape up
+    to an unknown similarity transform, so a photogrammetry scan carries *no absolute size* unless a known
+    reference was in the scene. A caller can today declare `mm` on a mesh whose scale came from nowhere,
+    and the sidecar will faithfully record a declaration that means less than it looks like — absence
+    disguised as a value, which is the one failure mode this repo is built against. It does real damage in
+    exactly one place: `compare` → `compensate` would turn a scale error into a slicer profile change.
+    Proposed shape: scan-derived imports carry the scale reference (bar, calibrated target, or measured
+    feature plus its measurement) as a required field; absence is UNKNOWN and refuses rather than defaults.
+    ADR before code. See [[openscan]].
+
+18. ~~**No scanner accuracy may be declared until a benchmark methodology is read**~~ → **closed
+    2026-09-11, the same day it was opened, by reading it.** The OpenScan Benchy page is not a metrology
+    benchmark. It is a *qualitative visual* comparison: one shared model scanned on various devices,
+    results posted to Sketchfab, prose about visible layer lines and print artifacts. **No ground-truth
+    geometry, no deviation measurement, and no accuracy figure appear on it at all** — and its own stated
+    purpose is so that users "do not have to fall for some marketing claims about accuracy and
+    resolution". The published sub-0.02 mm numbers are therefore **unsourced, not weakly sourced**, and
+    their citation points at a page that argues against the inference they invite. Two further details
+    worth keeping: the Mini entry ran through OpenScan Cloud, and the Classic entry used a 21 MP Daheng
+    industrial camera in Agisoft Metashape rather than the shipping IMX519 — so the comparison does not
+    represent a stock Classic either.
+
+    **The answer is a refusal, and that counts as answered:** no OpenScan figure may be passed to
+    `compare --declared-accuracy`, ever. A declared accuracy for this device class can only come from a
+    local measurement against a known artifact. Recorded in [[openscan]] and [[openscan-2026-09]].
+    Generalises beyond this vendor: the asterisk pattern — a precise-looking figure citing a page with no
+    measurement in it — is worth checking for on every instrument spec this platform reads.

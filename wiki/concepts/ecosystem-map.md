@@ -1,7 +1,7 @@
 ---
 title: Ecosystem map
 type: concept
-updated: 2026-08-15
+updated: 2026-09-11
 sources:
   - Oh-Ben-Claw/README.md, docs/ECOSYSTEM-INTEGRATION.md
   - OBC-Prime/PLAN.md (§2 four-repo assessment)
@@ -30,14 +30,17 @@ Eight repos, one shape: **brains, bodies, fabrication, and settlement**, converg
 
 Every repo independently arrived at the same patterns:
 
-1. **MCP as the seam.** AdvancedStudio, ClawCam, and Oh-Ben-Claw all expose/consume MCP with the same approval model. Any new capability (electronics, scanning) should arrive as an MCP surface, not a monolith.
+1. **MCP as the seam.** AdvancedStudio, ClawCam, and Oh-Ben-Claw all expose/consume MCP with the same approval model. Any new capability (electronics, scanning) should arrive as an MCP surface, not a monolith. The wider ecosystem converged on MCP too, but *without* the approval model — see [[ai-cad-mcp-landscape-2026-09]]: the public CAD and slicer servers are GUI-scripting wrappers with no units discipline, determinism or refusal path. Convergence on the protocol is not convergence on the contract.
 2. **Registry as ground truth.** Oh-Ben-Claw's `registry.json` is the component database three repos consume. Extending it (passives, ICs, mechanical hardware, filament, user inventory) is cheaper than building a new one. **Known problem:** ECOSYSTEM-INTEGRATION.md documents registry drift across Rust/TS/Python copies.
 3. **Inventory + desires → plan → artifact** is already the ecosystem's native workflow (deployment planner, wizard). The computational-engineering system generalizes this from "agent deployments" to "anything fabricable."
 4. **Provenance/evidence chains everywhere**: ODC's ledger, BINGO's signed hash-chained fabrication evidence, OBC-Prime's parity fixtures. These should compose: a BINGO fabrication proof should be able to reference an ODC provenance record.
 
 ## Gaps (nothing in the ecosystem does these today)
 
-- 3D scanning / mesh capture → design-ready geometry (photogrammetry, reconstruction, scan-to-SDF)
+- 3D scanning / mesh capture → design-ready geometry (photogrammetry, reconstruction, scan-to-SDF).
+  **Still a gap** — but the *import* half closed (`run_cradle`, `compare`), and [[openscan]] is a
+  surveyed candidate for the *capture* half that ROADMAP "Not ever" refuses to own (2026-09-11).
+  Blocking issue is scale, not accuracy: photogrammetry is scale-free by construction.
 - Schematic capture / circuit design / PCB layout (BINGO Tier 3 *assembles* PCBs; nothing *designs* them)
 - BOM generation and live component sourcing (Accelerapp's cost analyzer is closest, but no distributor integration)
 - Multi-domain co-design: board outline ↔ enclosure ↔ thermal ↔ mounting as one constrained problem

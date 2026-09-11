@@ -520,3 +520,72 @@ justification: qwen3:14b issued `verify_artifact` in the same turn as `run_enclo
 invented run id, read "run 1 not found", and called again with the real id — verification 68 over
 run 67, passed. A refusal a model can read is one it can recover from; one it cannot read ends the
 loop.
+
+## [2026-09-11] ingest | OpenScan as a capture candidate, and the scale problem nobody had named
+
+Two source pages ([[openscan-2026-09]], [[ai-cad-mcp-landscape-2026-09]]) and one entity
+([[openscan]]), from a landscape scan across AI-assisted modelling, MCP tooling, computational
+engineering and 3D scanning. [[ecosystem-map]] and [[open-questions]] updated.
+
+**The useful finding is a refusal this repo does not yet make.** `run_cradle` refuses `AUTO` units,
+which reads like the scan boundary is closed. It is not: photogrammetry is scale-free by
+construction — structure-from-motion recovers shape only up to an unknown similarity transform — so
+a caller can declare `mm` on a mesh whose absolute size came from nothing, and the sidecar will
+faithfully record a declaration that means less than it looks like. That is absence disguised as a
+value, arriving through the one door built to stop it, and it does real damage in exactly one place:
+`compare` → `compensate` would turn a scale error into a slicer profile change. Open question 17;
+ADR before code.
+
+**Second refusal, cheaper.** OpenScan's headline sub-0.02 mm accuracies are best-case vendor claims
+asterisked to a community benchmark nobody here has read. ADR-0015's `max(declared, observed spread)`
+defends against a declaration that is optimistic in practice; it cannot defend against one that was
+invented. Both source pages record the figures explicitly as claims barred from `data/`. Open
+question 18.
+
+**On the landscape itself, two things worth keeping.** (1) Text-to-CAD splits cleanly: direct ML
+geometry generation *will not honour exact dimensions*, by its own vendor's description, while the
+code-generation line (CadQuery plus a deterministic kernel) is credible — but every paper in it is
+scored on shape similarity, not dimensional correctness under tolerance, and none carries units,
+provenance or determinism. Better generation makes model code cheaper to author and touches nothing
+that makes an artifact a result. (2) The ecosystem converged on MCP without converging on the
+*contract*: the public CAD and slicer servers are GUI-scripting wrappers with no units discipline,
+determinism or refusal path, and several would violate this repo's non-negotiables on contact.
+ADR-0017/0018 had already found the correct use — a second kernel for cross-checking, tolerances
+pinned by the operator. [[ecosystem-map]]'s MCP-convergence claim amended to say so.
+
+**Method note, and a limit on all of the above.** This is the first ingest whose sources are web
+pages rather than repo-relative files. The schema requires immutable raw sources; URLs are mutable
+and unpinnable, so both source pages carry retrieval dates and state on the page that their own
+standing is weaker for it. Sibling `ClawBot/Knowledge/` diverged from this instantiation with a
+`raw/` tree to solve exactly this. Not resolved here — the schema is the one file this wiki
+co-evolves with the human. Open question 16.
+
+Nothing was built and nothing is planned. [[openscan]] records the shape an integration would take
+so the next person does not re-derive it; the scanning gap in [[ecosystem-map]] stays open.
+
+## [2026-09-11] finding | The asterisk pointed at a page with no measurement in it
+
+Open question 18 said the OpenScan accuracy figures could not be declared until someone read the
+benchmark they cite. Read it the same day. **The OpenScan Benchy is not a metrology benchmark** — it
+is a qualitative visual comparison: one shared model scanned on various devices, results posted to
+Sketchfab, prose about visible layer lines. No ground-truth geometry, no deviation measurement, no
+accuracy figure anywhere on the page. Its own stated purpose is so that users "do not have to fall
+for some marketing claims about accuracy and resolution".
+
+So "up to 0.01 mm" is **unsourced, not weakly sourced**, and its asterisk points at a page that
+argues against the inference the figure invites. Two details make it worse: the Mini entry was
+processed through OpenScan Cloud, and the Classic entry used a 21 MP Daheng industrial camera in
+Agisoft Metashape rather than the shipping IMX519 — so even the qualitative comparison is not of a
+stock Classic. Question 18 closes as a **refusal**: no OpenScan figure may be passed to
+`compare --declared-accuracy`; only a local measurement against a known artifact produces one.
+
+**Why this is worth a log entry rather than a line edit.** Yesterday's version of this repo would
+have accepted "0.01 mm, cited: OpenScan Benchy" as a sourced value. The citation exists, the page
+exists, the page is even about scanning accuracy — every surface check passes. What fails is the only
+check that matters, which is whether a measurement is in there. **A citation that resolves is not
+evidence that measures**, and the two are hard to tell apart at a glance. Worth checking for on every
+instrument spec this platform reads; it is the same shape as the [[open-filament-database]] conflict,
+where a list described a catalogue as holding "print settings" it does not hold.
+
+Questions 16 (raw layer for web sources) and 17 (scale reference in provenance) remain open and are
+Benji's calls — one is a schema change, one is an ADR.
