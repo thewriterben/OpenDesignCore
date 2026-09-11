@@ -624,3 +624,49 @@ Question 17's *shape* is also decided (declare the provenance class: `cad-export
 `photogrammetry`, scale reference required only for the last). Reading `ScanImport.cs` narrowed it:
 `fPostScale` already exists and its doc comment already calls scale a provenance field, so the gap is
 a missing *declaration*, not a missing capability. ADR and implementation not started — plan first.
+
+## [2026-09-11] build | ADR-0019: units are not scale, and the dangerous path was not the one named
+
+Question 17 closed. Import declares `EScanOrigin` (`cad-export` | `metrology-scan` |
+`photogrammetry`); photogrammetry requires a scale reference and refuses without one; `cad-export`
+refuses *having* one, because recording a measurement never made against already-authoritative units
+is not a harmless extra field. `ScanProvenance.Validate` holds the rule once so the CLI and MCP
+surface cannot drift. 185 tests, nine new, six of them refusals. `dotnet format` clean.
+
+**The scope in the plan was wrong, and finding out was the useful part.** The question named
+`run_cradle`. The compiler named `CompareRun`, which imports meshes at three call sites nobody had
+thought about — and *that* is the path that matters. A cradle built from a mis-scaled mesh does not
+fit, and the failure announces itself. `compare → compensate` turns a deviation into a slicer profile
+setting, so a scale error there becomes a provenance-stamped compensation applied to every future
+print in that material, and nothing about it looks wrong. The refusal had to live on both, and the
+two sides of a comparison now declare *different* origins on purpose: the design is always this
+engine's own export, the measured side is whatever the caller says it is.
+
+**One deliberate non-feature.** The scale reference's description is free text and is not
+length-checked or keyword-checked. A minimum length is a guess that manufactures confidence, and any
+threshold is satisfiable by filler — the failure ClawBot's ADR-0026 names for a `how_determined` that
+states nothing. The gate is the positive measured length, which cannot be produced by typing a word.
+The reference is still *not verified*: nobody checks the gauge block was really 10 mm. It is the
+author's claim, recorded as theirs, exactly like a declared scanner accuracy under ADR-0015. What
+changed is that an unscaled reconstruction can no longer pass in silence.
+
+A known-answer test earned its keep here: `ObservedSpreadTests` pinned `odc/comparison/0.3` and
+failed the moment the schema moved, which is the difference between a test that says the code still
+does what it did and one that says it does the right thing.
+
+## [2026-09-11] lint | An open question that had been false for 27 days
+
+Question 6 said CLAUDE.md's "Verify with" block still had placeholders. It does not, and has not
+since the solution skeleton landed on 2026-08-15 — the same day the question was written, a few hours
+later. Closed as stale.
+
+Trivial to fix and worth the entry, because of what it is: **an open-questions list is a claim about
+the present**, and a stale entry in one is the same failure class as a stale README claim. It is just
+less visible, because a README claim gets checked against the code and a *question* gets read as
+something nobody has gotten to yet. Anyone who opened this file in the last month was told to go look
+for a placeholder that was not there. The lint operation exists for exactly this, and had not been run
+against this section since it was written.
+
+Not a new rule, just the existing one applied where it had not been: ODC's own CLAUDE.md says a
+documented-but-unreachable feature gets wired or deleted, and ClawBot's says do not leave a status
+claim standing after the code has moved past it. A stale question is the interrogative form of both.

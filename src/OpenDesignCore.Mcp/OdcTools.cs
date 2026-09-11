@@ -158,11 +158,13 @@ public sealed class OdcTools
     }
 
     [McpServerTool(Name = "run_cradle")]
-    [Description("Import a scanned mesh and carve a cradle that fits it. Units must be declared explicitly (mm|cm|m|in|ft) — they are never inferred from the file.")]
+    [Description("Import a scanned mesh and carve a cradle that fits it. Units must be declared explicitly (mm|cm|m|in|ft) — they are never inferred from the file. The mesh's origin must also be declared: photogrammetry is scale-free by construction, so it additionally requires the scale reference that gave it an absolute size.")]
     public static string RunCradle(
         [Description("Path to the scan STL, relative to the working root.")] string stlPath,
         [Description("Units the scan is in: mm, cm, m, in, or ft. AUTO is refused.")] string units,
         [Description("Voxel size in mm. Required; no default.")] double voxelMm,
+        [Description("How the mesh came to exist: 'cad-export' (units authoritative), 'metrology-scan' (instrument established scale), or 'photogrammetry' (scale-free — requires scaleReference). Required; no default.")] string scanOrigin = "",
+        [Description("What established absolute scale, as '<length-mm>:<what was measured, and how>', e.g. '10.0:gauge block across the turntable, digital caliper'. Required for photogrammetry; refused for cad-export.")] string scaleReference = "",
         [Description("Clearance around the scan per side in mm (default 0.40).")] double clearanceMm = 0.40,
         [Description("Wall thickness in mm (default 2.40).")] double wallMm = 2.40,
         [Description("Fraction of the scan height the cradle rises to, 0..1 (default 0.45).")] double splitFraction = 0.45)
@@ -176,10 +178,36 @@ public sealed class OdcTools
                 "reliable unit information and a silently mis-scaled scan is a real bug.");
         }
 
+        // Declared, never defaulted — and refused here rather than deeper, so
+        // the caller reads the reason (ADR-0019, and the refusal-readability
+        // lesson from 2026-09-07).
+        if (!ScanProvenance.BTryParseOrigin(
+                string.IsNullOrWhiteSpace(scanOrigin) ? null : scanOrigin,
+                out EScanOrigin eOrigin))
+        {
+            throw new McpGuardException(
+                $"scanOrigin must be one of {ScanProvenance.StrAccepted}. It takes no default: " +
+                "declared units say how to read the file's numbers, not whether those numbers " +
+                "were ever tied to a physical size.");
+        }
+
+        ScaleReference? oScaleRef;
+        try
+        {
+            oScaleRef = string.IsNullOrWhiteSpace(scaleReference)
+                ? null
+                : ScaleReference.OParse(scaleReference);
+            ScanProvenance.Validate(eOrigin, oScaleRef);
+        }
+        catch (ImportValidationException e)
+        {
+            throw new McpGuardException(e.Message);
+        }
+
         string strStl = McpGuard.StrResolveInsideRoot(StrRoot, stlPath);
         CradleRunResult oResult = CradleRun.Execute(
-            strStl, eUnits, 1.0f, (float)voxelMm, (float)clearanceMm, (float)wallMm,
-            (float)splitFraction, StrArtifactsDir, StrLedgerPath, strCommit: "mcp");
+            strStl, eUnits, 1.0f, eOrigin, oScaleRef, (float)voxelMm, (float)clearanceMm,
+            (float)wallMm, (float)splitFraction, StrArtifactsDir, StrLedgerPath, strCommit: "mcp");
 
         return StrJson(new
         {

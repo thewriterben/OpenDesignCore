@@ -470,4 +470,47 @@ The precondition for spawning Blender from an MCP host is the stdin fix (PR #25)
 
 The tool's signature is `(runId)` and a test asserts exactly that, so adding a tolerance parameter later is a deliberate act against a named alarm, not a drift.
 
-**Consequences.** ADR-0017's reasoning survives intact — the tolerance is chosen by a person with the machine in front of them, once, and recorded per run as theirs. What changes is that the person chooses it in advance rather than at each run. A failed check is recorded and returned with the instruction not to re-run for a different answer; the inputs are the same and so would be the record. The CLI path is unchanged and still says *declared by the caller*. Operators who do not want agents triggering Blender at all leave the variable unset. Thumbnails remain out of scope, for ADR-0017's reason.
+**Consequences (ADR-0018).** ADR-0017's reasoning survives intact — the tolerance is chosen by a person with the machine in front of them, once, and recorded per run as theirs. What changes is that the person chooses it in advance rather than at each run. A failed check is recorded and returned with the instruction not to re-run for a different answer; the inputs are the same and so would be the record. The CLI path is unchanged and still says *declared by the caller*. Operators who do not want agents triggering Blender at all leave the variable unset. Thumbnails remain out of scope, for ADR-0017's reason.
+
+
+## ADR-0019 — Units are not scale: a mesh declares its origin
+
+**Date:** 2026-09-11
+**Status:** accepted
+
+**Context.** `ScanImport` has refused `AUTO` units since 2026-08-15, on the argument that an STL carries no reliable unit truth and a silently mis-scaled scan is the bug class the unit rules exist to prevent. That argument is right and incomplete. Declaring `mm` says *how to read the numbers in the file*. It says nothing about whether those numbers were ever tied to a physical size.
+
+For a CAD export they always were — `kicad-cli pcb export stl` writes millimetres because the board is millimetres. For a photogrammetric reconstruction they were not: structure-from-motion recovers shape only up to an unknown similarity transform, so absolute size enters solely from a known reference in the scene. A caller could therefore pass `--units mm` on a photogrammetry mesh, get a run, and get a sidecar faithfully recording a declaration that means less than it looks like. Absence disguised as a value, arriving through the one door built to stop it.
+
+The mechanism was already half-present and this is what made it easy to miss: `OImport` takes an `fPostScale`, and its own doc comment already says *"Scale and units are provenance fields."* Nothing recorded where that scale came from, so `fPostScale = 1.0` on an unscaled reconstruction is an identity scaling indistinguishable in the record from a deliberate one.
+
+The damage is not evenly spread. A wrong cradle does not fit and the failure is visible. But `compare` measures a printed part against its design, and `compensate` turns that deviation into a slicer profile setting — so on that path a scale error becomes a persistent, provenance-stamped compensation applied to every future print in that material. That is the path this ADR exists for.
+
+Prompted by the OpenScan survey (`wiki/entities/openscan.md`), which asked whether a photogrammetry rig could feed this boundary. The answer exposed that the boundary was not ready, independent of any particular scanner.
+
+**Options.**
+
+1. **Leave it.** Units are declared; treat scale as the caller's problem. Rejected: the record already looks authoritative, and a reader cannot tell a scaled mesh from an unscaled one.
+2. **Require a scale reference on every mesh import.** Uniform, nothing to mis-declare. Rejected: a `kicad-cli` export has no scale to establish, so the field would be ceremony in the majority of calls — and a required field that means nothing in context is one people satisfy with noise. ClawBot's ADR-0026 names this failure for a `how_determined` that states nothing.
+3. **Gate downstream only** — let `compare`/`compensate` refuse an unreferenced scan, leave import alone. Rejected: a 2 % scale error still produces a cradle that does not fit. It moves the failure later and makes it more expensive, and the import record stays ambiguous either way.
+4. **Declare the provenance class at import**, and require a scale reference only where the class makes one necessary.
+
+**Decision.** Option 4. Import takes a declared `EScanOrigin` — `cad-export` | `metrology-scan` | `photogrammetry` — with no default, alongside the units it already required.
+
+- `photogrammetry` **requires** a `ScaleReference`: a positive measured length in mm plus a description of what was measured and how. Absence is UNKNOWN and refuses, naming the reason.
+- `cad-export` **refuses** a scale reference. It is not a harmless extra: recording one asserts a measurement that was never made, against a mesh whose units were authoritative already.
+- `metrology-scan` (structured light, laser, CT) may carry one and does not require it — the instrument established scale itself.
+
+The rule lives in one place, `ScanProvenance.Validate`, so the CLI and the MCP surface cannot drift apart. Both sidecars gain `scan_origin` and `scan_scale_reference`, written **present-and-null** rather than omitted when there is none, so a reader can tell *"none was needed"* from *"nobody said"*.
+
+`CompareRun` declares the two sides separately and deliberately: the design is always `cad-export` (it is this engine's own output), and the measured side carries the caller's declaration. The manual caliper path records `scan_origin: null` — a caliper reads a physical part, so there is no reconstruction to scale.
+
+**On judging the description.** It is free text and is *not* length-checked or keyword-checked. A minimum length is a guess that manufactures confidence, and any threshold is satisfiable by filler. The real gate is the positive measured length, which cannot be produced by typing a word.
+
+**Schema.** `odc/provenance/0.2 → 0.3` for the cradle sidecar and `odc/comparison/0.3 → 0.4`. `EnclosureRun` is untouched — it is already on `odc/provenance/0.3` for ADR-0016's reasons and imports no mesh, so the cross-machine golden `7b1c8fb9dcdb…` is unaffected. The version tracks each sidecar's own content; the `inputs` block has always been model-specific. `scan-cradle/0.1` keeps its model id: the geometry is byte-identical, only the record changed.
+
+**Consequences.** `--scan-origin` is **required**, so every existing `run-cradle` and `compare --scan` invocation breaks until it is added. That is the intent — silence is what is being removed — and the walkthrough is updated to pass `cad-export` for the KiCad board STL, which is the honest declaration there.
+
+What this does *not* do: it does not verify the scale reference. Nobody checks that the gauge block was really 10 mm or that it was in frame. The claim is the author's, recorded as theirs, exactly as a declared scanner accuracy is under ADR-0015. What changes is that an unscaled reconstruction can no longer pass silently, and a later reader can see which meshes had their size established and by what.
+
+Open, deliberately: existing records written before this carry no `scan_origin`, and an absent field reads as "nobody said" — correct, since nobody did.

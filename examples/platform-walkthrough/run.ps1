@@ -58,6 +58,7 @@ Push-Location $design
 $stl = Join-Path $board "reference-esp32s3.stl"
 $runOutput = dotnet run --project src/OpenDesignCore -c Release --no-build -- `
     run-cradle --stl $stl --units mm --voxel-mm 0.3 `
+    --scan-origin cad-export `
     --clearance-mm 0.4 --wall-mm 2.4 --split 0.9 2>&1 | Out-String
 Write-Host $runOutput
 $runId = ([regex]::Match($runOutput, 'run (\d+): PASS')).Groups[1].Value

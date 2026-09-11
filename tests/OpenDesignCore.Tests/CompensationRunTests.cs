@@ -42,7 +42,9 @@ public sealed class CompensationRunTests : IDisposable
 
         return CompareRun.Execute(
             strDesign, strScan, Mesh.EStlUnit.MM, 0.2f,
-            StrArtifacts, StrLedger, "test-commit", "pla", fAccuracyMm).ReportSha256;
+            StrArtifacts, StrLedger, "test-commit", "pla",
+            OpenDesignCore.Import.EScanOrigin.MetrologyScan, null,
+            fAccuracyMm).ReportSha256;
     }
 
     private CompensationRunResult OCompensate(string strComparison, double fMaxSpreadPct)
@@ -410,7 +412,9 @@ public sealed class CompensationRunTests : IDisposable
 
         string strComparison = CompareRun.Execute(
             strDesign, strScan, Mesh.EStlUnit.MM, 0.2f,
-            StrArtifacts, StrLedger, "test-commit", "pla", 0.05f,
+            StrArtifacts, StrLedger, "test-commit", "pla",
+            OpenDesignCore.Import.EScanOrigin.MetrologyScan, null,
+            0.05f,
             FilamentRef.OParse(StrSpool)).ReportSha256;
 
         CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);

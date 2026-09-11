@@ -30,7 +30,7 @@ sources: []
 3. ~~BINGO hash algorithm~~ → SHA-256 hex confirmed from ASSET-GRAPH v0.1; contract updated to v0.1 ([[bingo-odc-provenance-contract]]); EXTERNAL-ANCHOR confirmed orthogonal (ordering, not identity).
 4. ~~Refusal-category taxonomy v0~~ → drafted as ProjectBINGO/v3/specs/REFUSAL-CATEGORIES.md (DRAFT, uncommitted, awaiting Benji's review). Open remainder: per-jurisdiction mappings (all TODO(source)), category-list hash into JOB_ACCEPTED.
 5. ~~Ingestion queue~~ → all 8 queued sources ingested to wiki/sources/ (2026-08-15). Standing conflict recorded: pre-2026 PDFs' Web3-as-core framing superseded by LANDSCAPE-2026.
-6. **Thin-thread build/test commands** — CLAUDE.md "Verify with" block still has placeholders; filled when the solution skeleton lands. Plan proposed 2026-08-15, awaiting go-ahead.
+6. ~~**Thin-thread build/test commands** — CLAUDE.md "Verify with" block still has placeholders~~ → **closed 2026-09-11 as stale; it had been false for 27 days.** CLAUDE.md carries the real commands (`dotnet build/test/format` against `OpenDesignCore.sln`, `--exclude external`), and has since the solution skeleton landed on 2026-08-15 — the same day this question was written, hours later. Nothing was wrong with the repo; the *question* rotted, and every reader since has been told to check a placeholder that is not there. Found by a lint pass, which is what the lint operation is for. Cheap to fix, worth noting: an open-questions list is a claim about the present, and a stale entry in it is the same failure class as a stale README claim — it is just less visible because nobody diffs a question against reality.
 7. ~~REFUSAL-CATEGORIES.md review~~ → reviewed and merged by Benji, 2026-08-15. Remaining: per-jurisdiction mappings (all TODO(source)), and freezing the category-list hash into JOB_ACCEPTED alongside the acceptance checklist hash.
 8. **ASSET-GRAPH v0.2** — formalize `design_provenance` and `policy_categories` as optional manifest fields (currently extensions).
 9. ~~studio-mcp broken against MCP SDK 2.0~~ → **fixed 2026-08-15**: ported to `MCPServer` (two lines; decorator and run() surfaces unchanged), requirements pinned `mcp>=2.0,<3`, and the proxy now carries `X-Studio-Token` on writes. All 12 tools register; verified Connected against a real client. Original note follows.
@@ -66,7 +66,20 @@ sources: []
     uniform across an ingest, and a page that does not say where it sits invites a reader to assume the
     best one.** Same discipline as ClawBot's `Knowledge/` schema states for its own pages.
 
-17. **A photogrammetric mesh needs its scale reference recorded, not just its units** (opened 2026-09-11).
+17. ~~**A photogrammetric mesh needs its scale reference recorded, not just its units**~~ → **closed
+    2026-09-11: ADR-0019 accepted and implemented.** Import declares `EScanOrigin`; photogrammetry
+    requires a scale reference and refuses without one, `cad-export` refuses *having* one, the rule sits
+    in `ScanProvenance.Validate` so CLI and MCP cannot drift, and both sidecars carry `scan_origin` /
+    `scan_scale_reference` present-and-null. 185 tests, nine new, six of them refusals.
+
+    **What implementing it added to the decision.** The scope was wrong when the question was written:
+    it named `run_cradle`, but `CompareRun` imports meshes too, and *that* is the dangerous path —
+    `compare → compensate` turns a deviation into a slicer profile setting, so a scale error there
+    becomes a provenance-stamped compensation applied to every future print in that material. A cradle
+    that does not fit announces itself; a silently wrong shrinkage figure does not. The refusal had to
+    live on both. Original text follows.
+
+~~17. **A photogrammetric mesh needs its scale reference recorded, not just its units** (opened 2026-09-11).
     `run_cradle` refusing `AUTO` is necessary and not sufficient: structure-from-motion recovers shape up
     to an unknown similarity transform, so a photogrammetry scan carries *no absolute size* unless a known
     reference was in the scene. A caller can today declare `mm` on a mesh whose scale came from nowhere,
@@ -88,8 +101,7 @@ sources: []
     doc comment already says "Scale and units are provenance fields" — so the mechanism exists and is
     simply *unrecorded*. `fPostScale = 1.0` on a photogrammetric mesh is a silent identity scaling,
     indistinguishable in the sidecar from a deliberate one. The gap is narrower than first written: not
-    a missing capability, a missing declaration. **ADR and implementation still to do.** See
-    [[openscan]].
+    a missing capability, a missing declaration.~~ See [[openscan]].
 
 18. ~~**No scanner accuracy may be declared until a benchmark methodology is read**~~ → **closed
     2026-09-11, the same day it was opened, by reading it.** The OpenScan Benchy page is not a metrology

@@ -25,6 +25,13 @@ public sealed record ScanImportResult
 /// a silently mis-scaled scan is precisely the bug class the unit rules exist
 /// to prevent. Scale and units are provenance fields.
 ///
+/// Units are not scale, though (ADR-0019). Declaring `mm` says how to read the
+/// numbers in the file, not whether they were ever tied to a physical size —
+/// and for a photogrammetric reconstruction they were not, because
+/// structure-from-motion recovers shape only up to an unknown similarity
+/// transform. So the caller also declares the mesh's origin, and photogrammetry
+/// must name the reference that established its scale.
+///
 /// v0 limitation, stated plainly: voxelization requires a closed (watertight)
 /// mesh. A leaky scan produces a degenerate field, which the emptiness check
 /// catches — repair belongs upstream in the scan app for now.
@@ -36,12 +43,18 @@ public static class ScanImport
         string strStlPath,
         Mesh.EStlUnit eUnits,
         float fPostScale,
+        EScanOrigin eOrigin,
+        ScaleReference? oScaleRef,
         string strArtifactsDir)
     {
         if (eUnits == Mesh.EStlUnit.AUTO)
             throw new ImportValidationException(
                 "Units must be declared explicitly (mm/cm/m/in/ft) — AUTO infers from an " +
                 "unreliable STL header and silent unit inference is forbidden.");
+
+        // Units say how to read the file's numbers; origin says whether those
+        // numbers were ever tied to a physical size (ADR-0019).
+        ScanProvenance.Validate(eOrigin, oScaleRef);
         if (fPostScale <= 0)
             throw new ImportValidationException("Scale must be positive.");
         if (!File.Exists(strStlPath))

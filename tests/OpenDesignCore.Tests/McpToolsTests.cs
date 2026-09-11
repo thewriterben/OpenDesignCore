@@ -125,6 +125,33 @@ public sealed class McpToolsTests : IDisposable
     }
 
     [Fact]
+    public void RunCradle_RefusesAnUndeclaredScanOrigin()
+    {
+        Environment.SetEnvironmentVariable("ODC_ROOT", _strTempDir);
+
+        // Units are fine here; what is missing is the origin. The caller must
+        // read why, not just that it failed (ADR-0019, and the refusal-
+        // readability fix of 2026-09-07).
+        McpGuardException oEx = Assert.Throws<McpGuardException>(
+            () => OdcTools.RunCradle("scan.stl", units: "mm", voxelMm: 0.4));
+
+        Assert.Contains("cad-export|metrology-scan|photogrammetry", oEx.Message);
+        Assert.Contains("takes no default", oEx.Message);
+    }
+
+    [Fact]
+    public void RunCradle_RefusesPhotogrammetryWithoutAScaleReference()
+    {
+        Environment.SetEnvironmentVariable("ODC_ROOT", _strTempDir);
+
+        McpGuardException oEx = Assert.Throws<McpGuardException>(
+            () => OdcTools.RunCradle(
+                "scan.stl", units: "mm", voxelMm: 0.4, scanOrigin: "photogrammetry"));
+
+        Assert.Contains("scale-free", oEx.Message);
+    }
+
+    [Fact]
     public void PathsEscapingTheRoot_AreRefused()
     {
         Assert.Throws<McpGuardException>(

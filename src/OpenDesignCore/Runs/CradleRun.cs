@@ -16,10 +16,15 @@ public sealed record CradleRunResult
 }
 
 /// <summary>
-/// Scan-to-fit executor: imported mesh in (units declared, never inferred),
-/// validated cradle STL + deterministic provenance out, run ledgered. The raw
-/// scan file is itself content-addressed, so the sidecar chains cradle → scan
-/// by hash.
+/// Scan-to-fit executor: imported mesh in (units and origin declared, never
+/// inferred), validated cradle STL + deterministic provenance out, run ledgered.
+/// The raw scan file is itself content-addressed, so the sidecar chains
+/// cradle → scan by hash.
+///
+/// Sidecar schema `odc/provenance/0.3` — the 0.2 → 0.3 bump adds `scan_origin`
+/// and `scan_scale_reference` (ADR-0019). `EnclosureRun` is already on 0.3 for
+/// its own reasons (ADR-0016) and is untouched here; the version tracks each
+/// sidecar's own content, and the `inputs` block has always been model-specific.
 /// </summary>
 public static class CradleRun
 {
@@ -27,6 +32,8 @@ public static class CradleRun
         string strStlPath,
         Mesh.EStlUnit eUnits,
         float fPostScale,
+        EScanOrigin eOrigin,
+        ScaleReference? oScaleRef,
         float fVoxelSizeMm,
         float fClearanceMm,
         float fWallMm,
@@ -43,7 +50,7 @@ public static class CradleRun
         using (Library oLib = new(fVoxelSizeMm))
         {
             ScanImportResult oScan = ScanImport.OImport(
-                oLib, strStlPath, eUnits, fPostScale, strArtifactsDir);
+                oLib, strStlPath, eUnits, fPostScale, eOrigin, oScaleRef, strArtifactsDir);
             strScanHash = oScan.ScanSha256;
             nScanTriangles = oScan.TriangleCount;
 
@@ -80,7 +87,7 @@ public static class CradleRun
 
         Dictionary<string, object?> oSidecar = new()
         {
-            ["schema"] = "odc/provenance/0.2",
+            ["schema"] = "odc/provenance/0.3",
             ["model"] = CradleModel.StrModelId,
             ["voxel_size_mm"] = StrF2(fVoxelSizeMm),
             ["inputs"] = new Dictionary<string, object?>
@@ -88,6 +95,17 @@ public static class CradleRun
                 ["scan_sha256"] = strScanHash,
                 ["scan_declared_units"] = eUnits.ToString().ToLowerInvariant(),
                 ["scan_post_scale"] = StrF4(fPostScale),
+                ["scan_origin"] = ScanProvenance.StrOrigin(eOrigin),
+                // Null on purpose when there is none: a reader must be able to
+                // tell "no reference was needed" from "one was recorded", and an
+                // absent key reads as neither (ADR-0019).
+                ["scan_scale_reference"] = oScaleRef is null
+                    ? null
+                    : new Dictionary<string, object?>
+                    {
+                        ["length_mm"] = StrF4(oScaleRef.LengthMm),
+                        ["description"] = oScaleRef.Description,
+                    },
                 ["scan_triangle_count"] = nScanTriangles,
                 ["clearance_mm"] = StrF2(fClearanceMm),
                 ["wall_mm"] = StrF2(fWallMm),
