@@ -2,7 +2,7 @@
 
 OpenDesignCore. Read first, in this order: `ARCHITECTURE.md`, `GLOSSARY.md`, `DECISIONS.md`, then `ROADMAP.md` for scope.
 
-C# on .NET, built on PicoGK and the LEAP 71 ShapeKernel as pinned submodules. The PicoGK runtime is a separate native install. Geometry is voxel/SDF fields over OpenVDB — we do not write geometry algorithms that belong upstream.
+C# on .NET, built on PicoGK and the LEAP 71 ShapeKernel, both pinned — but consumed differently, and the difference matters (ADR-0008): **PicoGK is a NuGet `PackageReference` at `[2.2.0]` with its runtime bundled** (no separate native install), while **ShapeKernel is a git submodule** at `external/LEAP71_ShapeKernel`, tag `ShapeKernel-v2.1.0`, compiled as sources. Geometry is voxel/SDF fields over OpenVDB — we do not write geometry algorithms that belong upstream.
 
 ## Verify with
 
@@ -29,7 +29,7 @@ Run these after every step. Don't move forward while anything is red.
 
 ## How to work
 
-- Open the actual files. Never infer an API from its name — including PicoGK's; read the submodule source.
+- Open the actual files. Never infer an API from its name. For ShapeKernel that means reading the submodule source under `external/`. **PicoGK has no source in this tree** — it is a NuGet package (ADR-0008), so its behaviour is checked by decompiling the assembly or, better, by *measuring it*: write a test that compares the effect against its absence. This is not pedantry. On 2026-09-11 `mshFromStlFile` was found to accept a scale argument and silently ignore it, unnoticed for 27 days because every test used scale `1.0` — the one value where working and broken look identical. A dependency's signature is a claim, and a claim is not evidence. See `wiki/entities/picogk.md`.
 - Anything touching more than one file gets a short plan first.
 - Small steps, verified individually.
 - Don't add code nothing calls. Documented-but-unreachable feature: wire it or delete it, and say which.

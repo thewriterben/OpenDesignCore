@@ -20,6 +20,13 @@ public sealed record ScanImportResult
     /// (ADR-0020) — so the sidecar records what happened, not what was asked.
     /// </summary>
     public required float EffectiveScale { get; init; }
+
+    /// <summary>
+    /// Edge topology of the imported mesh. Recorded in provenance, never used to
+    /// refuse (ADR-0021) — the counts are a signal a reader can weigh, not a
+    /// verdict, and the weld they rest on is stricter than some writers deserve.
+    /// </summary>
+    public required MeshTopologyReport Topology { get; init; }
 }
 
 /// <summary>
@@ -113,6 +120,29 @@ public static class ScanImport
             throw new ImportValidationException(
                 $"{Path.GetFileName(strStlPath)}: no triangles after import — empty or unreadable STL.");
 
+        // Mesh topology is measured and RECORDED, not enforced (ADR-0021).
+        //
+        // This boundary claimed from 2026-08-15 that voxelisation needs a closed
+        // mesh and that a leaky one yields a degenerate field the emptiness
+        // check catches. Measured 2026-09-11: all three clauses false. A mesh
+        // with its lower third deleted voxelised into a solid 33 % smaller by
+        // volume, every gate green — a wrong-but-non-empty field passes an
+        // emptiness test by definition. The kernel was blameless: it faithfully
+        // voxelised a mesh describing a shorter object.
+        //
+        // Refusing on that basis was tried and reverted the same day. Two
+        // measurements killed it. A KiCad board export is five loose parts, four
+        // of them individually closed solids that merely touch — a normal
+        // assembly, which OpenVDB unions correctly and which a closed-manifold
+        // rule rejects. And this analyser and Blender disagree on that file's
+        // boundary count (4 against 0), because exact-equality welding splits
+        // vertices a tolerant weld merges, so some "boundaries" may be artefacts
+        // of the weld rather than holes in the surface.
+        //
+        // So the counts travel into provenance, where a reader can judge them,
+        // and nothing is refused on a threshold nobody has evidence for.
+        MeshTopologyReport oTopology = MeshTopology.OAnalyse(mshLoaded);
+
         // Recentre deterministically: XY centered on origin, floor at Z = 0.
         // Matrix overload on purpose — the (vecScale, vecOffset) overload in
         // PicoGK 2.2.0 applies a different scale component per vertex (upstream bug).
@@ -134,6 +164,7 @@ public static class ScanImport
             TriangleCount = mshLoaded.nTriangleCount(),
             SizeMm = vecSize,
             EffectiveScale = fPostScale,
+            Topology = oTopology,
         };
     }
 

@@ -151,10 +151,15 @@ enter ODC at all:
 | Loose parts | **277** |
 | Watertight | **false** |
 
-ODC's mesh import is voxelisation and its v0 requires a closed mesh. **This mesh
-would be refused**, which was the predicted outcome and is now measured.
+**This section predicted ODC would refuse this mesh. It does not — and the
+reason is now ADR-0021.** ODC's import had *claimed* since 2026-08-15 to require
+a closed mesh, and that claim was never enforced. Enforcing it was tried the same
+day these numbers were taken and reverted within the hour: the rule rejected the
+platform walkthrough's own KiCad board export, which is five touching solids,
+four of them individually closed — a normal assembly that voxelises correctly.
+Topology is now **measured and recorded**, not enforced.
 
-### Why this is not merely inconvenient
+### Why the tension is real even without a gate
 
 `--PoissonMeshing.trim` defaults to `10`: it discards low-confidence regions,
 which is what produces those 40,161 boundary edges. Setting `trim 0` yields a
@@ -162,16 +167,16 @@ which is what produces those 40,161 boundary edges. Setting `trim 0` yields a
 observed.** Photogrammetry of an object standing on a platter cannot see its
 underside; that surface does not exist in any image.
 
-So for this input class the watertight requirement and the evidence are in
-tension:
+- **`trim 10`** — honest mesh, open where nothing was seen. Imports, with its
+  boundary-edge count in `scan_topology`.
+- **`trim 0`** — closed mesh carrying invented geometry. Imports too, and looks
+  *cleaner* in the record precisely because the invention closed it.
 
-- **`trim 10`** — honest mesh, open where nothing was seen, **refused** by ODC.
-- **`trim 0`** — closed mesh that **passes** ODC's validity gate while carrying
-  invented geometry, with a provenance record that looks clean.
-
-The second is the failure mode this repository exists to prevent, arriving
-through the gate meant to prevent it. A watertight check cannot distinguish
-observed surface from plausible surface, because both are closed.
+That inversion is the point: a watertight check cannot distinguish observed
+surface from plausible surface, because both are closed. It would have rated the
+more-invented mesh higher. Recording the counts does not solve that either — what
+marks it is `scan_origin: photogrammetry` (ADR-0019), the declaration that this
+mesh may contain surface nobody saw.
 
 ### Measured: how much `trim 0` invents
 
@@ -196,13 +201,15 @@ and **28–51 % larger on two axes than the data it was built from.** It would
 pass ODC's validity gate and produce a cradle for a part half again too big,
 under clean provenance.
 
-`trim 5` tracks the data to 2–3 % on X and Y and is open, so ODC refuses it. Its
-only real extrapolation is +11 % on Z, at the unobserved bottom — exactly where
-Poisson smooths past the boundary before trimming. X holds at 30.68 mm under
-both settings; the well-observed axis is stable.
+`trim 5` tracks the data to 2–3 % on X and Y and is open — which ODC **records
+rather than refuses** (ADR-0021): 565 boundary and 145 non-manifold edges land in
+`scan_topology`. Its only real extrapolation is +11 % on Z, at the unobserved
+bottom — exactly where Poisson smooths past the boundary before trimming. X holds
+at 30.68 mm under both settings; the well-observed axis is stable.
 
 **So "pick a trim value" is not the answer.** The two settings fail in opposite
-directions and neither is usable.
+directions: one is dimensionally wrong where nobody looked, the other is honest
+about its holes. Neither is refused, and the record is what tells them apart.
 
 ### What the numbers suggest, and what still needs deciding
 

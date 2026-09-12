@@ -736,6 +736,56 @@ independent of any tooling: when a document points at a record, read the record.
 Also checked and **not** a problem: `machines.json` appeared to have a machine with a blank id. The
 field is `machine_id`; the query asked for `id`. Both entries are intact.
 
+## [2026-09-11] lint | Audit of status claims: the README contradicts the glossary it cites
+
+Two stale claims found by accident tonight was enough evidence to look on purpose. Swept every
+status claim in `README.md`, `CLAUDE.md`, `ROADMAP.md`, `GLOSSARY.md`, `ARCHITECTURE.md`,
+`DEPENDENCIES.md` and the open-questions list against the record each depends on — ADRs, `.gitmodules`,
+the csproj files, `machines.json` — rather than against another document.
+
+**Three determinate errors, all fixed here, all ADR-backed:**
+
+1. **`README.md` stated two invariants that accepted ADRs explicitly superseded** — on the same day
+   those ADRs were written, so it had been wrong from the start. It said *"All quantities are SI
+   internally"* (ADR-0004 supersedes: length is millimetres) and *"Geometric predicates take an
+   explicit tolerance; there are no ambient epsilons"* (ADR-0003 supersedes: one global voxel size per
+   run). The decisive part: **the README contradicted `GLOSSARY.md`, which it links to in the same
+   sentence as the authority on units.** The glossary was right the whole time.
+
+2. **`CLAUDE.md` called PicoGK a pinned submodule.** It is a NuGet `PackageReference` at `[2.2.0]`
+   (ADR-0008, 2026-08-15). `.gitmodules` contains only ShapeKernel. The file contradicted itself —
+   line 15 had it right.
+
+3. **`CLAUDE.md` told readers to "read the submodule source" for PicoGK.** There is none. That is the
+   instruction which, had it been followable, would have caught tonight's `mshFromStlFile` bug — so it
+   was not merely wrong, it was wrong in the exact place it was most needed. Now says PicoGK has no
+   source in-tree and that its behaviour is established by *measuring the effect against its absence*.
+
+**Two things that looked like findings and were not**, recorded because the retraction matters as much
+as the find:
+
+- `ARCHITECTURE.md` and `GLOSSARY.md` carry unfilled `⟨…⟩` sections — but ARCHITECTURE declares it in
+  its own second line (*"Partly written"*). **Disclosed incompleteness is not a stale claim.** The
+  distinction is the whole point: a document that says what it does not know is doing its job.
+- `DEPENDENCIES.md`'s two `⟨if a model needs it⟩` markers are *correct* usage, marking optional
+  libraries deliberately not adopted. It is the most accurate document in the repo.
+
+**And the audit nearly produced a false finding of its own.** A PowerShell placeholder count returned
+16 for `ARCHITECTURE.md` by one method and 0 by another — an encoding difference in how the file was
+read. I was one step from reporting "the prescribed reading path leads through two skeletons" on the
+strength of a number that did not reproduce. Checked with a second reader before claiming. That is the
+third time tonight a measurement taken two ways disagreed, after the contaminated crop and the
+CPU/GPU feature counts.
+
+**Left alone deliberately:** `README.md`'s nine `⟨…⟩` slots — mission, quick start, capabilities,
+non-goals. Those are product positioning, and the project's own instructions leave the same questions
+open. Inventing them would be exactly the plausible-content failure this repo refuses. They are
+Benji's to write.
+
+**Noted, not fixed:** ROADMAP says the MCP surface has 7 tools, CHANGELOG's newest entry says eight.
+Both are defensible — `verify_artifact` registers only when `ODC_BLENDER` is configured — so the line
+is incomplete rather than false.
+
 ## [2026-09-11] measurement | SfM is a similarity to 75 ppm, so the second scale reference would measure its own noise
 
 `examples/scale-derivation` renders a turntable capture in Blender with exact
