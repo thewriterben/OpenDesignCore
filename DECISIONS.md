@@ -514,3 +514,49 @@ The rule lives in one place, `ScanProvenance.Validate`, so the CLI and the MCP s
 What this does *not* do: it does not verify the scale reference. Nobody checks that the gauge block was really 10 mm or that it was in frame. The claim is the author's, recorded as theirs, exactly as a declared scanner accuracy is under ADR-0015. What changes is that an unscaled reconstruction can no longer pass silently, and a later reader can see which meshes had their size established and by what.
 
 Open, deliberately: existing records written before this carry no `scan_origin`, and an absent field reads as "nobody said" — correct, since nobody did.
+
+## ADR-0020 — A photogrammetry scale is derived from its reference, and scaling happens in our own code
+
+**Date:** 2026-09-11
+**Status:** accepted — extends ADR-0019
+
+**Context.** ADR-0019 made photogrammetry declare a scale reference: a known length in mm plus a description of what was measured. It then recorded that reference in the sidecar and did nothing else with it. Grepping every use, `LengthMm` was read by exactly one thing — the JSON writer.
+
+Meanwhile `fPostScale` was passed separately. So the two numbers that describe the same physical fact never met. A caller could pass `--scale-ref 10.0:gauge block --scale 1.0` against a mesh in which that block spans three units, and the record would assert a 10 mm reference against a mesh where it is 3 mm: internally inconsistent, and stamped with provenance that reads as rigour.
+
+ADR-0019 anticipated the *external* version of this — nobody checks the block was really 10 mm — and defended it by analogy to a declared scanner accuracy under ADR-0015. That analogy was weaker than it sounded. A declared accuracy is **consumed**: `compare` uses it in the significance test, and ADR-0015 made observed spread override it. The scale reference was consumed by nothing.
+
+**Then the investigation found something worse.** A probe comparing a scaled import against an unscaled one, on both import paths:
+
+```
+binary STL, scale 1.0 -> X = 15.98
+binary STL, scale 2.0 -> X = 15.98     ratio = 1
+ASCII  STL, scale 1.0 -> X = 10
+ASCII  STL, scale 2.0 -> X = 20        ratio = 2
+```
+
+**PicoGK 2.2.0's `mshFromStlFile` accepts a scale argument and does not apply it.** Our own ASCII parser applied it inline, so the two paths disagreed. Since the mesh boundary was built on 2026-08-15, every binary STL imported with a non-1.0 scale was imported unscaled while the sidecar recorded the requested scale as though it had happened. A silently mis-scaled scan — the exact bug class the boundary's own doc comment says it exists to prevent — living inside the boundary. Nothing caught it because no test compared a scaled import against an unscaled one; every test used scale 1.0, where correct and broken are indistinguishable.
+
+**Options.**
+
+1. **Cross-check the reference against the declared scale**, refuse on disagreement beyond a tolerance. Detects the inconsistency, but keeps two sources for one quantity and adds a tolerance parameter that has no principled value.
+2. **Leave the reference descriptive** and fix only the PicoGK bug. Honest about the bug, leaves an inert field that looks like evidence.
+3. **Derive the scale from the reference.** If the caller can state the reference's length in mm and what it spans in the file, they have given the two numbers that *determine* the scale. Taking a third, separately declared, is the redundancy.
+
+**Decision.** Option 3, plus a rule about where scaling happens.
+
+**The scale reference gains `SpanFileUnits`** — what the reference spans in the mesh file's own coordinates, before units and scaling. For `photogrammetry` it is **required**, and the total file→mm factor is `LengthMm / SpanFileUnits`; the declared unit's contribution is divided back out so the two do not multiply. `--scale` is **refused** alongside photogrammetry: two sources for one quantity. For every other origin a span is **refused**, because there the scale came from elsewhere and a span would be that same second source.
+
+Inconsistency is now unrepresentable rather than detectable. There is no tolerance to choose because there is nothing to compare.
+
+**Scaling happens once, in our own code, after load.** Both import paths now load with units only and apply the post-scale through a single `mshCreateTransformed`. The kernel's scale parameter is passed `1.0f` and a comment says why, with the measurement date. This is the "conversion happens at one place per boundary" rule from ADR-0004, applied where it had quietly not been.
+
+The sidecar records `scan_post_scale` as the factor **actually applied**, plus `scan_scale_source` — `derived from scale_reference` or `declared by the caller` — because `1.0000` alone cannot distinguish a derived identity from a defaulted one.
+
+**Consequences.** `--scale-ref-span` is required for photogrammetry, so ADR-0019's surface is breaking three hours after it landed. Better now than after a record exists that depends on it.
+
+The PicoGK finding is upstream's, not ours, and we work around it rather than patching the submodule (ADR-0001: geometry algorithms belong upstream). Worth reporting to LEAP 71. If a later PicoGK applies the argument, our transform would double-apply it — so the workaround is pinned to `[2.2.0]` by the same discipline that pins everything else, and the comment names the version and the date it was measured.
+
+Three regression tests now pin that a scaled import is actually bigger, on both paths, and that the paths agree with each other. They are known-answer tests: a sphere twice as big is twice as big. The absent version of this test is why a month passed.
+
+**What this still does not do.** It does not verify that the gauge block was really 10 mm, or that it was in frame, or that the operator measured the right edge. Those remain the author's claims, recorded as theirs. What changed is that the claim now determines the geometry instead of sitting beside it, so a wrong reference produces a visibly wrong mesh rather than a correct-looking record.

@@ -165,6 +165,7 @@ public sealed class OdcTools
         [Description("Voxel size in mm. Required; no default.")] double voxelMm,
         [Description("How the mesh came to exist: 'cad-export' (units authoritative), 'metrology-scan' (instrument established scale), or 'photogrammetry' (scale-free — requires scaleReference). Required; no default.")] string scanOrigin = "",
         [Description("What established absolute scale, as '<length-mm>:<what was measured, and how>', e.g. '10.0:gauge block across the turntable, digital caliper'. Required for photogrammetry; refused for cad-export.")] string scaleReference = "",
+        [Description("What that reference spans in the mesh file's own coordinates, before units. Required for photogrammetry — it and the reference's length DERIVE the scale, so no scale is taken separately. Refused for other origins.")] double scaleReferenceSpan = 0,
         [Description("Clearance around the scan per side in mm (default 0.40).")] double clearanceMm = 0.40,
         [Description("Wall thickness in mm (default 2.40).")] double wallMm = 2.40,
         [Description("Fraction of the scan height the cradle rises to, 0..1 (default 0.45).")] double splitFraction = 0.45)
@@ -196,7 +197,9 @@ public sealed class OdcTools
         {
             oScaleRef = string.IsNullOrWhiteSpace(scaleReference)
                 ? null
-                : ScaleReference.OParse(scaleReference);
+                : ScaleReference.OParse(
+                    scaleReference,
+                    scaleReferenceSpan > 0 ? scaleReferenceSpan : null);
             ScanProvenance.Validate(eOrigin, oScaleRef);
         }
         catch (ImportValidationException e)

@@ -107,19 +107,151 @@ public sealed class CradleRunTests : IDisposable
         CradleRunResult oResult = OExecute(
             strScan,
             eOrigin: EScanOrigin.Photogrammetry,
+            // The sphere is 16 mm across in file units; calling that 16 mm
+            // means a 1:1 derived scale, so the cradle geometry is unchanged
+            // and this test is about the record, not the resizing.
             oScaleRef: new ScaleReference
             {
-                Description = "10 mm gauge block across the turntable, digital caliper",
-                LengthMm = 10.0,
+                Description = "16 mm gauge block across the turntable, digital caliper",
+                LengthMm = 16.0,
+                SpanFileUnits = 16.0,
             });
 
         string strSidecar = File.ReadAllText(ArtifactStore.StrPathFor(
             StrArtifactsDir, oResult.ProvenanceSha256, ".provenance.json"));
 
         Assert.Contains("\"scan_origin\":\"photogrammetry\"", strSidecar);
-        Assert.Contains("\"length_mm\":\"10.0000\"", strSidecar);
+        Assert.Contains("\"length_mm\":\"16.0000\"", strSidecar);
+        Assert.Contains("\"span_file_units\":\"16.0000\"", strSidecar);
         Assert.Contains("gauge block across the turntable", strSidecar);
         Assert.Contains("\"schema\":\"odc/provenance/0.3\"", strSidecar);
+
+        // The record says where the scale came from, because "1.0000" alone
+        // cannot distinguish a derived identity from a defaulted one.
+        Assert.Contains("\"scan_scale_source\":\"derived from scale_reference\"", strSidecar);
+    }
+
+    /// <summary>
+    /// The one that would have caught the gap: the reference does not describe
+    /// the scale, it *is* the scale (ADR-0020). A 32 mm reference spanning 16
+    /// file units must produce a mesh twice the file's size.
+    /// </summary>
+    [Fact]
+    public void Photogrammetry_DerivesTheScaleFromTheReference()
+    {
+        string strScan = StrMakeScanStl();   // sphere, 16 mm across in file units
+
+        using Library oLib = new(0.4f);
+        ScanImportResult oAtOne = ScanImport.OImport(
+            oLib, strScan, Mesh.EStlUnit.MM, 1.0f,
+            EScanOrigin.Photogrammetry,
+            new ScaleReference
+            {
+                Description = "16 mm gauge block, caliper",
+                LengthMm = 16.0,
+                SpanFileUnits = 16.0,
+            },
+            StrArtifactsDir);
+
+        ScanImportResult oAtTwo = ScanImport.OImport(
+            oLib, strScan, Mesh.EStlUnit.MM, 1.0f,
+            EScanOrigin.Photogrammetry,
+            new ScaleReference
+            {
+                Description = "32 mm gauge block, caliper",
+                LengthMm = 32.0,
+                SpanFileUnits = 16.0,
+            },
+            StrArtifactsDir);
+
+        Assert.Equal(1.0f, oAtOne.EffectiveScale, 3);
+        Assert.Equal(2.0f, oAtTwo.EffectiveScale, 3);
+        Assert.Equal(oAtOne.SizeMm.X * 2.0f, oAtTwo.SizeMm.X, 2);
+        Assert.Equal(oAtOne.SizeMm.Z * 2.0f, oAtTwo.SizeMm.Z, 2);
+    }
+
+    [Fact]
+    public void Photogrammetry_DerivationAccountsForDeclaredUnits()
+    {
+        // The span is measured in raw file coordinates, so the unit conversion
+        // PicoGK applies has to be divided back out. Declaring CM must not
+        // multiply the derived size by ten.
+        string strScan = StrMakeScanStl();
+
+        using Library oLib = new(0.4f);
+        ScanImportResult oCm = ScanImport.OImport(
+            oLib, strScan, Mesh.EStlUnit.CM, 1.0f,
+            EScanOrigin.Photogrammetry,
+            new ScaleReference
+            {
+                Description = "32 mm gauge block, caliper",
+                LengthMm = 32.0,
+                SpanFileUnits = 16.0,
+            },
+            StrArtifactsDir);
+
+        // 16 file units declared as the 32 mm reference → 32 mm across,
+        // whatever the unit label says.
+        Assert.Equal(32.0f, oCm.SizeMm.X, 1);
+    }
+
+    [Fact]
+    public void Photogrammetry_WithoutASpan_IsRefused()
+    {
+        string strScan = StrMakeScanStl();
+
+        ImportValidationException e = Assert.Throws<ImportValidationException>(
+            () => OExecute(
+                strScan,
+                eOrigin: EScanOrigin.Photogrammetry,
+                oScaleRef: new ScaleReference
+                {
+                    Description = "10 mm gauge block, caliper",
+                    LengthMm = 10.0,
+                }));
+
+        Assert.Contains("what it spans", e.Message);
+        Assert.Contains("reads as rigour and is not", e.Message);
+    }
+
+    [Fact]
+    public void ASpanOnANonPhotogrammetryOrigin_IsRefused()
+    {
+        string strScan = StrMakeScanStl();
+
+        ImportValidationException e = Assert.Throws<ImportValidationException>(
+            () => OExecute(
+                strScan,
+                eOrigin: EScanOrigin.MetrologyScan,
+                oScaleRef: new ScaleReference
+                {
+                    Description = "10 mm gauge block, caliper",
+                    LengthMm = 10.0,
+                    SpanFileUnits = 5.0,
+                }));
+
+        Assert.Contains("second source for one quantity", e.Message);
+    }
+
+    [Fact]
+    public void Photogrammetry_WithAnExplicitScale_IsRefused()
+    {
+        string strScan = StrMakeScanStl();
+
+        using Library oLib = new(0.4f);
+        ImportValidationException e = Assert.Throws<ImportValidationException>(
+            () => ScanImport.OImport(
+                oLib, strScan, Mesh.EStlUnit.MM, 2.0f,   // an explicit scale
+                EScanOrigin.Photogrammetry,
+                new ScaleReference
+                {
+                    Description = "16 mm gauge block, caliper",
+                    LengthMm = 16.0,
+                    SpanFileUnits = 16.0,
+                },
+                StrArtifactsDir));
+
+        Assert.Contains("takes no explicit scale", e.Message);
     }
 
     [Fact]

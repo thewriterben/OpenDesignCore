@@ -45,6 +45,7 @@ public static class CradleRun
         byte[] abStl;
         string strScanHash;
         int nScanTriangles;
+        float fEffectiveScale;
         ArtifactGeometry oGeometry;
 
         using (Library oLib = new(fVoxelSizeMm))
@@ -53,6 +54,7 @@ public static class CradleRun
                 oLib, strStlPath, eUnits, fPostScale, eOrigin, oScaleRef, strArtifactsDir);
             strScanHash = oScan.ScanSha256;
             nScanTriangles = oScan.TriangleCount;
+            fEffectiveScale = oScan.EffectiveScale;
 
             CradleParams oParams = new()
             {
@@ -94,7 +96,12 @@ public static class CradleRun
             {
                 ["scan_sha256"] = strScanHash,
                 ["scan_declared_units"] = eUnits.ToString().ToLowerInvariant(),
-                ["scan_post_scale"] = StrF4(fPostScale),
+                // What was applied, not what was asked: for photogrammetry this
+                // is derived from the reference below (ADR-0020).
+                ["scan_post_scale"] = StrF4(fEffectiveScale),
+                ["scan_scale_source"] = eOrigin == EScanOrigin.Photogrammetry
+                    ? "derived from scale_reference"
+                    : "declared by the caller",
                 ["scan_origin"] = ScanProvenance.StrOrigin(eOrigin),
                 // Null on purpose when there is none: a reader must be able to
                 // tell "no reference was needed" from "one was recorded", and an
@@ -104,6 +111,9 @@ public static class CradleRun
                     : new Dictionary<string, object?>
                     {
                         ["length_mm"] = StrF4(oScaleRef.LengthMm),
+                        ["span_file_units"] = oScaleRef.SpanFileUnits is { } fSpan
+                            ? StrF4(fSpan)
+                            : null,
                         ["description"] = oScaleRef.Description,
                     },
                 ["scan_triangle_count"] = nScanTriangles,

@@ -14,6 +14,12 @@ public sealed record ScanImportResult
     public required int TriangleCount { get; init; }
     /// <summary>Scan bounding-box size after unit conversion and recentring, mm.</summary>
     public required Vector3 SizeMm { get; init; }
+    /// <summary>
+    /// The post-unit scale actually applied. Equals the caller's value except
+    /// for photogrammetry, where it is derived from the scale reference
+    /// (ADR-0020) — so the sidecar records what happened, not what was asked.
+    /// </summary>
+    public required float EffectiveScale { get; init; }
 }
 
 /// <summary>
@@ -55,6 +61,26 @@ public static class ScanImport
         // Units say how to read the file's numbers; origin says whether those
         // numbers were ever tied to a physical size (ADR-0019).
         ScanProvenance.Validate(eOrigin, oScaleRef);
+
+        // For photogrammetry the scale is DERIVED, not declared (ADR-0020).
+        // The reference's known length and its measured span in file units
+        // determine the total file→mm factor between them; taking a separate
+        // --scale as well would be two sources for one quantity, and the
+        // sidecar could record a reference that contradicts the mesh it
+        // describes. Deriving makes that contradiction unrepresentable.
+        if (eOrigin == EScanOrigin.Photogrammetry)
+        {
+            if (fPostScale != 1.0f)
+                throw new ImportValidationException(
+                    "Photogrammetry takes no explicit scale: it is derived from the scale " +
+                    "reference (ADR-0020). Passing both would name two sources for one quantity.");
+
+            // The reference's span is measured in raw file coordinates, so the
+            // unit conversion PicoGK will apply has to be divided back out —
+            // the total is length/span, and eUnits contributes part of it.
+            fPostScale = (float)(oScaleRef!.FTotalScale / fUnitScaleMm(eUnits));
+        }
+
         if (fPostScale <= 0)
             throw new ImportValidationException("Scale must be positive.");
         if (!File.Exists(strStlPath))
@@ -64,9 +90,24 @@ public static class ScanImport
         byte[] abScan = File.ReadAllBytes(strStlPath);
         string strScanHash = ArtifactStore.StrStore(strArtifactsDir, abScan, ".stl");
 
+        // Units only — the post-scale is applied below, in ONE place.
+        //
+        // PicoGK 2.2.0's mshFromStlFile accepts a scale argument and does not
+        // apply it: measured 2026-09-11, a binary STL imported at 1.0 and at
+        // 2.0 comes out the same size, while our own ASCII parser scales
+        // correctly. Passing it here would be a request the kernel ignores
+        // while the sidecar records it as done — a silently mis-scaled scan,
+        // which is the exact bug class this boundary exists to prevent.
         Mesh mshLoaded = bIsAsciiStl(abScan)
-            ? mshFromAsciiStl(oLib, abScan, eUnits, fPostScale)
-            : Mesh.mshFromStlFile(strStlPath, eUnits, fPostScale, null, oLib);
+            ? mshFromAsciiStl(oLib, abScan, eUnits)
+            : Mesh.mshFromStlFile(strStlPath, eUnits, 1.0f, null, oLib);
+
+        if (fPostScale != 1.0f)
+        {
+            // Matrix overload on purpose: the (vecScale, vecOffset) overload in
+            // PicoGK 2.2.0 applies a different scale component per vertex.
+            mshLoaded = mshLoaded.mshCreateTransformed(Matrix4x4.CreateScale(fPostScale));
+        }
 
         if (mshLoaded.nTriangleCount() == 0)
             throw new ImportValidationException(
@@ -92,6 +133,7 @@ public static class ScanImport
             ScanSha256 = strScanHash,
             TriangleCount = mshLoaded.nTriangleCount(),
             SizeMm = vecSize,
+            EffectiveScale = fPostScale,
         };
     }
 
@@ -113,9 +155,9 @@ public static class ScanImport
     /// emits exactly that (`kicad-cli pcb export stl` has no binary option).
     /// This is file parsing, not geometry — the kernel keeps owning geometry.
     /// </summary>
-    private static Mesh mshFromAsciiStl(Library oLib, byte[] abData, Mesh.EStlUnit eUnits, float fPostScale)
+    private static Mesh mshFromAsciiStl(Library oLib, byte[] abData, Mesh.EStlUnit eUnits)
     {
-        float fScale = fUnitScaleMm(eUnits) * fPostScale;
+        float fScale = fUnitScaleMm(eUnits);
         Mesh msh = new(oLib);
         List<Vector3> aVertices = new(3);
         int nTriangles = 0;
