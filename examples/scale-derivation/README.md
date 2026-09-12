@@ -90,25 +90,146 @@ value is diagnostic: if two references on a real capture disagree by ~1 %, that
 is now attributable to optics and technique rather than to SfM being inherently
 non-similar. Without this baseline the two are indistinguishable.
 
-## GPU SIFT
+## GPU SIFT — resolved 2026-09-11
 
-`--FeatureExtraction.use_gpu 0` is deliberate. On this machine (RTX 5070,
-Blackwell) COLMAP's `sift_test.exe` crashes at `ExtractSiftFeaturesGPU.Nominal`
-with `0xC0000409`, while the same binary's `gpu_mat_test` passes 4/4 and the
-non-GPU SIFT cases pass 17/17. COLMAP's GPU SIFT path goes through SiftGPU,
-which wants an OpenGL context; these runs were headless, so **whether that crash
-is a real defect or an artifact of no display has not been established.** CPU
-extraction costs seconds at this image count and sidesteps the question.
+The crash is confined to the **unit tests' OpenGL path**. Production is fine.
 
-Dense PatchMatch — the step that genuinely needs CUDA — is on the code path
-`gpu_mat_test` exercises, and COLMAP fixed empty PatchMatch results on `sm_100+`
-in 4.0.3, so dense reconstruction is expected to work. Not yet run.
+Running each GPU case separately isolates it:
 
-## Not done yet
+| case | result |
+|---|---|
+| `CreateSiftGPUMatcherCUDA` | **passes** (exit 0) |
+| `CreateSiftGPUMatcherOpenGL` | crashes, `0xC0000409` |
+| `ExtractSiftFeaturesGPU` | crashes, `0xC0000409` |
+| `gpu_mat_test` (CUDA) | passes 4/4 |
+| non-GPU SIFT cases | pass 17/17 |
 
-Dense reconstruction and meshing. A true end-to-end ADR-0020 round trip is:
-export a mesh, measure a span in it, pass `--scale-ref-span`, and confirm the
-subject returns as 30 × 20 × 15 mm. **The camera-derived scale above is the
-ground truth that round trip has to reproduce.** Note also that ODC's mesh
-import requires a watertight mesh (v0), and Poisson output is not automatically
-watertight — expect that to be the next thing that bites.
+Both crashes die at `[ RUN ]` with no further output — consistent with a hard
+failure creating an OpenGL context, which is what SiftGPU wants and a headless
+process does not have. The CUDA path passing while the OpenGL path dies is the
+tell.
+
+**And the actual CLI works headless:** `colmap feature_extractor
+--FeatureExtraction.use_gpu 1` returns exit 0 and extracts normally. The real
+binary sets up a context the test harness does not. So there is no usability
+problem here, only a test that cannot run headless.
+
+### CPU is still the better default here, for a different reason
+
+Same two images, same 1600 × 1200:
+
+| | features |
+|---|---|
+| CPU | 11,549 / 11,792 |
+| GPU | 8,224 / 8,381 |
+
+**CPU SIFT finds about 40 % more features.** COLMAP's CPU and GPU SIFT are
+different implementations and they do not agree at default settings. More
+features means more to match, so for reconstruction quality CPU is the better
+choice at this image count — the speed advantage of GPU only starts to matter
+with far more images. `--FeatureExtraction.use_gpu 0` therefore stays, now on
+evidence rather than as a workaround.
+
+Dense PatchMatch — the step that genuinely needs CUDA — ran successfully on this
+card; see the dense section above.
+
+## Dense reconstruction, and the watertight problem
+
+Run 2026-09-11: `image_undistorter` → `patch_match_stereo` (CUDA, ~15 min for 72
+depth maps on an RTX 5070) → `stereo_fusion` (13.9 MB) → `poisson_mesher`
+(40.8 MB). **Dense PatchMatch executes CUDA kernels on Blackwell**, which is the
+step COLMAP fixed in 4.0.3 and the one `gpu_mat_test` only covered indirectly.
+
+`inspect_mesh.py` then asks the two questions that decide whether the mesh can
+enter ODC at all:
+
+| | |
+|---|---|
+| Vertices / faces | 851,194 / 1,661,273 |
+| Boundary edges | **40,161** |
+| Non-manifold edges | 0 |
+| Loose parts | **277** |
+| Watertight | **false** |
+
+ODC's mesh import is voxelisation and its v0 requires a closed mesh. **This mesh
+would be refused**, which was the predicted outcome and is now measured.
+
+### Why this is not merely inconvenient
+
+`--PoissonMeshing.trim` defaults to `10`: it discards low-confidence regions,
+which is what produces those 40,161 boundary edges. Setting `trim 0` yields a
+*closed* surface — and the closure is **extrapolated into space no camera ever
+observed.** Photogrammetry of an object standing on a platter cannot see its
+underside; that surface does not exist in any image.
+
+So for this input class the watertight requirement and the evidence are in
+tension:
+
+- **`trim 10`** — honest mesh, open where nothing was seen, **refused** by ODC.
+- **`trim 0`** — closed mesh that **passes** ODC's validity gate while carrying
+  invented geometry, with a provenance record that looks clean.
+
+The second is the failure mode this repository exists to prevent, arriving
+through the gate meant to prevent it. A watertight check cannot distinguish
+observed surface from plausible surface, because both are closed.
+
+### Measured: how much `trim 0` invents
+
+The first attempt at this compared a mesh to the *nominal* part and was
+worthless, because the crop box included a slab of platter — so the mesh was of
+part-plus-platter and Poisson's extrapolation could not be separated from the
+crop's own contents. It reported 81–93 % oversize and meant nothing.
+
+The clean version crops above the support plane (`--z-min-mm 1.5`) so only the
+part's observed surface is kept, and compares each mesh to **the cloud it was
+built from** — same frame, same units, no nominal involved.
+
+Observed point cloud: **31.32 × 21.58 × 14.14 mm** (107,433 points).
+
+| | largest part | boundary edges | own-axes mm | vs cloud |
+|---|---|---|---|---|
+| `trim 0` | 363,634 v | **14** (≈closed) | 30.68 × **27.69** × **21.38** | **+28 %, +51 %** |
+| `trim 5` | 362,607 v | **662** (open) | 30.68 × 21.38 × 15.69 | +11 % on Z only |
+
+`trim 0` is essentially watertight — 14 boundary edges in a 363k-vertex mesh —
+and **28–51 % larger on two axes than the data it was built from.** It would
+pass ODC's validity gate and produce a cradle for a part half again too big,
+under clean provenance.
+
+`trim 5` tracks the data to 2–3 % on X and Y and is open, so ODC refuses it. Its
+only real extrapolation is +11 % on Z, at the unobserved bottom — exactly where
+Poisson smooths past the boundary before trimming. X holds at 30.68 mm under
+both settings; the well-observed axis is stable.
+
+**So "pick a trim value" is not the answer.** The two settings fail in opposite
+directions and neither is usable.
+
+### What the numbers suggest, and what still needs deciding
+
+The only genuinely unobserved region is the bottom: `trim 5` gets the sides and
+top right. Capping *that* mesh against a **declared support plane** would close
+it without inventing a third of the part, and the cap would be evidence — the
+object demonstrably rested on something flat — rather than extrapolation. It
+also fits the existing grammar: declared never inferred, recorded in provenance,
+refuses when absent.
+
+**Still undecided, and deliberately so.** The mechanism is not obvious. Capping a
+boundary loop is geometry, and ODC's non-goals say geometry algorithms belong
+upstream in PicoGK/ShapeKernel. There may be an SDF-native route that avoids
+meshing the closure at all — building a level set from the point cloud, or a
+boolean against a half-space — which would sidestep the question rather than
+answer it. That wants a plan before an ADR.
+
+## Still not done
+
+The end-to-end ADR-0020 round trip — measure a span in the mesh, pass
+`--scale-ref-span`, confirm 30 × 20 × 15 mm comes back — is blocked on the
+above, and on one thing `analyse_scale.py` deliberately does not compute.
+
+Its pairwise-distance method recovers **scale without rotation**, which is what
+makes it need no SVD. But the reconstruction's axes are COLMAP's, not the
+scene's, so an axis-aligned bounding box in that frame is not comparable to
+`30 × 20 × 15`. Measuring subject *dimensions* needs the full similarity,
+rotation included. The largest loose part measures 0.979 × 0.620 × 1.379 units,
+and 0.979 × 30.9015 = **30.3 mm** against a true 30 mm — suggestive, and not a
+result, because two of those three axes are not the axes they appear to be.
