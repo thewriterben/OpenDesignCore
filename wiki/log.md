@@ -670,3 +670,40 @@ against this section since it was written.
 Not a new rule, just the existing one applied where it had not been: ODC's own CLAUDE.md says a
 documented-but-unreachable feature gets wired or deleted, and ClawBot's says do not leave a status
 claim standing after the code has moved past it. A stale question is the interrogative form of both.
+
+## [2026-09-11] finding | The kernel's scale argument did nothing, and every test used the one value that hides it
+
+New entity [[picogk]], written because two things in PicoGK 2.2.0 do not do what their signatures say
+and both workarounds are version-bound. ADR-0020 in the same pass.
+
+**`mshFromStlFile` accepts a scale argument and ignores it.** Measured while implementing ADR-0020:
+
+```
+binary STL, scale 1.0 -> X = 15.98      ASCII STL, scale 1.0 -> X = 10
+binary STL, scale 2.0 -> X = 15.98      ASCII STL, scale 2.0 -> X = 20
+ratio = 1                                ratio = 2
+```
+
+Our own ASCII parser scaled correctly; the kernel's binary path did not. So from 2026-08-15 to
+2026-09-11, **every binary STL imported with a non-1.0 scale was imported unscaled while the sidecar
+recorded the requested scale as though it had been applied.** A silently mis-scaled scan, inside the
+boundary whose own doc comment says it exists to prevent exactly that. Scaling now happens once, in
+our own code, after load, for both paths.
+
+**Why it survived 27 days: every test used scale 1.0.** That is the single value at which correct and
+broken are indistinguishable. The suite was green the whole time and green meant nothing, because
+nothing compared the effect against its absence. Three regression tests now do.
+
+**The generalisation, which is the part worth keeping.** This repo's discipline is that a claim is
+not evidence until something measures it — and it had been applying that to *data* while taking a
+*dependency's function signature* on trust. A kernel argument is a claim too. Where behaviour depends
+on one having an effect, a test should compare against its absence.
+
+Second finding, smaller and self-inflicted: ADR-0019 justified leaving the scale reference unverified
+by analogy to a declared scanner accuracy under ADR-0015. The analogy was wrong and lasted three
+hours. A declared accuracy is *consumed* — `compare` uses it, observed spread overrides it. The scale
+reference was consumed by nothing; grepping every use, its length was read by the JSON writer and
+nothing else. ADR-0020 makes it determine the scale instead of sitting beside it, so a wrong
+reference now produces a visibly wrong mesh rather than a correct-looking record.
+
+**Open:** neither PicoGK bug has been reported to LEAP 71. Marked `TODO(report)` on [[picogk]].

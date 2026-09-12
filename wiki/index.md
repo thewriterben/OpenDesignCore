@@ -23,6 +23,7 @@
 - [[openbuildcore]] — inventory + ideation + machines; quantity-aware exclusive matching; print time only from a measured throughput (ADR-0005)
 - [[open-filament-database]] — MIT filament catalogue; spool identity for ADR-0013; an identity source, never a value source (2026-08-21)
 - [[openscan]] — open-source photogrammetry scanners; candidate for the capture half ROADMAP "Not ever" refuses; blocked on scale, not accuracy (2026-09-11)
+- [[picogk]] — the kernel this repo is built on; **two 2.2.0 behaviours that do not match their signatures**, both worked around, both version-bound — read before any upgrade (2026-09-11)
 
 ## Sources
 - [[bingo-landscape-2026]] — authoritative market layer: churn disease, five commandments, gap matrix (2026-08-15)
