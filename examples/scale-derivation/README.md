@@ -104,11 +104,61 @@ Dense PatchMatch — the step that genuinely needs CUDA — is on the code path
 `gpu_mat_test` exercises, and COLMAP fixed empty PatchMatch results on `sm_100+`
 in 4.0.3, so dense reconstruction is expected to work. Not yet run.
 
-## Not done yet
+## Dense reconstruction, and the watertight problem
 
-Dense reconstruction and meshing. A true end-to-end ADR-0020 round trip is:
-export a mesh, measure a span in it, pass `--scale-ref-span`, and confirm the
-subject returns as 30 × 20 × 15 mm. **The camera-derived scale above is the
-ground truth that round trip has to reproduce.** Note also that ODC's mesh
-import requires a watertight mesh (v0), and Poisson output is not automatically
-watertight — expect that to be the next thing that bites.
+Run 2026-09-11: `image_undistorter` → `patch_match_stereo` (CUDA, ~15 min for 72
+depth maps on an RTX 5070) → `stereo_fusion` (13.9 MB) → `poisson_mesher`
+(40.8 MB). **Dense PatchMatch executes CUDA kernels on Blackwell**, which is the
+step COLMAP fixed in 4.0.3 and the one `gpu_mat_test` only covered indirectly.
+
+`inspect_mesh.py` then asks the two questions that decide whether the mesh can
+enter ODC at all:
+
+| | |
+|---|---|
+| Vertices / faces | 851,194 / 1,661,273 |
+| Boundary edges | **40,161** |
+| Non-manifold edges | 0 |
+| Loose parts | **277** |
+| Watertight | **false** |
+
+ODC's mesh import is voxelisation and its v0 requires a closed mesh. **This mesh
+would be refused**, which was the predicted outcome and is now measured.
+
+### Why this is not merely inconvenient
+
+`--PoissonMeshing.trim` defaults to `10`: it discards low-confidence regions,
+which is what produces those 40,161 boundary edges. Setting `trim 0` yields a
+*closed* surface — and the closure is **extrapolated into space no camera ever
+observed.** Photogrammetry of an object standing on a platter cannot see its
+underside; that surface does not exist in any image.
+
+So for this input class the watertight requirement and the evidence are in
+tension:
+
+- **`trim 10`** — honest mesh, open where nothing was seen, **refused** by ODC.
+- **`trim 0`** — closed mesh that **passes** ODC's validity gate while carrying
+  invented geometry, with a provenance record that looks clean.
+
+The second is the failure mode this repository exists to prevent, arriving
+through the gate meant to prevent it. A watertight check cannot distinguish
+observed surface from plausible surface, because both are closed.
+
+**This is an open design question, not a resolved one.** It is not obvious
+whether the answer is a hole-filling step that records what it invented, an
+import mode that accepts open meshes for fit-only work, or a refusal that names
+the unobserved region. Recorded rather than decided.
+
+## Still not done
+
+The end-to-end ADR-0020 round trip — measure a span in the mesh, pass
+`--scale-ref-span`, confirm 30 × 20 × 15 mm comes back — is blocked on the
+above, and on one thing `analyse_scale.py` deliberately does not compute.
+
+Its pairwise-distance method recovers **scale without rotation**, which is what
+makes it need no SVD. But the reconstruction's axes are COLMAP's, not the
+scene's, so an axis-aligned bounding box in that frame is not comparable to
+`30 × 20 × 15`. Measuring subject *dimensions* needs the full similarity,
+rotation included. The largest loose part measures 0.979 × 0.620 × 1.379 units,
+and 0.979 × 30.9015 = **30.3 mm** against a true 30 mm — suggestive, and not a
+result, because two of those three axes are not the axes they appear to be.
