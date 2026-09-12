@@ -24,6 +24,11 @@
          so the script that produced a verification record is the one this build
          carries, and its hash can be recorded in the record. -->
     <EmbeddedResource Include="Verification\blender_measure.py" LogicalName="blender_measure.py" />
+    <!-- Run inside headless Blender by ThumbnailRender (ADR-0022). Embedded for
+         the same reason: the render is only reproducible if the script that
+         produced an image is the one this build carries, and the record says
+         which by hash. -->
+    <EmbeddedResource Include="Rendering\blender_thumbnail.py" LogicalName="blender_thumbnail.py" />
   </ItemGroup>
 
 </Project>

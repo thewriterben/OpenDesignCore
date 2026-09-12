@@ -448,7 +448,7 @@ Tolerances are parameters, not constants (project rule). The bounding-box tolera
 
 Blender absent means **skipped, exit 3, nothing written** — the same rule as a peer test with no peer checkout. A skip is not a pass and it is not silent.
 
-**Consequences.** Blender becomes an optional external process (DEPENDENCIES.md: GPL-3.0, invoked over stdio, never linked; its licence does not reach this repo). The artifact is never modified; disagreement is a record, and what to do about it is a person's call. Only STL artifacts are covered — the cross-check reads what Blender can import. It is not on the MCP surface: this is a human-run check on a run that already exists, and an agent that could verify its own output with a tolerance it chose would be laundering, not verifying. The first record is verification 52 over run 50, all claims agreeing. Thumbnails (BLENDER-INTEGRATION.md option 2) are deliberately not part of this: a record of numbers and a record of pixels are different claims.
+**Consequences.** Blender becomes an optional external process (DEPENDENCIES.md: GPL-3.0, invoked over stdio, never linked; its licence does not reach this repo). The artifact is never modified; disagreement is a record, and what to do about it is a person's call. Only STL artifacts are covered — the cross-check reads what Blender can import. It is not on the MCP surface: this is a human-run check on a run that already exists, and an agent that could verify its own output with a tolerance it chose would be laundering, not verifying. The first record is verification 52 over run 50, all claims agreeing. Thumbnails (BLENDER-INTEGRATION.md option 2) are deliberately not part of this: a record of numbers and a record of pixels are different claims. *(Superseded by ADR-0022, which keeps that distinction and makes it the reason for a separate record type rather than a reason to refuse.)*
 
 ## ADR-0018 — The agent may ask for a second opinion; it may not set the bar
 
@@ -470,7 +470,7 @@ The precondition for spawning Blender from an MCP host is the stdin fix (PR #25)
 
 The tool's signature is `(runId)` and a test asserts exactly that, so adding a tolerance parameter later is a deliberate act against a named alarm, not a drift.
 
-**Consequences (ADR-0018).** ADR-0017's reasoning survives intact — the tolerance is chosen by a person with the machine in front of them, once, and recorded per run as theirs. What changes is that the person chooses it in advance rather than at each run. A failed check is recorded and returned with the instruction not to re-run for a different answer; the inputs are the same and so would be the record. The CLI path is unchanged and still says *declared by the caller*. Operators who do not want agents triggering Blender at all leave the variable unset. Thumbnails remain out of scope, for ADR-0017's reason.
+**Consequences (ADR-0018).** ADR-0017's reasoning survives intact — the tolerance is chosen by a person with the machine in front of them, once, and recorded per run as theirs. What changes is that the person chooses it in advance rather than at each run. A failed check is recorded and returned with the instruction not to re-run for a different answer; the inputs are the same and so would be the record. The CLI path is unchanged and still says *declared by the caller*. Operators who do not want agents triggering Blender at all leave the variable unset. Thumbnails remain out of scope, for ADR-0017's reason. *(Superseded by ADR-0022 as to the CLI; they stay off the MCP surface, and ADR-0022 says why the tolerance-pinning argument that readmitted `verify_artifact` has no equivalent here.)*
 
 
 ## ADR-0019 — Units are not scale: a mesh declares its origin
@@ -607,3 +607,43 @@ The distinction option 3 could not draw, and a reader can: **a hole means the fi
 **What would justify a gate, and what it would need first.** The weld question is unresolved: until this analyser and a tolerant one agree on a foreign-written mesh, its boundary counts cannot carry a refusal. After that, the open question is which hole *sizes* matter — a hole spanning the footprint is not a 4-edge nick, and no one has measured where between them the answer goes wrong. Both are answerable; neither is answered.
 
 **On the invented surface, which this does not address.** Poisson always closes; `trim` only punches holes in low-confidence regions. The extrapolated underside — +11 % on Z at `trim 5`, 28–51 % on two axes at `trim 0` — is closure no camera observed, and no topology check distinguishes it from observed surface because both are closed. `scan_origin: photogrammetry` (ADR-0019) is already the flag that a mesh may contain surface nobody saw. A field marking *which* surface was invented is not implementable from an STL: the confidence data lives in the reconstruction, not the file.
+
+## ADR-0022 - A thumbnail is a record of pixels, and says so in every copy
+
+**Date:** 2026-09-11
+**Status:** accepted. Supersedes the thumbnail exclusions in ADR-0017 and ADR-0018.
+
+**Context.** Twice this repo decided not to render pictures. ADR-0017: *"Thumbnails (BLENDER-INTEGRATION.md option 2) are deliberately not part of this: a record of numbers and a record of pixels are different claims."* ADR-0018 repeated it by reference. Both were right about the risk and wrong about the conclusion, and it is worth being exact about which half survives.
+
+The risk is that a picture invites a verdict it cannot support. A render of a tray looks like the tray; a reader who sees one concludes the part is fine; nothing in the image can distinguish a part in tolerance from one 0.4 mm out, because the eye cannot resolve a tenth of a millimetre and this projection is one fixed direction, so anything hidden behind the part is not in it. That reasoning is not repealed here.
+
+What changed is the alternative. The pictures exist regardless - they get taken in a viewport, cropped into a message, and pasted into a report, with no record of which artifact they show or what produced them. An undocumented screenshot makes exactly the claim ADR-0017 feared, with nothing attached to contradict it. The question is not whether images enter the conversation but whether they arrive carrying their own provenance.
+
+**Is it even reproducible?** Measured before deciding, 2026-09-11, on run 50's artifact, rendered in two separate Blender processes:
+
+| | process A | process B |
+|---|---|---|
+| IDAT chunks | identical | identical |
+| decompressed pixels | `fccaf78e...` | `fccaf78e...` |
+| `tEXt Date` | 2026/09/11 22:39:42 | 2026/09/11 22:39:45 |
+| `tEXt RenderTime` | 00:00.62 | 00:00.50 |
+
+So the renderer is deterministic and only its metadata is not - a wall clock and a stopwatch. That is the difference between "we cannot honour ADR-0003's determinism here" and "we strip two fields". Determinism is bought by refusing every setting that samples or depends on taste: Workbench rather than Cycles (rasteriser, no sampler, nothing stochastic to seed), `render_aa = OFF` (the one Workbench setting that samples), an **orthographic** camera pointed down a fixed unit vector, centred on the bounding box and scaled to its diagonal times a fixed margin. A perspective camera would make the projection depend on distance, and "frame it nicely" is not a function anyone can re-run.
+
+**Options.**
+
+1. **Keep refusing.** Rejected: it does not stop the pictures, it only stops them being traceable.
+2. **Render, and fold the image into the verification record.** Rejected - this is the merge ADR-0017 was protecting against. `odc/verification/0.1` carries a `passed` that means two kernels agreed on numbers. An image sharing that field would inherit the word.
+3. **Render as its own record type, carrying its own caveats.**
+
+**Decision.** Option 3. `odc/thumbnail/0.1`, model `blender-thumbnail/0.1`, produced by `render-thumbnail --run <id>`. The record holds the image hash, the settings that produced it, the script's own sha256, the mesh extent and counts - and a `caveats` array, in every copy, saying that this is a picture and not a measurement and naming `verify-artifact` as the thing that makes claims about numbers. There is no tolerance argument, because nothing is being judged.
+
+**Normalisation is a whitelist, not a blacklist of those two keywords.** A future Blender adding a third timestamp under a name nobody predicted would silently break byte-identity under a blacklist. Under a whitelist an unknown ancillary chunk is dropped and the image still decodes, because ancillary chunks are by definition optional. The colour chunks Blender does write - `sRGB`, `gAMA`, `cHRM` - are kept: they change how the pixels are read. The date the render happened is not lost; it is in the ledger row, where a time belongs.
+
+**Human CLI only, for now.** ADR-0017 kept `verify_artifact` off the MCP surface and ADR-0018 put it on, once operator-pinned tolerances meant the agent could not choose its own bar. The laundering risk here is different in kind: there is no tolerance to pin, so there is no equivalent lever. An agent that can render and then describe what it rendered is an agent narrating an image it chose to make, and the caveats in the record do not travel into that narration. The MCP question is left open, as ADR-0017 left it, rather than answered by default.
+
+**The `passed` column, and the option not taken.** The ledger's `passed` is `NOT NULL` (ADR-0006, append-only). A render has no verdict to record, so the honest value would be null. Rejected: expressing one new model's abstention would mean migrating the 75 rows already in the ledger, and the cost lands on the oldest records in the repo to make a picture read better. Instead `passed = true` means *the render completed and the image was stored* - and this is what the column has always been: for an enclosure run it means the validation gate passed, for a cross-check that the claims agreed. The predicate is per-model; the `model` column names which one. This is a weakness in the schema that a thumbnail exposes rather than creates.
+
+**Consequences.** Two records can now exist for one artifact, one about numbers and one about pixels, and it must stay obvious which is which - hence the schema name, the separate model id and the caveats. Blender remains optional: absent, `render-thumbnail` exits 3 and writes nothing, the same "skipped is not passed" rule as `verify-artifact`.
+
+The determinism claim is pinned by a test that renders twice and compares hashes, and it returns early when `ODC_BLENDER` is unset, because CI has no Blender and a check that cannot run must not look like one that passed. That test also asserts the camera's ortho scale is the box diagonal times the margin - if the framing ever stops being arithmetic on the bounding box, "render it again and compare" has stopped being true, and this is where that would be caught.

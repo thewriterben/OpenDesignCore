@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Reflection;
 using OpenDesignCore.Data;
 using OpenDesignCore.Models;
+using OpenDesignCore.Rendering;
 using OpenDesignCore.Runs;
 using OpenDesignCore.Verification;
 
@@ -737,6 +738,63 @@ if (args is ["verify-artifact", ..])
     }
 }
 
+if (args is ["render-thumbnail", ..])
+{
+    // A picture of a run's artifact, with the settings that produced it (ADR-0022).
+    //   --run <id>               ledger run id of an STL-producing run (required)
+    //   --blender <exe>          Blender executable (default: $ODC_BLENDER); absent → skipped, exit 3
+    //   --artifacts / --ledger   as for run-enclosure
+    //
+    // There is no tolerance argument because there is nothing to judge. This
+    // renders and records; it does not check anything, and the record says so.
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+    if (!oOpts.TryGetValue("run", out string? strRun) || !long.TryParse(strRun, out long nRunId))
+    {
+        Console.Error.WriteLine("--run <ledger run id> is required.");
+        return 2;
+    }
+    string? strBlender = oOpts.GetValueOrDefault("blender") ?? Environment.GetEnvironmentVariable("ODC_BLENDER");
+    if (string.IsNullOrWhiteSpace(strBlender) || !File.Exists(strBlender))
+    {
+        Console.Error.WriteLine(
+            $"render-thumbnail SKIPPED: no Blender at '{strBlender ?? "(unset)"}'. " +
+            "Pass --blender <exe> or set ODC_BLENDER. No thumbnail record was written.");
+        return 3;
+    }
+
+    try
+    {
+        ThumbnailResult oThumb = ThumbnailRender.Execute(
+            strArtifactsDir: oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            strLedgerPath: oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            nRunId: nRunId,
+            strBlenderExe: strBlender,
+            strCommit: StrGitCommit());
+
+        Console.WriteLine($"thumbnail {oThumb.ThumbnailRunId} of run {nRunId}  (Blender {oThumb.Settings.BlenderVersion})");
+        Console.WriteLine($"  extent     {oThumb.Settings.ExtentX:F3} x {oThumb.Settings.ExtentY:F3} x {oThumb.Settings.ExtentZ:F3} mm");
+        Console.WriteLine($"  render     {oThumb.Settings.Engine} {oThumb.Settings.Projection} {oThumb.Settings.ResolutionPx}px, AA {oThumb.Settings.AntiAliasing}");
+        Console.WriteLine($"  image      sha256:{oThumb.ImageSha256}");
+        Console.WriteLine($"  record     sha256:{oThumb.RecordSha256}");
+        Console.WriteLine("  note       a picture, not a measurement: use verify-artifact for a claim about numbers.");
+        return 0;
+    }
+    catch (ThumbnailException e)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 string strTool = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
 string strPicoGK = typeof(PicoGK.Library).Assembly.GetName().Version?.ToString() ?? "unknown";
 
@@ -766,6 +824,11 @@ Console.WriteLine("                                 [--studio <url>] [--artifact
 Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>]");
 Console.WriteLine("                              [--upload <gcode>] [--print <gcode>]");
 Console.WriteLine("                              [--offline] [--artifacts <dir>] [--ledger <path>]");
+Console.WriteLine("       OpenDesignCore verify-artifact --run <id> [--blender <exe>] [--volume-tol-pct <v>]");
+Console.WriteLine("                                      [--bbox-tol-mm <v>] [--artifacts <dir>] [--ledger <path>]");
+Console.WriteLine("       OpenDesignCore render-thumbnail --run <id> [--blender <exe>]");
+Console.WriteLine("                                       [--artifacts <dir>] [--ledger <path>]");
+Console.WriteLine("                                       (a picture, not a measurement -- ADR-0022)");
 return 0;
 
 static string StrGitCommit()
