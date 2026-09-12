@@ -113,6 +113,32 @@ public static class ScanImport
             throw new ImportValidationException(
                 $"{Path.GetFileName(strStlPath)}: no triangles after import — empty or unreadable STL.");
 
+        // The closed-mesh requirement, enforced (ADR-0021). This boundary has
+        // claimed since 2026-08-15 that voxelisation needs a closed mesh and
+        // that a leaky one produces a degenerate field the emptiness check
+        // catches. Measured 2026-09-11: all three clauses are false. A mesh
+        // with its lower third deleted voxelised happily into a solid 33 %
+        // smaller by volume and 4.9 mm shorter, and every gate passed — because
+        // a wrong-but-non-empty field satisfies an emptiness test by
+        // definition. The kernel was not at fault: it faithfully voxelised a
+        // mesh that described a shorter object. Nothing asked whether the mesh
+        // described the whole object.
+        MeshTopologyReport oTopology = MeshTopology.OAnalyse(mshLoaded);
+        if (!oTopology.IsClosedManifold)
+        {
+            throw new ImportValidationException(
+                $"{Path.GetFileName(strStlPath)}: not a closed manifold — " +
+                $"{oTopology.BoundaryEdges} boundary edge(s), " +
+                $"{oTopology.NonManifoldEdges} non-manifold edge(s) across " +
+                $"{oTopology.Edges} edges ({oTopology.WeldedVertices} welded vertices, " +
+                $"{oTopology.Triangles} triangles).\n" +
+                "Voxelising this would produce a solid that silently differs from the object: a hole " +
+                "makes the field describe whatever the surface encloses, which is not the part. " +
+                "Repair the mesh before import — for photogrammetry that usually means meshing " +
+                "without a trim step, at the cost of a closure the camera never observed, which is " +
+                "why the origin is recorded (ADR-0019).");
+        }
+
         // Recentre deterministically: XY centered on origin, floor at Z = 0.
         // Matrix overload on purpose — the (vecScale, vecOffset) overload in
         // PicoGK 2.2.0 applies a different scale component per vertex (upstream bug).
