@@ -707,3 +707,40 @@ nothing else. ADR-0020 makes it determine the scale instead of sitting beside it
 reference now produces a visibly wrong mesh rather than a correct-looking record.
 
 **Open:** neither PicoGK bug has been reported to LEAP 71. Marked `TODO(report)` on [[picogk]].
+
+## [2026-09-11] measurement | SfM is a similarity to 75 ppm, so the second scale reference would measure its own noise
+
+`examples/scale-derivation` renders a turntable capture in Blender with exact
+ground truth — subject dimensions and camera positions both known, not measured — and
+reconstructs it with COLMAP. Built to test ADR-0020's premise rather than reason about it.
+
+**Result.** 36/36 views registered, 40,286 points, 0.31 px mean reprojection error. Scale
+30.9015 mm per reconstruction unit. The similarity test — `d_true / d_recon` over all 630
+camera pairs, which needs no alignment because rotation and translation cancel inside a
+distance — gives σ/median **0.0075 %**, worst pair 0.084 %.
+
+**So ADR-0020's premise holds in the clean case:** one scale really does correct the whole
+reconstruction, and `length_mm / span_file_units` is exact rather than approximate.
+
+**And it answers Benji's two-template question with a number instead of an argument.** A
+second orthogonal reference was proposed to detect departure from similarity. It cannot, at
+this level: a caliper reading a 50 mm printed target at ±0.02 mm is ±0.04 %, five times
+noisier than the 0.0075 % defect it would be looking for. Two references would disagree
+reliably — because of the calipers. A refusal built on that would fire on measurement error.
+
+**The caveat is the whole value.** This is a perfect pinhole camera: no lens distortion, no
+rolling shutter, no focus breathing, no motion. 75 ppm is a *floor*, not a prediction. What
+it buys is diagnostic power — if two references on a real capture disagree by 1 %, that is
+now attributable to optics and technique rather than to structure-from-motion being
+inherently non-similar. Those two were previously indistinguishable, and a design decision
+was about to be made without being able to tell them apart.
+
+Two bugs found by looking at a render rather than trusting `exit 0`: the first pass was
+untextured (Blender's `Noise.Scale` multiplies the *coordinate*, and Object coordinates in mm
+put the frequency below a pixel — the same class of units error as the rest of tonight), and
+the second was visibly textured but nearly gradient-free, which is what SIFT actually keys on.
+Both would have failed reconstruction in a way that looks like a scale problem.
+
+**Not done:** dense reconstruction and meshing, which is what an end-to-end ADR-0020 round
+trip needs. The camera-derived scale is the ground truth that round trip must reproduce, and
+ODC's v0 import wants a watertight mesh while Poisson output is not automatically watertight.

@@ -119,6 +119,28 @@ sources: []
     `compare --declared-accuracy`, ever. A declared accuracy for this device class can only come from a
     local measurement against a known artifact. Recorded in [[openscan]] and [[openscan-2026-09]].
 
+20. **Is a two-reference scale cross-check worth building?** (opened and largely answered
+    2026-09-11.) Benji proposed two-colour 3D-printed measuring templates, and the sharpest
+    version of the idea was a *second* orthogonal reference — not for redundancy, since
+    photogrammetry scale is isotropic, but to test whether the reconstruction is a similarity
+    at all. `examples/scale-derivation` now measures that: **σ/median 0.0075 %** over 630
+    camera pairs on a synthetic capture with exact ground truth. A caliper reading a 50 mm
+    printed target at ±0.02 mm is ±0.04 %, so the check would be five times noisier than the
+    defect and would fire on its own measurement error. **Provisionally: no.**
+
+    Two things keep it open rather than closed. The 0.0075 % is a *synthetic floor* — perfect
+    pinhole camera, no distortion — so a real capture's number is unknown and could plausibly
+    be large enough to matter. And the printed template carries a separate problem worth
+    recording: **a reference printed on the machine whose dimensional error you are measuring
+    is circular.** If the K2 shrinks PLA 0.3 %, a nominally 10 mm marking is 9.97 mm, and
+    scaling a scan by it would hide exactly the shrinkage `compare` exists to find. The
+    resolution is that a printed template is a *carrier*, never a *source*: it gets
+    caliper-measured after printing, and the measurement — with a date, since PLA drifts — is
+    what enters `--scale-ref`. Nominal never enters anything. Same discipline as
+    `calibration-block/0.2`, which is also not trusted to be the size it was asked to be.
+
+    Closes when a real capture gives a real disagreement figure.
+
 19. **Two PicoGK 2.2.0 bugs are unreported upstream** (opened 2026-09-11). `mshFromStlFile` ignores its
     scale argument, and the `(vecScale, vecOffset)` transform overload applies a different scale
     component per vertex. Both are worked around at the call site rather than patched, per ADR-0001, and
