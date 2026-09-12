@@ -90,19 +90,48 @@ value is diagnostic: if two references on a real capture disagree by ~1 %, that
 is now attributable to optics and technique rather than to SfM being inherently
 non-similar. Without this baseline the two are indistinguishable.
 
-## GPU SIFT
+## GPU SIFT — resolved 2026-09-11
 
-`--FeatureExtraction.use_gpu 0` is deliberate. On this machine (RTX 5070,
-Blackwell) COLMAP's `sift_test.exe` crashes at `ExtractSiftFeaturesGPU.Nominal`
-with `0xC0000409`, while the same binary's `gpu_mat_test` passes 4/4 and the
-non-GPU SIFT cases pass 17/17. COLMAP's GPU SIFT path goes through SiftGPU,
-which wants an OpenGL context; these runs were headless, so **whether that crash
-is a real defect or an artifact of no display has not been established.** CPU
-extraction costs seconds at this image count and sidesteps the question.
+The crash is confined to the **unit tests' OpenGL path**. Production is fine.
 
-Dense PatchMatch — the step that genuinely needs CUDA — is on the code path
-`gpu_mat_test` exercises, and COLMAP fixed empty PatchMatch results on `sm_100+`
-in 4.0.3, so dense reconstruction is expected to work. Not yet run.
+Running each GPU case separately isolates it:
+
+| case | result |
+|---|---|
+| `CreateSiftGPUMatcherCUDA` | **passes** (exit 0) |
+| `CreateSiftGPUMatcherOpenGL` | crashes, `0xC0000409` |
+| `ExtractSiftFeaturesGPU` | crashes, `0xC0000409` |
+| `gpu_mat_test` (CUDA) | passes 4/4 |
+| non-GPU SIFT cases | pass 17/17 |
+
+Both crashes die at `[ RUN ]` with no further output — consistent with a hard
+failure creating an OpenGL context, which is what SiftGPU wants and a headless
+process does not have. The CUDA path passing while the OpenGL path dies is the
+tell.
+
+**And the actual CLI works headless:** `colmap feature_extractor
+--FeatureExtraction.use_gpu 1` returns exit 0 and extracts normally. The real
+binary sets up a context the test harness does not. So there is no usability
+problem here, only a test that cannot run headless.
+
+### CPU is still the better default here, for a different reason
+
+Same two images, same 1600 × 1200:
+
+| | features |
+|---|---|
+| CPU | 11,549 / 11,792 |
+| GPU | 8,224 / 8,381 |
+
+**CPU SIFT finds about 40 % more features.** COLMAP's CPU and GPU SIFT are
+different implementations and they do not agree at default settings. More
+features means more to match, so for reconstruction quality CPU is the better
+choice at this image count — the speed advantage of GPU only starts to matter
+with far more images. `--FeatureExtraction.use_gpu 0` therefore stays, now on
+evidence rather than as a workaround.
+
+Dense PatchMatch — the step that genuinely needs CUDA — ran successfully on this
+card; see the dense section above.
 
 ## Dense reconstruction, and the watertight problem
 
