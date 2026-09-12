@@ -1,4 +1,4 @@
-# Decisions
+﻿# Decisions
 
 Append-only. Newest at the bottom. One entry per choice that would be expensive to reverse.
 
@@ -561,53 +561,49 @@ Three regression tests now pin that a scaled import is actually bigger, on both 
 
 **What this still does not do.** It does not verify that the gauge block was really 10 mm, or that it was in frame, or that the operator measured the right edge. Those remain the author's claims, recorded as theirs. What changed is that the claim now determines the geometry instead of sitting beside it, so a wrong reference produces a visibly wrong mesh rather than a correct-looking record.
 
-## ADR-0021 — The closed-mesh requirement, enforced
+## ADR-0021 — Mesh topology is recorded, not enforced
 
 **Date:** 2026-09-11
 **Status:** accepted
 
-**Context.** `ScanImport`'s own doc comment has said since 2026-08-15:
+*Drafted first as "enforce the closed-mesh requirement" and rewritten before merge, after the enforcement broke a working path. The rejected version is kept below as Option 3, because the reason it failed is the useful part.*
 
-> *v0 limitation, stated plainly: voxelization requires a closed (watertight) mesh. A leaky scan produces a degenerate field, which the emptiness check catches — repair belongs upstream in the scan app for now.*
+**Context.** `ScanImport`'s doc comment has said since 2026-08-15:
+
+> *voxelization requires a closed (watertight) mesh. A leaky scan produces a degenerate field, which the emptiness check catches — repair belongs upstream in the scan app for now.*
 
 Measured 2026-09-11. **All three clauses are false.**
 
-A mesh built from a real photogrammetric reconstruction with its lower third deleted — 1,458 boundary edges, a hole spanning the whole footprint — imported without complaint and produced a cradle. Against the same part with the hole closed:
+A reconstructed mesh with its lower third deleted — 1,458 boundary edges, a hole spanning the footprint — imported without complaint and produced a cradle:
 
-| input | boundary edges | result | cradle bbox mm | volume |
-|---|---|---|---|---|
-| nearly closed | 662 | **PASS** | 40.78 × 30.56 × 16.79 | 20,545 mm³ |
-| lower third deleted | 1,458 | **PASS** | 40.83 × 29.06 × **11.93** | **13,839 mm³** |
+| input | boundary edges | cradle bbox mm | volume |
+|---|---|---|---|
+| nearly closed | 662 | 40.78 × 30.56 × 16.79 | 20,545 mm³ |
+| lower third deleted | 1,458 | 40.83 × 29.06 × **11.93** | **13,839 mm³** |
 
-A third of the part removed gave a cradle 4.9 mm shorter and 33 % smaller by volume, with every gate green and a clean provenance record.
-
-The emptiness check cannot catch this **by construction**: a wrong-but-non-empty field satisfies an emptiness test. And the kernel is not at fault — PicoGK faithfully voxelised a mesh that described a shorter object. Nothing asked whether the mesh described the *whole* object.
-
-Same shape as the `mshFromStlFile` finding earlier the same day: a documented safeguard, never measured, guarding a case it does not detect.
+A third of the part removed gave a cradle 4.9 mm shorter and 33 % smaller by volume, every gate green, provenance clean. An emptiness check cannot catch that **by construction** — a wrong-but-non-empty field satisfies it. PicoGK was blameless: it faithfully voxelised a mesh describing a shorter object. Nothing asked whether the mesh described the *whole* object.
 
 **Options.**
 
-1. **Leave it.** Rejected: the failure is silent and dimensional, and this repo exists to prevent exactly that.
-2. **Record the open-edge count in provenance and proceed.** Rejected. A 33 %-wrong cradle carrying an accurate note about its own brokenness is not safer than an undocumented one — it is the plausible-number failure with better paperwork.
-3. **Refuse unless the mesh is a closed manifold.**
-4. **Refuse above a threshold of boundary edges.** Rejected: the threshold would be invented. Every number picked by judgement tonight was either wrong or measuring its own noise, and `boundary == 0 && non-manifold == 0` needs no number at all.
+1. **Leave it.** Rejected: the failure is silent and dimensional.
+2. **Refuse above a threshold of boundary edges.** Rejected: the threshold would be invented, and every number picked by judgement that day was either wrong or measuring its own noise.
+3. **Refuse anything that is not a closed manifold.** Needs no threshold — `boundary == 0 && non-manifold == 0` is binary. **Implemented, then reverted the same day.** Two measurements killed it:
+   - **It rejects normal assemblies.** The KiCad board export used by `examples/platform-walkthrough` is **five loose parts, four of them individually closed solids**, that merely touch. Touching solids share edges, which reads as 1,139 non-manifold edges. OpenVDB unions them correctly — that export had already produced a validated cradle in run 3. The rule rejected a proven, legitimate input.
+   - **Some "boundaries" may be artefacts of the weld.** This analyser reports 4 boundary edges on that file; Blender reports 0. Exact-equality welding splits vertices a tolerant weld merges, so on a mesh from a *foreign writer* the count is not trustworthy. The check was validated on a PicoGK-written sphere — same writer, bitwise-identical shared vertices — which is the easy case and not the one that matters.
+4. **Measure and record; refuse nothing.**
 
-**Decision.** Option 3. `MeshTopology.OAnalyse` runs at the import boundary and `ScanImport` refuses anything that is not a closed manifold, naming the boundary-edge count, the non-manifold count, and what to do about it.
+**Decision.** Option 4. `MeshTopology.OAnalyse` runs at the import boundary and the result travels into provenance as `scan_topology`: boundary edges, non-manifold edges, total edges, welded vertices, `closed_manifold`, Euler characteristic, and the weld method. Nothing is refused.
 
-**Two implementation facts that had to be measured, not assumed.**
+The distinction option 3 could not draw, and a reader can: **a hole means the field describes whatever the surface encloses, which is not the part; touching solids in an assembly are non-manifold and voxelise correctly.** Those are different facts with the same symptom under a binary rule.
 
-*Topology, not geometry.* ADR-0001 puts geometry algorithms upstream and that holds. Counting faces per edge intersects nothing and meshes nothing; it is the same category as the ASCII STL parser beside it — reading the structure of a file we were handed.
+**Two implementation facts that had to be measured.**
 
-*STL has no shared vertices, and PicoGK does not weld on load.* Measured on a closed sphere: 44,820 vertices against 14,940 triangles, a ratio of exactly 3.000, with all 44,820 edges reporting as boundaries. **An index-based manifold check is meaningless on anything loaded from STL** — it would call every mesh open. Vertices are therefore welded by **exact** `Vector3` equality: a shared vertex written once by one writer returns bitwise identical, so a tolerance buys nothing and would be the hard-coded epsilon CONTRIBUTING rejects. Verified on the same sphere — 44,820 weld to 7,472, giving 22,410 edges, zero boundary, zero non-manifold, and V − E + F = 2 as a closed genus-0 surface must.
+*This is topology, not geometry.* ADR-0001 puts geometry algorithms upstream, and that holds — counting faces per edge intersects nothing and meshes nothing. Same category as the ASCII STL parser beside it.
 
-**Consequences, including the one that counts against this decision.**
+*STL carries no shared vertices, and PicoGK does not weld on load.* Measured on a closed sphere: 44,820 vertices against 14,940 triangles, a ratio of exactly 3.000, with **all 44,820 edges reporting as boundaries**. An index-based check is therefore meaningless on anything loaded from STL. Vertices weld by exact `Vector3` equality — a tolerance would be the hard-coded epsilon CONTRIBUTING rejects — verified on that sphere: 44,820 weld to 7,472, giving zero boundary, zero non-manifold, and V − E + F = 2.
 
-**No COLMAP Poisson output passes, at any trim setting.** Measured on the synthetic capture: `trim 5` gives 565 boundary and 145 non-manifold edges; **`trim 0` — the nearly-closed setting — still gives 14 boundary edges** in 1,092,583. So this rule, today, rejects **everything** the photogrammetry path produces.
+**Consequences.** Nothing that imported before this still imports; the walkthrough is unaffected. The 33 %-wrong cradle remains *possible* — this ADR does not prevent it, it makes it **visible after the fact** in a record that now says the mesh had 1,458 boundary edges. That is weaker than a gate and is what the evidence supports.
 
-That is a real cost and it was the stated risk when this option was chosen over the alternatives. It is accepted on two grounds. The refusal is *correct*: those meshes are not solids, and the one time such a mesh was voxelised it produced a silently 33 %-wrong answer. And the failure direction is the safe one — loud and recoverable, against silent and dimensional.
+**What would justify a gate, and what it would need first.** The weld question is unresolved: until this analyser and a tolerant one agree on a foreign-written mesh, its boundary counts cannot carry a refusal. After that, the open question is which hole *sizes* matter — a hole spanning the footprint is not a 4-edge nick, and no one has measured where between them the answer goes wrong. Both are answerable; neither is answered.
 
-But "recoverable" means a manual repair step on every scan, which is heavier than "use `trim 0` instead" implied when this was chosen. **Whether ODC should repair small holes itself — filling a boundary loop deterministically and recording the filled count and area as provenance — is deliberately left open.** It is the same shape as ADR-0019 and ADR-0020: do not refuse the input, require the declaration and record it. It wants its own evidence about what "small" means, and inventing that threshold now would repeat the mistake option 4 was rejected for.
-
-**On the invented surface, which this does not address.** Poisson always closes; `trim` only punches holes in low-confidence regions. So the extrapolated underside — measured at +11 % on Z for `trim 5`, and 28–51 % on two axes for `trim 0` — is closure the camera never observed, and a closed-manifold check cannot tell it from observed surface because both are closed. That is recorded, not solved: `scan_origin: photogrammetry` (ADR-0019) is already the flag that a mesh may contain surface nobody saw. A field claiming to mark *which* surface was invented is not implementable from an STL, because the confidence data lives in the reconstruction and not in the file.
-
-**Not done:** cutting an extrapolated region against a declared support plane. The mechanism is available — a boolean against a half-space is a model-level operation, not a geometry algorithm belonging upstream — but it is a refinement of the provenance problem, and it only matters once a hole cannot silently ruin the answer. That is what this ADR buys.
+**On the invented surface, which this does not address.** Poisson always closes; `trim` only punches holes in low-confidence regions. The extrapolated underside — +11 % on Z at `trim 5`, 28–51 % on two axes at `trim 0` — is closure no camera observed, and no topology check distinguishes it from observed surface because both are closed. `scan_origin: photogrammetry` (ADR-0019) is already the flag that a mesh may contain surface nobody saw. A field marking *which* surface was invented is not implementable from an STL: the confidence data lives in the reconstruction, not the file.

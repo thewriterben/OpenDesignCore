@@ -46,6 +46,7 @@ public static class CradleRun
         string strScanHash;
         int nScanTriangles;
         float fEffectiveScale;
+        MeshTopologyReport oTopology;
         ArtifactGeometry oGeometry;
 
         using (Library oLib = new(fVoxelSizeMm))
@@ -55,6 +56,7 @@ public static class CradleRun
             strScanHash = oScan.ScanSha256;
             nScanTriangles = oScan.TriangleCount;
             fEffectiveScale = oScan.EffectiveScale;
+            oTopology = oScan.Topology;
 
             CradleParams oParams = new()
             {
@@ -117,6 +119,24 @@ public static class CradleRun
                         ["description"] = oScaleRef.Description,
                     },
                 ["scan_triangle_count"] = nScanTriangles,
+                // Measured, not enforced (ADR-0021). A hole makes the field
+                // describe whatever the surface encloses; touching solids in an
+                // assembly are non-manifold and voxelise correctly. The counts
+                // let a reader tell those apart; the importer does not try to.
+                ["scan_topology"] = new Dictionary<string, object?>
+                {
+                    ["boundary_edges"] = oTopology.BoundaryEdges,
+                    ["nonmanifold_edges"] = oTopology.NonManifoldEdges,
+                    ["edges"] = oTopology.Edges,
+                    ["welded_vertices"] = oTopology.WeldedVertices,
+                    ["closed_manifold"] = oTopology.IsClosedManifold,
+                    ["euler_characteristic"] = oTopology.EulerCharacteristic,
+                    // Vertices weld by exact equality, so a writer that emits
+                    // shared vertices at differing precision can inflate
+                    // boundary_edges. Measured on one KiCad export: 4 here
+                    // against 0 from a tolerant weld.
+                    ["weld"] = "exact vector equality",
+                },
                 ["clearance_mm"] = StrF2(fClearanceMm),
                 ["wall_mm"] = StrF2(fWallMm),
                 ["split_fraction"] = StrF2(fSplitFraction),

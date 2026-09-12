@@ -144,23 +144,83 @@ public sealed class ScanScaleTests : IDisposable
     }
 
     [Fact]
-    public void AMeshWithAHoleIsRefused()
+    public void AMeshWithAHoleIsImported_AndItsHoleIsRecorded()
     {
-        // A cube missing one face: unambiguously open, and exactly the shape of
-        // a scan whose underside no camera saw.
+        // A cube missing one face: unambiguously open, and the shape of a scan
+        // whose underside no camera saw.
+        //
+        // This imports. Refusing it was tried on 2026-09-11 and reverted the
+        // same day (ADR-0021): the same rule rejected a KiCad board export that
+        // is five touching solids, four of them individually closed, which
+        // voxelises correctly and had already produced a validated cradle. The
+        // counts are recorded so a reader can judge; nothing is refused on a
+        // threshold nobody has evidence for.
         string strPath = Path.Combine(_strTempDir, "open-box.stl");
         WriteOpenBox(strPath);
 
         using Library oLib = new(0.4f);
-        ImportValidationException e = Assert.Throws<ImportValidationException>(
-            () => ScanImport.OImport(
-                oLib, strPath, Mesh.EStlUnit.MM, 1.0f,
-                EScanOrigin.MetrologyScan, null, StrArtifacts));
+        ScanImportResult oResult = ScanImport.OImport(
+            oLib, strPath, Mesh.EStlUnit.MM, 1.0f,
+            EScanOrigin.MetrologyScan, null, StrArtifacts);
 
-        Assert.Contains("not a closed manifold", e.Message);
-        Assert.Contains("boundary edge", e.Message);
-        // The refusal has to say what to do about it, not merely that it failed.
-        Assert.Contains("Repair the mesh", e.Message);
+        Assert.False(oResult.Topology.IsClosedManifold);
+        Assert.True(oResult.Topology.BoundaryEdges > 0);
+        Assert.Equal(0, oResult.Topology.NonManifoldEdges);
+    }
+
+    [Fact]
+    public void TouchingSolidsAreNonManifoldAndStillImport()
+    {
+        // Two boxes sharing a face — the shape of every CAD assembly export,
+        // and the case that killed the refusal. Non-manifold by construction;
+        // OpenVDB unions it correctly.
+        string strPath = Path.Combine(_strTempDir, "two-boxes.stl");
+        WriteTouchingBoxes(strPath);
+
+        using Library oLib = new(0.4f);
+        ScanImportResult oResult = ScanImport.OImport(
+            oLib, strPath, Mesh.EStlUnit.MM, 1.0f,
+            EScanOrigin.CadExport, null, StrArtifacts);
+
+        Assert.True(oResult.Topology.NonManifoldEdges > 0);
+        Assert.False(oResult.Topology.IsClosedManifold);
+        Assert.True(oResult.SizeMm.X > 0);
+    }
+
+    private static void WriteTouchingBoxes(string strPath)
+    {
+        // Boxes 0..10 and 10..20 along X, sharing the plane at x = 10.
+        System.Text.StringBuilder oSb = new();
+        oSb.AppendLine("solid two-boxes");
+        foreach (float x0 in new[] { 0f, 10f })
+            AppendBox(oSb, x0, x0 + 10f);
+        oSb.AppendLine("endsolid two-boxes");
+        File.WriteAllText(strPath, oSb.ToString());
+    }
+
+    private static void AppendBox(System.Text.StringBuilder oSb, float x0, float x1)
+    {
+        (float, float, float)[] v =
+        [
+            (x0, 0, 0), (x1, 0, 0), (x1, 6, 0), (x0, 6, 0),
+            (x0, 0, 4), (x1, 0, 4), (x1, 6, 4), (x0, 6, 4),
+        ];
+        int[][] aFaces =
+        [
+            [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+            [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        ];
+        foreach (int[] f in aFaces)
+        {
+            oSb.AppendLine("  facet normal 0 0 0");
+            oSb.AppendLine("    outer loop");
+            foreach (int i in f)
+                oSb.AppendLine(
+                    $"      vertex {v[i].Item1:0.######} {v[i].Item2:0.######} {v[i].Item3:0.######}");
+            oSb.AppendLine("    endloop");
+            oSb.AppendLine("  endfacet");
+        }
     }
 
     private static void WriteOpenBox(string strPath)
