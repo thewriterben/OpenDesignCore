@@ -708,6 +708,34 @@ reference now produces a visibly wrong mesh rather than a correct-looking record
 
 **Open:** neither PicoGK bug has been reported to LEAP 71. Marked `TODO(report)` on [[picogk]].
 
+## [2026-09-11] lint | The Z axis closed 17 days ago and three documents still said it was open
+
+Asked to work on the Z axis with the K2 powered up, and stopped before doing any of it. The K2's
+record in OpenBuildCore `machines.json` carries a complete `z` entry dated **2026-08-25**: span
+21.02 against 21.00 nominal, recorded as residual 0 with its floor stated (0.04 mm on 21 mm = 0.19 %,
+so the residual is below the instrument rather than absent), comparison `cc639d8a24ae`, all three
+readings per surface in the record.
+
+It closed exactly the way `CALIBRATE-FIRST.md` predicted: the profile was tuned first, which took the
+final-layer top face from 0.08 mm spread to 0.02 mm, and only then was the span measurable at all.
+
+**ROADMAP said otherwise, and so did open questions 14 and 15.** Three documents asserting work was
+outstanding that had been finished for 17 days, one of them pointing at the very record that
+contradicted it (`axis_calibration: partial`, when the record reads verified on all three axes). The
+session was one step from re-tuning a profile and reprinting a block to re-measure something already
+measured.
+
+Caught only because a memory of the 08-25 result disagreed with the roadmap, and the authoritative
+record was checked instead of the document describing it.
+
+**Second stale status claim tonight**, after question 6, and the pair is the finding. Both lived in
+files nobody diffs against reality. A test fails when the code moves past it; a roadmap does not. This
+wiki's lint operation covers wiki pages and has never been pointed at `ROADMAP.md`. The cheap habit,
+independent of any tooling: when a document points at a record, read the record.
+
+Also checked and **not** a problem: `machines.json` appeared to have a machine with a blank id. The
+field is `machine_id`; the query asked for `id`. Both entries are intact.
+
 ## [2026-09-11] measurement | SfM is a similarity to 75 ppm, so the second scale reference would measure its own noise
 
 `examples/scale-derivation` renders a turntable capture in Blender with exact
