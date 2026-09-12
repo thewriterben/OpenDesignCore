@@ -144,10 +144,52 @@ The second is the failure mode this repository exists to prevent, arriving
 through the gate meant to prevent it. A watertight check cannot distinguish
 observed surface from plausible surface, because both are closed.
 
-**This is an open design question, not a resolved one.** It is not obvious
-whether the answer is a hole-filling step that records what it invented, an
-import mode that accepts open meshes for fit-only work, or a refusal that names
-the unobserved region. Recorded rather than decided.
+### Measured: how much `trim 0` invents
+
+The first attempt at this compared a mesh to the *nominal* part and was
+worthless, because the crop box included a slab of platter — so the mesh was of
+part-plus-platter and Poisson's extrapolation could not be separated from the
+crop's own contents. It reported 81–93 % oversize and meant nothing.
+
+The clean version crops above the support plane (`--z-min-mm 1.5`) so only the
+part's observed surface is kept, and compares each mesh to **the cloud it was
+built from** — same frame, same units, no nominal involved.
+
+Observed point cloud: **31.32 × 21.58 × 14.14 mm** (107,433 points).
+
+| | largest part | boundary edges | own-axes mm | vs cloud |
+|---|---|---|---|---|
+| `trim 0` | 363,634 v | **14** (≈closed) | 30.68 × **27.69** × **21.38** | **+28 %, +51 %** |
+| `trim 5` | 362,607 v | **662** (open) | 30.68 × 21.38 × 15.69 | +11 % on Z only |
+
+`trim 0` is essentially watertight — 14 boundary edges in a 363k-vertex mesh —
+and **28–51 % larger on two axes than the data it was built from.** It would
+pass ODC's validity gate and produce a cradle for a part half again too big,
+under clean provenance.
+
+`trim 5` tracks the data to 2–3 % on X and Y and is open, so ODC refuses it. Its
+only real extrapolation is +11 % on Z, at the unobserved bottom — exactly where
+Poisson smooths past the boundary before trimming. X holds at 30.68 mm under
+both settings; the well-observed axis is stable.
+
+**So "pick a trim value" is not the answer.** The two settings fail in opposite
+directions and neither is usable.
+
+### What the numbers suggest, and what still needs deciding
+
+The only genuinely unobserved region is the bottom: `trim 5` gets the sides and
+top right. Capping *that* mesh against a **declared support plane** would close
+it without inventing a third of the part, and the cap would be evidence — the
+object demonstrably rested on something flat — rather than extrapolation. It
+also fits the existing grammar: declared never inferred, recorded in provenance,
+refuses when absent.
+
+**Still undecided, and deliberately so.** The mechanism is not obvious. Capping a
+boundary loop is geometry, and ODC's non-goals say geometry algorithms belong
+upstream in PicoGK/ShapeKernel. There may be an SDF-native route that avoids
+meshing the closure at all — building a level set from the point cloud, or a
+boolean against a half-space — which would sidestep the question rather than
+answer it. That wants a plan before an ADR.
 
 ## Still not done
 
