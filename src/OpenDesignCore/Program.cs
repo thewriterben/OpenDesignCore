@@ -147,10 +147,26 @@ if (args is ["run-cradle", ..])
 
     try
     {
+        double? fSpan = oOpts.TryGetValue("scale-ref-span", out string? strSpan)
+            ? double.Parse(strSpan, System.Globalization.CultureInfo.InvariantCulture)
+            : null;
         OpenDesignCore.Import.ScaleReference? oScaleRef =
             oOpts.TryGetValue("scale-ref", out string? strScaleRef)
-                ? OpenDesignCore.Import.ScaleReference.OParse(strScaleRef)
+                ? OpenDesignCore.Import.ScaleReference.OParse(strScaleRef, fSpan)
                 : null;
+
+        // `--scale` and a photogrammetry reference are two sources for one
+        // quantity (ADR-0020). Presence is what matters, not the value, so
+        // this checks the key rather than comparing against the 1.0 default.
+        if (eScanOrigin == OpenDesignCore.Import.EScanOrigin.Photogrammetry
+            && oOpts.ContainsKey("scale"))
+        {
+            Console.Error.WriteLine(
+                "--scale is refused for photogrammetry: the scale is derived from --scale-ref "
+                + "and --scale-ref-span (ADR-0020). Drop --scale, or declare the origin this "
+                + "mesh actually has.");
+            return 2;
+        }
 
         CradleRunResult oResult = CradleRun.Execute(
             strStlPath: strStl,
@@ -338,8 +354,11 @@ if (args is ["compare", ..])
             OpenDesignCore.Import.ScaleReference? oCmpScaleRef;
             try
             {
+                double? fCmpSpan = oOpts.TryGetValue("scale-ref-span", out string? strCmpSpan)
+                    ? double.Parse(strCmpSpan, System.Globalization.CultureInfo.InvariantCulture)
+                    : null;
                 oCmpScaleRef = oOpts.TryGetValue("scale-ref", out string? strCmpScaleRef)
-                    ? OpenDesignCore.Import.ScaleReference.OParse(strCmpScaleRef)
+                    ? OpenDesignCore.Import.ScaleReference.OParse(strCmpScaleRef, fCmpSpan)
                     : null;
                 OpenDesignCore.Import.ScanProvenance.Validate(eCmpOrigin, oCmpScaleRef);
             }
@@ -731,6 +750,8 @@ Console.WriteLine("                                    [--wall-mm <v>] [--data <
 Console.WriteLine("       OpenDesignCore run-cradle --stl <path> --units <mm|cm|m|in|ft> --voxel-mm <v>");
 Console.WriteLine("                                 --scan-origin <cad-export|metrology-scan|photogrammetry>");
 Console.WriteLine("                                 [--scale-ref <length-mm>:<what was measured, and how>]");
+Console.WriteLine("                                 [--scale-ref-span <span in file units>]   (required for photogrammetry;");
+Console.WriteLine("                                                                            scale is derived, --scale refused)");
 Console.WriteLine("                                 [--clearance-mm <v>] [--wall-mm <v>] [--split <0..1>] [--scale <f>]");
 Console.WriteLine("       OpenDesignCore run-calibration-block --instrument-accuracy-mm <v>");
 Console.WriteLine("                                            [--x-mm <v>] [--y-mm <v>] [--z-mm <v>] [--voxel-mm <v>]");

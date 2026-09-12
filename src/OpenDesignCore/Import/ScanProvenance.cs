@@ -48,6 +48,26 @@ public sealed record ScaleReference
     /// <summary>The reference's known or measured length, mm. Must be positive.</summary>
     public required double LengthMm { get; init; }
 
+    /// <summary>
+    /// What that same reference spans in the mesh file's own coordinates,
+    /// before units and any scaling are applied. Required for photogrammetry
+    /// (ADR-0020), where it and <see cref="LengthMm"/> together *determine* the
+    /// scale rather than merely describing it. Null where the scale came from
+    /// somewhere else and this reference is corroboration.
+    /// </summary>
+    public double? SpanFileUnits { get; init; }
+
+    /// <summary>
+    /// The total file→mm scale this reference implies. Not a check against a
+    /// separately declared scale — the declared scale is gone (ADR-0020), and
+    /// this is the only source.
+    /// </summary>
+    public double FTotalScale =>
+        SpanFileUnits is { } fSpan && fSpan > 0
+            ? LengthMm / fSpan
+            : throw new ImportValidationException(
+                "This scale reference carries no measured span, so it implies no scale.");
+
     public void Validate()
     {
         if (string.IsNullOrWhiteSpace(Description))
@@ -64,13 +84,24 @@ public sealed record ScaleReference
                 $"A scale reference must carry a positive measured length; got {LengthMm} mm.");
         if (double.IsNaN(LengthMm) || double.IsInfinity(LengthMm))
             throw new ImportValidationException("Scale reference length must be finite.");
+
+        if (SpanFileUnits is { } fSpan)
+        {
+            if (!(fSpan > 0))
+                throw new ImportValidationException(
+                    $"A scale reference's measured span must be positive; got {fSpan} file units.");
+            if (double.IsNaN(fSpan) || double.IsInfinity(fSpan))
+                throw new ImportValidationException("Scale reference span must be finite.");
+        }
     }
 
     /// <summary>
     /// Parse the CLI/MCP surface form `&lt;length-mm&gt;:&lt;description&gt;`,
-    /// e.g. `10.0:gauge block across the turntable, digital caliper`.
+    /// e.g. `10.0:gauge block across the turntable, digital caliper`. The
+    /// measured span arrives separately (`--scale-ref-span`), because it is
+    /// required in one case and meaningless in another.
     /// </summary>
-    public static ScaleReference OParse(string strValue)
+    public static ScaleReference OParse(string strValue, double? fSpanFileUnits = null)
     {
         int nSplit = strValue.IndexOf(':');
         if (nSplit <= 0)
@@ -92,6 +123,7 @@ public sealed record ScaleReference
         {
             Description = strValue[(nSplit + 1)..].Trim(),
             LengthMm = fLengthMm,
+            SpanFileUnits = fSpanFileUnits,
         };
         oRef.Validate();
         return oRef;
@@ -117,6 +149,21 @@ public static class ScanProvenance
                     "not give this mesh an absolute size. Pass a scale reference " +
                     "('<length-mm>:<what was measured, and how>'), or declare a different origin " +
                     "if the scale did not come from photogrammetry. Absence is UNKNOWN, not 1:1.");
+
+            case EScanOrigin.Photogrammetry when oScaleRef.SpanFileUnits is null:
+                throw new ImportValidationException(
+                    "A photogrammetry scale reference must also say what it spans in the mesh " +
+                    "file's own coordinates (--scale-ref-span), because that span and the known " +
+                    "length are what *determine* this mesh's scale — they are not a description " +
+                    "of it (ADR-0020). Without the span the reference asserts a size nothing in " +
+                    "the pipeline ever uses, which reads as rigour and is not.");
+
+            case not EScanOrigin.Photogrammetry when oScaleRef?.SpanFileUnits is not null:
+                throw new ImportValidationException(
+                    $"A measured span is only meaningful for photogrammetry, where it sets the " +
+                    $"scale. For {StrOrigin(eOrigin)} the scale came from elsewhere, so a span " +
+                    "here would name a second source for one quantity. Drop it, or declare " +
+                    "photogrammetry if that is what this mesh is.");
 
             case EScanOrigin.CadExport when oScaleRef is not null:
                 throw new ImportValidationException(

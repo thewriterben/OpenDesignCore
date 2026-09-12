@@ -402,6 +402,9 @@ public static class CompareRun
                     : new Dictionary<string, object?>
                     {
                         ["length_mm"] = StrF3(oScanScaleRef.LengthMm),
+                        ["span_file_units"] = oScanScaleRef.SpanFileUnits is { } fSpan
+                            ? StrF3(fSpan)
+                            : null,
                         ["description"] = oScanScaleRef.Description,
                     },
                 // The material the part was printed in. A shrinkage figure
