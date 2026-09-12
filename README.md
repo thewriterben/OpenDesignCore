@@ -54,7 +54,7 @@ Parts come from a sibling [OpenPartsCore](https://github.com/thewriterben/OpenPa
 separately with the reason each is unavailable, so absence is visible rather than silent.
 
 The other commands: `validate-data`, `run-cradle`, `run-calibration-block`, `compare`, `compensate`,
-`verify-artifact`, `handoff`. Run with no arguments for usage.
+`verify-artifact`, `render-thumbnail`, `handoff`. Run with no arguments for usage.
 
 ## What it is
 
@@ -69,6 +69,9 @@ The other commands: `validate-data`, `run-cradle`, `run-calibration-block`, `com
   deviation survives that test.
 - **Independent verification.** `verify-artifact` re-measures an artifact with a second geometry
   kernel, against tolerances the operator pins and the caller cannot choose (ADR-0017, ADR-0018).
+- **Pictures that carry their own provenance.** `render-thumbnail` renders an artifact
+  deterministically and records the settings that produced it — and records, in every copy, that a
+  picture is not a measurement (ADR-0022). Human CLI only; it is not on the MCP surface.
 - **An MCP surface that proposes and never commits.** Reads and deterministic runs execute; anything
   that would start a print is a proposal a human approves elsewhere (ADR-0009).
 
