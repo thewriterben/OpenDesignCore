@@ -118,5 +118,13 @@ sources: []
     **The answer is a refusal, and that counts as answered:** no OpenScan figure may be passed to
     `compare --declared-accuracy`, ever. A declared accuracy for this device class can only come from a
     local measurement against a known artifact. Recorded in [[openscan]] and [[openscan-2026-09]].
+
+19. **Two PicoGK 2.2.0 bugs are unreported upstream** (opened 2026-09-11). `mshFromStlFile` ignores its
+    scale argument, and the `(vecScale, vecOffset)` transform overload applies a different scale
+    component per vertex. Both are worked around at the call site rather than patched, per ADR-0001, and
+    both workarounds are **version-bound** — a release that fixes the first would make our transform
+    double-apply. Neither has been sent to LEAP 71, so the fix we are waiting on is one nobody knows is
+    wanted. Reporting is a public act on Benji's account, so it is his to make; [[picogk]] carries the
+    reproduction and the measured numbers ready to paste. Marked `TODO(report)` there.
     Generalises beyond this vendor: the asterisk pattern — a precise-looking figure citing a page with no
     measurement in it — is worth checking for on every instrument spec this platform reads.
