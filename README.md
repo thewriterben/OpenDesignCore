@@ -29,7 +29,11 @@ Expected output: ⟨artifact and where it lands⟩. Should take under five minut
 
 ## Conventions
 
-All quantities are SI internally and carry explicit units at API boundaries. Geometric predicates take an explicit tolerance; there are no ambient epsilons. See [GLOSSARY.md](GLOSSARY.md) for terms, units, and sign conventions.
+Length is **millimetres**, matching the PicoGK kernel (ADR-0004); other quantities are SI unless dimensionally coupled to length, in which case the unit is stated explicitly rather than inferred. Conversion happens at exactly one place per boundary.
+
+Resolution is **one global voxel size per model run** (ADR-0003), supplied explicitly by the caller, never defaulted in code, and recorded in the provenance of every artifact. A model below its resolution floor fails loudly rather than answering coarsely.
+
+See [GLOSSARY.md](GLOSSARY.md) for terms, units, and sign conventions.
 
 ## Docs
 
