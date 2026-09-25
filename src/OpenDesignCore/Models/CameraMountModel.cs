@@ -90,12 +90,13 @@ public sealed record CameraMountParams
         LipDiameterMm = 16.65f,
         AxisToBoardBottomMm = 35.00f,
 
-        // ── Chosen, and the one that is still a guess ──
-        // PROVISIONAL until lens-fit-gauge/0.1 is printed and a rung fits. The
-        // barrel is 14.95; this is not 14.95, because a printed hole comes out
-        // undersize and by how much is a property of the machine. The gauge's
-        // second rung is the starting assumption, not a measurement.
-        BoreDiameterMm = 15.20f,
+        // ── Derived from a measurement, no longer a guess ──
+        // The barrel is 14.95 and this is not, because a printed hole comes out
+        // undersize. How much is a property of the machine, and it was measured
+        // on 2026-09-25 with a printed lens-fit-gauge — see
+        // LensFitGaugeModel.MeasuredBoreUndersizeMm for the rungs and the
+        // uncertainty. Derived rather than written out so the two cannot drift.
+        BoreDiameterMm = 14.95f + LensFitGaugeModel.MeasuredBoreUndersizeMm,
 
         BoreLandMm = 3.00f,      // < 5.10 free length, leaving ~2 mm of barrel proud
         PlateThicknessMm = 6.00f,

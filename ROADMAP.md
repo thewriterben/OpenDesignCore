@@ -57,3 +57,33 @@ Explicit non-goals. Cheaper to write down once than to relitigate.
 - Electronics design, component sourcing, marketplace, settlement — peer systems in the ecosystem (ADR-0007)
 - Geometry algorithms that belong upstream in PicoGK/ShapeKernel
 - Designs for weapons or items regulated in the user's locality — policy gating lives at the platform layer, but this repo will not carry such models
+
+## Known gap: no home for a per-machine feature offset
+
+`lens-fit-gauge/0.1` measured, on 2026-09-25, that this printer cuts a ~15 mm bore
+about **0.25 ± 0.13 mm undersize** (nominal 15.20 near-snug on a 14.95 cylinder,
+nominal 15.45 loose; bracketed to half the ladder's 0.25 mm step).
+
+That figure has nowhere to live. It is a **machine/process** fact, so:
+
+- `data/materials/` is the wrong owner — filing a machine fault under a material's
+  name is precisely what ADR-0012 exists to prevent.
+- `OpenBuildCore/machines.json` owns machines, but its `axis_calibration` carries a
+  per-axis *scale residual in percent*. A constant offset on an internal feature is
+  a different quantity, and ADR-0012 makes this engine read-only against that file.
+- `odc/comparison/*` carries x/y/z bounding extents only; it cannot express a
+  feature diameter. `compensate` deliberately outputs a ratio for a shrinkage
+  calculator, and this is a constant, not a ratio — the same distinction the
+  calibration loop already draws between first-layer squish and shrinkage.
+- The ledger stores runs and handoffs. There is no measurement record type.
+
+So it currently lives as a cited constant on the model that measured it
+(`LensFitGaugeModel.MeasuredBoreUndersizeMm`), wired into the one model that
+consumes it (`camera-mount/0.2`'s bore) so it cannot drift into a magic number.
+That is the right size for one measurement and the wrong shape for a second.
+
+**What it would take:** a `data/` namespace for per-machine process constants, a
+record type beside `MaterialEntry`, a `LoadNamespace` call, and a decision about
+whether such facts belong here or in OpenBuildCore — which is an ADR, because it
+moves the boundary ADR-0012 drew. Deferred deliberately: one measurement does not
+justify the schema, and the second one will.

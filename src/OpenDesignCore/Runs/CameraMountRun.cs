@@ -75,8 +75,13 @@ public static class CameraMountRun
                     "measured 2026-09-25 with calipers; LILYGO T-CameraPlus-S3 V1.1, "
                     + "node obc-esp32-s3-003",
                 ["bore_diameter_mm"] = StrF2(oParams.BoreDiameterMm),
-                ["bore_diameter_source"] = "PROVISIONAL - not yet measured from a printed "
-                    + "lens-fit-gauge/0.1; this is the nominal to cut, not the barrel diameter",
+                ["bore_diameter_source"] =
+                    "measured 2026-09-25 from a printed lens-fit-gauge/0.1 (ledger run 86, "
+                    + "artifact 67a96e7c): nominal 15.20 near-snug on the 14.95 barrel, "
+                    + "nominal 15.45 loose. Bracketed to about half the ladder's 0.25 mm "
+                    + "step, so 0.25 +/- 0.13 mm undersize. This is the nominal to cut, not "
+                    + "the barrel diameter, and it is a property of one printer, one "
+                    + "filament and one set of settings",
                 ["bore_land_mm"] = StrF2(oParams.BoreLandMm),
                 ["lip_pocket_mm"] = StrF2(oParams.LipPocketMm),
                 ["plate_thickness_mm"] = StrF2(oParams.PlateThicknessMm),
@@ -98,11 +103,10 @@ public static class CameraMountRun
             ["artifact"] = oGeometry.OArtifactBlock(strArtifactHash),
             ["caveats"] = new List<object?>
             {
-                "bore_diameter_mm is PROVISIONAL. It is the nominal figure to cut, not the "
-                    + "barrel's 14.95 mm: a printed hole comes out undersize and by how much "
-                    + "is a property of this printer. Print lens-fit-gauge/0.1, find the rung "
-                    + "that slides on snugly, and re-run with --bore-diameter-mm set to that "
-                    + "rung's nominal before trusting the fit.",
+                "bore_diameter_mm is now MEASURED rather than assumed, but only to about "
+                    + "half the gauge's 0.25 mm ladder step. If the bore comes out tight or "
+                    + "loose, that is within the figure's stated uncertainty and wants a "
+                    + "finer ladder, not a guess.",
                 "v0.1 of this model gripped the board's long edges and did not fit: the "
                     + "bottom corners carry a micro-USB and two JST connectors exactly where "
                     + "the slots bit. The outline was right and the SURFACE was never "

@@ -59,6 +59,19 @@ public sealed class CameraMountTests : IDisposable
     }
 
     [Fact]
+    public void TheBoreIsDerivedFromTheMeasuredPrinterOffset()
+    {
+        // 15.20 is not a number someone liked. It is 14.95 plus a measured
+        // offset, and writing it out as a literal would let the two drift the
+        // next time the offset is re-measured on a finer ladder.
+        CameraMountParams o = CameraMountParams.ODefault();
+        Assert.Equal(
+            o.BarrelDiameterMm + LensFitGaugeModel.MeasuredBoreUndersizeMm,
+            o.BoreDiameterMm,
+            4);
+    }
+
+    [Fact]
     public void TheBoreIsNotTheBarrelDiameter()
     {
         // The single most likely "tidy-up" someone could make to this model is
@@ -190,10 +203,11 @@ public sealed class CameraMountTests : IDisposable
     }
 
     [Fact]
-    public void TheSidecarSaysTheBoreIsProvisionalAndCarriesNoTimestamp()
+    public void TheSidecarSaysWhereTheBoreCameFromAndCarriesNoTimestamp()
     {
-        // The bore has not been measured on a printed gauge yet. An artifact
-        // that did not say so would read as though it had been.
+        // The bore IS measured now, but only to half the gauge's ladder step.
+        // An artifact that stated the figure without its provenance would read
+        // as though it were exact.
         CameraMountRunResult oResult = ORun();
         string strSidecar = File.ReadAllText(
             Path.Combine(
@@ -202,7 +216,8 @@ public sealed class CameraMountTests : IDisposable
                 oResult.ProvenanceSha256 + ".provenance.json"));
 
         Assert.DoesNotContain("created", strSidecar);
-        Assert.Contains("PROVISIONAL", strSidecar);
+        Assert.Contains("measured 2026-09-25 from a printed lens-fit-gauge", strSidecar);
+        Assert.Contains("0.25 +/- 0.13 mm undersize", strSidecar);
         Assert.Contains("measured 2026-09-25 with calipers", strSidecar);
         // And the reason v0.1 failed, so the next fixture does not repeat it.
         Assert.Contains("JST connectors", strSidecar);

@@ -97,6 +97,37 @@ public static class LensFitGaugeModel
     public const string StrModelId = "lens-fit-gauge/0.1";
 
     /// <summary>
+    /// How much undersize this printer cuts a ~15 mm bore, mm. Add it to a
+    /// cylinder's measured diameter to get the nominal to model.
+    ///
+    /// <para>
+    /// <b>MEASURED 2026-09-25</b> from a printed gauge (ledger run 86, artifact
+    /// <c>67a96e7c…</c>, voxel 0.0625 mm) against the LILYGO T-CameraPlus-S3
+    /// V1.1 lens barrel, 14.95 mm across:
+    /// </para>
+    /// <list type="bullet">
+    /// <item>rung 2, nominal <b>15.20</b> — near-snug on the barrel</item>
+    /// <item>rung 3, nominal <b>15.45</b> — slips over with room to move</item>
+    /// </list>
+    ///
+    /// <para>
+    /// <b>The figure is bracketed, not resolved.</b> The ladder steps 0.25 mm, so
+    /// this is only known to about half a step — call it 0.25 ± 0.13 mm. A finer
+    /// ladder between rungs 1 and 3 would tighten it, and has not been run.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Scope.</b> This is a property of one printer, one filament and one set
+    /// of settings — the gauge's own caveat says so. It is not a material
+    /// constant and must not be filed as one (ADR-0012 exists to stop exactly
+    /// that). There is currently no store in this repo for a per-machine feature
+    /// offset, which is why it lives here, next to the part that measured it,
+    /// wired into the one model that consumes it. See ROADMAP.
+    /// </para>
+    /// </summary>
+    public const float MeasuredBoreUndersizeMm = 0.25f;
+
+    /// <summary>
     /// Largest voxel size at which this gauge means anything.
     ///
     /// <para>

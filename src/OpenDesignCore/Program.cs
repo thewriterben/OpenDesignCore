@@ -655,10 +655,10 @@ if (args is ["run-camera-mount", ..])
         Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
         Console.WriteLine($"  stl        {oResult.ArtifactPath}");
         Console.WriteLine();
-        Console.WriteLine("  THE BORE IS PROVISIONAL. It is the nominal to cut, not the barrel's");
-        Console.WriteLine("  14.95 mm -- a printed hole comes out undersize and by how much is a");
-        Console.WriteLine("  property of this printer. Print lens-fit-gauge/0.1, find the rung that");
-        Console.WriteLine("  slides on snugly, then re-run with --bore-diameter-mm set to it.");
+        Console.WriteLine("  The bore is 14.95 + 0.25, the offset MEASURED on 2026-09-25 from a");
+        Console.WriteLine("  printed lens-fit-gauge (run 86). It is known to about half that");
+        Console.WriteLine("  gauge's 0.25 mm ladder step, so a tight or loose fit is inside the");
+        Console.WriteLine("  figure's uncertainty and wants a finer ladder, not a guess.");
         Console.WriteLine();
         Console.WriteLine("  Acceptance, in Oh-Ben-Claw, with and without the fixture:");
         Console.WriteLine("    python scripts/vision/bench_floor.py knock-test 60 1.0 COM10 20");
