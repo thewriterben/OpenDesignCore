@@ -822,3 +822,33 @@ Both would have failed reconstruction in a way that looks like a scale problem.
 **Not done:** dense reconstruction and meshing, which is what an end-to-end ADR-0020 round
 trip needs. The camera-derived scale is the ground truth that round trip must reproduce, and
 ODC's v0 import wants a watertight mesh while Poisson output is not automatically watertight.
+
+## [2026-09-25] ingest | Creating MakerSpaces (Apress 2025): a facility is a fabrication node with people in it
+
+Read in full: *Creating MakerSpaces* (Mannickarottu, Patterson, Godon — the operators of Penn's
+Bio-MakerSpace), cited by DOI and not archived, per the web-sources rule. Trigger: Benji is
+developing operation and automation procedures for makerspaces and wants them tied to this
+platform. Source page [[creating-makerspaces-2025]]; synthesis [[makerspace-operations]].
+
+**What the mapping showed.** The book's central operational problem — a reservation is not tied to
+the physical tool, so spaces run on trust, staff check-ins and consequences — is what the platform
+already solved for one printer by a different route: a proposal carrying the design hash, approved
+by a human at the machine, every decision a ledger row (ADR-0009, studio ADR-0003, ODC `handoffs`).
+Extending that to a room of tools exposes one hole the map did not have a name for: **no peer owns
+the person.** Machines, parts, designs, proposals and settlement all have homes; *who is certified
+on what, validated how, until when* has none, and every enforcement mechanism in the book hangs off
+it. Added to the ecosystem gaps and filed as open question 22.
+
+**Recorded as designs, not code**, because ADR-0007 puts facility operations outside this engine: a
+per-(person, tool) certification state machine with three terminal-looking states kept apart for
+ADR-0012's reason; reservation → check-in → proposal → ledger with the studio's silent TTL expiry
+named as the row a reservation system must write itself; a machine cadence record extending
+`axis_calibration`; consumables as a cadence rather than a quantity; and the build order cheapest-first.
+Variants by facility type, since the procedures are generic.
+
+**Kept out.** The book's few figures (a knitting machine's price, a survey percentage, a
+printer-maintenance schedule) are wiki-layer only; its reservation-software comparison is repeated
+as the authors' description and marked unverified — NEMO in particular is named as the
+adopt-before-build candidate on the strength of a paragraph, which is exactly the standing a reader
+should not assume is better. The skill built from the book for Benji's own use stays outside the
+repo: its chapter notes are the long restatement this wiki's schema calls a failed page.
