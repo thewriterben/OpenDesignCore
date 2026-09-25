@@ -34,5 +34,14 @@ The largest voxel size at which a given model's result is still meaningful. Decl
 ### provenance
 The record that lets a given artifact be reproduced: inputs, voxel size, pinned submodule versions, tool version, commit. An artifact without one is not a result.
 
+### cradle slot
+A vertical groove in a fixture that a board edge slides into, sized to the board thickness plus a clearance per side. Holds by friction; carries the board's weight on its blind lower end. Not to be confused with a *cavity*, which surrounds a part rather than gripping one edge of it.
+
+### grip depth
+How far a cradle slot reaches inboard of a board's edge, in mm, per side. Sets how much of the board is held and — since the two slots face each other — how wide the gap between them is. Too deep and whatever passes between the uprights, such as a lens barrel, fouls them.
+
+### seat lift
+The height in mm from a fixture's base top to the floor of its cradle slot, i.e. how far a seated board is held clear of the base. Exists so connectors and castellations along a board's lower edge do not bear on anything.
+
 ### ⟨term⟩
 ⟨Definition.⟩ Unit: ⟨…⟩. Sign: ⟨…⟩. Not to be confused with ⟨the neighbouring term people conflate it with⟩.

@@ -506,6 +506,92 @@ if (args is ["run-calibration-block", ..])
     }
 }
 
+if (args is ["run-camera-mount", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    if (!oOpts.TryGetValue("voxel-mm", out string? strMountVoxel)
+        || !float.TryParse(strMountVoxel, System.Globalization.CultureInfo.InvariantCulture,
+                           out float fMountVoxelMm))
+    {
+        Console.Error.WriteLine(
+            "--voxel-mm is required and takes no default: voxel size is an explicit "
+            + "input to every model run (ADR-0003).");
+        return 2;
+    }
+
+    CameraMountParams oMountDefault = CameraMountParams.ODefault();
+    float FMount(string strKey, float fDefault)
+        => oOpts.TryGetValue(strKey, out string? s)
+            ? float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)
+            : fDefault;
+
+    CameraMountParams oMount = new()
+    {
+        BoardWidthMm = FMount("board-width-mm", oMountDefault.BoardWidthMm),
+        BoardLengthMm = FMount("board-length-mm", oMountDefault.BoardLengthMm),
+        BoardThicknessMm = FMount("board-thickness-mm", oMountDefault.BoardThicknessMm),
+        LensProtrusionMm = FMount("lens-protrusion-mm", oMountDefault.LensProtrusionMm),
+        LensDiameterMm = FMount("lens-diameter-mm", oMountDefault.LensDiameterMm),
+        TotalDepthMm = FMount("total-depth-mm", oMountDefault.TotalDepthMm),
+        SlotClearanceMm = FMount("slot-clearance-mm", oMountDefault.SlotClearanceMm),
+        GripDepthMm = FMount("grip-depth-mm", oMountDefault.GripDepthMm),
+        WallMm = FMount("wall-mm", oMountDefault.WallMm),
+        BaseThicknessMm = FMount("base-thickness-mm", oMountDefault.BaseThicknessMm),
+        BaseFrontMm = FMount("base-front-mm", oMountDefault.BaseFrontMm),
+        BaseBackMm = FMount("base-back-mm", oMountDefault.BaseBackMm),
+        SeatLiftMm = FMount("seat-lift-mm", oMountDefault.SeatLiftMm),
+        GripHeightMm = FMount("grip-height-mm", oMountDefault.GripHeightMm),
+    };
+
+    try
+    {
+        CameraMountRunResult oResult = CameraMountRun.Execute(
+            oMount, fMountVoxelMm,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+
+        Console.WriteLine($"run {oResult.RunId}: PASS  {CameraMountModel.StrModelId}");
+        Console.WriteLine(
+            $"  board      {oMount.BoardWidthMm:F2} x {oMount.BoardLengthMm:F2} x "
+            + $"{oMount.BoardThicknessMm:F2} mm, lens {oMount.LensProtrusionMm:F2} mm proud "
+            + "(MEASURED, not from the datasheet)");
+        Console.WriteLine(
+            $"  fixture    {oResult.Geometry.BBoxXMm:F3} x {oResult.Geometry.BBoxYMm:F3} x "
+            + $"{oResult.Geometry.BBoxZMm:F3} mm (voxel {fMountVoxelMm:F4} mm)");
+        Console.WriteLine(
+            $"  slot       {oMount.BoardThicknessMm + 2 * oMount.SlotClearanceMm:F2} mm wide, "
+            + $"gripping {oMount.GripDepthMm:F2} mm per side over {oMount.GripHeightMm:F2} mm");
+        Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine($"  stl        {oResult.ArtifactPath}");
+        Console.WriteLine();
+        Console.WriteLine("  The slot clearance is a guess until a part exists. Print it, try the");
+        Console.WriteLine("  board, and if it binds or rattles change --slot-clearance-mm rather");
+        Console.WriteLine("  than forcing the board into a fixture that does not fit it.");
+        Console.WriteLine();
+        Console.WriteLine("  Acceptance is measurable. In Oh-Ben-Claw, with and without the mount:");
+        Console.WriteLine("    python scripts/vision/bench_floor.py knock-test 60 1.0 COM10 20");
+        Console.WriteLine("  Knock the desk mid-run and compare the `edge` peak. This fixture");
+        Console.WriteLine("  exists to make the detector's `nudge` class rare; that is the test.");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 if (args is ["compensate", ..])
 {
     Dictionary<string, string> oOpts = [];
