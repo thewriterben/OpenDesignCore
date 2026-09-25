@@ -80,10 +80,11 @@ public sealed class OdcTools
         new
         {
             id = CameraMountModel.StrModelId,
-            summary = "Bench fixture holding a camera board upright in two grooved slots. "
-                + "Board dimensions are measurements of one physical board, not a datasheet.",
-            parameters = new[] { "board_width_mm", "board_length_mm", "board_thickness_mm", "lens_protrusion_mm", "lens_diameter_mm", "total_depth_mm", "slot_clearance_mm", "grip_depth_mm", "grip_height_mm", "wall_mm", "base_thickness_mm", "base_front_mm", "base_back_mm", "seat_lift_mm", "voxel_mm" },
-            resolution_floor = "min(wall_mm / 2, (board_thickness_mm + 2 * slot_clearance_mm) / 2)",
+            summary = "Bench fixture locating a camera board on its lens barrel: the barrel "
+                + "passes through a bore and its lip seats in a pocket. Board figures are "
+                + "measurements of one physical board, not a datasheet.",
+            parameters = new[] { "barrel_diameter_mm", "bore_diameter_mm", "barrel_free_length_mm", "lip_diameter_mm", "axis_to_board_bottom_mm", "floor_drop_mm", "bore_land_mm", "plate_thickness_mm", "lip_pocket_mm", "base_thickness_mm", "base_front_mm", "base_back_mm", "width_mm", "plate_headroom_mm", "voxel_mm" },
+            resolution_floor = "min(bore_diameter_mm / 100, bore_land_mm / 10)",
             run_tool = (string?)null,
         },
     });

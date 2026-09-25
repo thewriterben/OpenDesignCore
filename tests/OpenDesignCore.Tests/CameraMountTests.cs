@@ -5,14 +5,19 @@ using Xunit;
 namespace OpenDesignCore.Tests;
 
 /// <summary>
-/// The mount exists to hold a board still, so the tests are about the ways it
-/// could fail to do that and still export cleanly: a slot the board will not
-/// enter, uprights the lens fouls, and a base that does not reach under the
-/// mass hanging off the front.
+/// The mount holds a board by its lens barrel, so the tests are about the ways
+/// that can fail while still exporting cleanly — and about the failure that
+/// produced v0.2 in the first place.
 ///
-/// The board dimensions are measurements of one physical board and the vendor
-/// datasheet disagrees with them substantially, so there is also a test that
-/// the defaults have not quietly drifted back toward the datasheet.
+/// <para>
+/// v0.1 gripped the board's long edges and did not fit: the bottom corners
+/// carry a micro-USB and two JST connectors exactly where the slots bit. Every
+/// geometric check it had passed, because all of them compared the fixture to
+/// its own specification and none could ask whether the specification matched
+/// the board. These tests cannot close that gap either — nothing in this repo
+/// knows what a board is — so several of them instead pin the *measurements*,
+/// which is the part that can be checked.
+/// </para>
 /// </summary>
 public sealed class CameraMountTests : IDisposable
 {
@@ -24,14 +29,17 @@ public sealed class CameraMountTests : IDisposable
     private string StrArtifacts => Path.Combine(_strTempDir, "artifacts");
     private string StrLedger => Path.Combine(_strTempDir, "ledger.db");
 
-    /// <summary>Comfortably inside the floor, and coarse enough to keep tests quick.</summary>
-    private static float FVoxel() => 0.4f;
+    /// <summary>Coarse enough to keep tests quick, fine enough to pass the floor.</summary>
+    private static float FVoxel() =>
+        CameraMountModel.FResolutionFloorMm(CameraMountParams.ODefault());
 
     private CameraMountRunResult ORun(CameraMountParams? oParams = null, float? fVoxelMm = null)
     {
         CameraMountParams oUse = oParams ?? CameraMountParams.ODefault();
         return CameraMountRun.Execute(
-            oUse, fVoxelMm ?? FVoxel(), StrArtifacts, StrLedger, "test-commit");
+            oUse,
+            fVoxelMm ?? CameraMountModel.FResolutionFloorMm(oUse),
+            StrArtifacts, StrLedger, "test-commit");
     }
 
     // ── the measured board ───────────────────────────────────────────────────
@@ -39,93 +47,103 @@ public sealed class CameraMountTests : IDisposable
     [Fact]
     public void TheDefaultsAreTheMeasuredBoardAndNotTheDatasheet()
     {
-        // LILYGO publish 60 x 32 x 12 mm for this product. The board on the
-        // bench is none of those. If someone "corrects" these toward the
-        // published figure the fixture stops fitting, and the failure would be
-        // a part that does not work rather than a test that goes red — so the
-        // test goes red instead.
+        // LILYGO publish 60 x 32 x 12 mm with four 2 mm holes. None of it
+        // describes this board. If someone "corrects" these toward the
+        // published figure the fixture stops fitting, and the symptom would be
+        // a dead part rather than a red test.
         CameraMountParams o = CameraMountParams.ODefault();
-        Assert.Equal(68.25f, o.BoardLengthMm);
-        Assert.Equal(27.90f, o.BoardWidthMm);
-        Assert.Equal(29.40f, o.TotalDepthMm);
-        Assert.NotEqual(60f, o.BoardLengthMm);
-        Assert.NotEqual(32f, o.BoardWidthMm);
-        Assert.NotEqual(12f, o.TotalDepthMm);
-    }
-
-    // ── the ways it could hold the board badly ───────────────────────────────
-
-    [Fact]
-    public void AGripThatWouldFoulTheLensIsRefusedByName()
-    {
-        // The lens passes between the uprights. Grip deep enough and the
-        // fixture is one the board cannot be pushed into, which a bounding-box
-        // check would never notice.
-        ArgumentException oEx = Assert.Throws<ArgumentException>(
-            () => ORun(CameraMountParams.ODefault() with { GripDepthMm = 7.0f }));
-        Assert.Contains("lens barrel", oEx.Message);
+        Assert.Equal(14.95f, o.BarrelDiameterMm);
+        Assert.Equal(5.10f, o.BarrelFreeLengthMm);
+        Assert.Equal(16.65f, o.LipDiameterMm);
+        Assert.Equal(35.00f, o.AxisToBoardBottomMm);
     }
 
     [Fact]
-    public void AGripDeeperThanTheBoardIsRefused()
+    public void TheBoreIsNotTheBarrelDiameter()
     {
+        // The single most likely "tidy-up" someone could make to this model is
+        // setting the bore to the measured barrel, because they look like they
+        // should match. They must not: a printed hole comes out undersize, and
+        // the gap is what lens-fit-gauge/0.1 measures.
+        CameraMountParams o = CameraMountParams.ODefault();
+        Assert.True(
+            o.BoreDiameterMm > o.BarrelDiameterMm,
+            "the nominal bore must exceed the barrel, or the printed hole will not accept it");
+        Assert.True(
+            o.BoreDiameterMm < o.LipDiameterMm,
+            "the bore must be smaller than the lip, or there is no datum at all");
+    }
+
+    // ── the ways it could fail to hold the board ─────────────────────────────
+
+    [Fact]
+    public void ALandThickerThanTheBarrelIsFreeIsRefused()
+    {
+        // The lip would hit the plate before the barrel passed through, holding
+        // the board off its own datum — and it would export perfectly.
         ArgumentException oEx = Assert.Throws<ArgumentException>(
-            () => ORun(CameraMountParams.ODefault() with { GripDepthMm = 20.0f }));
-        Assert.Contains("no board between the", oEx.Message);
+            () => ORun(CameraMountParams.ODefault() with { BoreLandMm = 6.0f }));
+        Assert.Contains("free length", oEx.Message);
     }
 
     [Fact]
-    public void ABaseThatStopsShortOfTheLensTipIsRefused()
+    public void ABoreThatDoesNotClearTheBarrelIsRefused()
     {
-        // 1.25 mm of plate with 24 mm of lens hanging off it. A base that does
-        // not reach the tip is a fixture that falls over, and it exports
-        // perfectly.
         ArgumentException oEx = Assert.Throws<ArgumentException>(
-            () => ORun(CameraMountParams.ODefault() with { BaseFrontMm = 10.0f }));
-        Assert.Contains("falls over", oEx.Message);
+            () => ORun(CameraMountParams.ODefault() with { BoreDiameterMm = 14.50f }));
+        Assert.Contains("does not clear", oEx.Message);
     }
 
     [Fact]
-    public void ABaseThatDoesNotReachTheDisplayStackIsRefused()
+    public void ABoreTheLipWouldFallThroughIsRefused()
     {
         ArgumentException oEx = Assert.Throws<ArgumentException>(
-            () => ORun(CameraMountParams.ODefault() with { BaseBackMm = 1.0f }));
-        Assert.Contains("display stack", oEx.Message);
+            () => ORun(CameraMountParams.ODefault() with { BoreDiameterMm = 17.0f }));
+        Assert.Contains("no datum at all", oEx.Message);
     }
 
     [Fact]
-    public void AGripTallerThanTheBoardIsRefused()
+    public void APocketThatDoesNotClearTheLipIsRefused()
     {
         ArgumentException oEx = Assert.Throws<ArgumentException>(
-            () => ORun(CameraMountParams.ODefault() with { GripHeightMm = 100.0f }));
-        Assert.Contains("exceeds the", oEx.Message);
+            () => ORun(CameraMountParams.ODefault() with { LipPocketMm = 16.0f }));
+        Assert.Contains("does not clear", oEx.Message);
     }
 
     // ── the resolution floor ─────────────────────────────────────────────────
 
     [Fact]
-    public void TheFloorIsSetByTheSlotWhenTheSlotIsTheNarrowerFeature()
+    public void TheFloorIsSetByTheBoreBecauseTheBoreIsTheDatum()
     {
-        // Default: 2.40 mm wall vs a 1.65 mm slot. The slot is narrower, so it
-        // decides — this is the case the enclosure model does not have, and
-        // getting it backwards would allow a voxel size that closes the slot.
         CameraMountParams o = CameraMountParams.ODefault();
-        float fSlotMm = o.BoardThicknessMm + 2 * o.SlotClearanceMm;
-        Assert.True(fSlotMm < o.WallMm, "precondition: the slot is the narrower feature");
-        Assert.Equal(fSlotMm / 2f, CameraMountModel.FResolutionFloorMm(o), 4);
+        Assert.Equal(
+            Math.Min(o.BoreDiameterMm / 100f, o.BoreLandMm / 10f),
+            CameraMountModel.FResolutionFloorMm(o),
+            5);
     }
 
     [Fact]
-    public void AVoxelThatWouldCloseTheSlotIsRefused()
+    public void AVoxelThatWouldRoundTheBoreIsRefused()
     {
         CameraMountParams o = CameraMountParams.ODefault();
-        float fTooCoarse = CameraMountModel.FResolutionFloorMm(o) * 1.5f;
         ResolutionFloorException oEx = Assert.Throws<ResolutionFloorException>(
-            () => ORun(o, fTooCoarse));
-        Assert.Contains("slot the board does not fit", oEx.Message);
+            () => ORun(o, CameraMountModel.FResolutionFloorMm(o) * 2f));
+        Assert.Contains("rattles in or will not enter", oEx.Message);
     }
 
     // ── what it actually produced ────────────────────────────────────────────
+
+    [Fact]
+    public void TheAxisSitsWhereTheBoardsGeometryPutsIt()
+    {
+        // Base, plus the deliberate gap under the board's bottom edge, plus the
+        // measured 35 mm from that edge to the lens centre.
+        CameraMountParams o = CameraMountParams.ODefault();
+        Assert.Equal(
+            o.BaseThicknessMm + o.FloorDropMm + o.AxisToBoardBottomMm,
+            CameraMountModel.FAxisHeightMm(o),
+            4);
+    }
 
     [Fact]
     public void TheExportedFixtureIsTheSizeItWasAskedFor()
@@ -140,40 +158,26 @@ public sealed class CameraMountTests : IDisposable
     }
 
     [Fact]
-    public void BothSlotsAreActuallyCut()
+    public void TheBoreAndPocketWereActuallyCut()
     {
-        // A bounding box is identical whether or not the slots exist, so the
-        // check has to be on volume — and it has to be an absolute check, not a
-        // nearest-of-two.
-        //
-        // The first version of this test asked whether the measured volume was
-        // closer to "both slots cut" than to "neither cut". A mutation removing
-        // ONE of the two cuts passed it, because one slot missing lands exactly
-        // halfway between those two figures and the comparison becomes a coin
-        // flip. Asymmetric slots is the most plausible defect this model has:
-        // the two cuts are near-identical call sites differing by a sign.
-        //
-        // So: absolute deviation, with the bound set at half of one slot. That
-        // is derived from the failure being guarded against rather than picked
-        // — anything that loses a whole slot cannot hide inside it.
+        // A bounding box is identical whether or not the hole exists. The bound
+        // is half the bore's own volume, derived from the failure being guarded
+        // against rather than chosen — the same reasoning v0.1 used for its
+        // slots, which is the one part of v0.1 worth keeping.
         CameraMountParams o = CameraMountParams.ODefault();
         CameraMountRunResult oResult = ORun(o);
 
-        double fSlotX = o.SlotClearanceMm + o.GripDepthMm;
-        double fSlotY = o.BoardThicknessMm + 2 * o.SlotClearanceMm;
-        double fOneSlot = fSlotX * fSlotY * o.GripHeightMm;
-        double fBound = fOneSlot / 2.0;
-
-        double fAnalytic = FAnalyticVolumeCubicMm(o);
+        double fAnalytic = CameraMountModel.FAnalyticVolumeCubicMm(o);
         double fMeasured = oResult.Geometry.VolumeCubicMm;
         double fError = Math.Abs(fMeasured - fAnalytic);
+        double fBore = Math.PI * Math.Pow(o.BoreDiameterMm / 2.0, 2) * o.BoreLandMm;
 
         Assert.True(
-            fError < fBound,
-            $"analytic {fAnalytic:F1} mm^3, voxel {fMeasured:F1} mm^3, deviation {fError:F1} mm^3 "
-            + $"({fError / fAnalytic * 100:F2} %), bound {fBound:F1} mm^3 (half of one "
-            + $"{fOneSlot:F1} mm^3 slot). A deviation this large is not discretization — a slot "
-            + "is missing, misplaced, or the wrong size.");
+            fError < fBore / 2.0,
+            $"analytic {fAnalytic:F1} mm³, voxel {fMeasured:F1} mm³, deviation {fError:F1} mm³ "
+            + $"({fError / fAnalytic * 100:F2} %), bound {fBore / 2.0:F1} mm³ (half the "
+            + $"{fBore:F1} mm³ bore). A deviation this large is not discretization — the bore "
+            + "or the lip pocket is missing, misplaced, or the wrong size.");
     }
 
     [Fact]
@@ -186,44 +190,21 @@ public sealed class CameraMountTests : IDisposable
     }
 
     [Fact]
-    public void TheSidecarCarriesNoTimestamp()
+    public void TheSidecarSaysTheBoreIsProvisionalAndCarriesNoTimestamp()
     {
-        // Byte-identical reruns depend on it: the clock lives in the ledger.
+        // The bore has not been measured on a printed gauge yet. An artifact
+        // that did not say so would read as though it had been.
         CameraMountRunResult oResult = ORun();
         string strSidecar = File.ReadAllText(
             Path.Combine(
                 StrArtifacts,
                 oResult.ProvenanceSha256[..2],
                 oResult.ProvenanceSha256 + ".provenance.json"));
+
         Assert.DoesNotContain("created", strSidecar);
+        Assert.Contains("PROVISIONAL", strSidecar);
         Assert.Contains("measured 2026-09-25 with calipers", strSidecar);
-    }
-
-    /// <summary>
-    /// Closed form for the default geometry, re-derived here rather than
-    /// imported from the model so the two can disagree.
-    ///
-    /// Base slab, plus two uprights standing on it, less the two slots.
-    /// </summary>
-    internal static double FAnalyticVolumeCubicMm(CameraMountParams p)
-    {
-        double fOuterX = p.BoardWidthMm + 2 * p.SlotClearanceMm + 2 * p.WallMm;
-        double fOuterY = p.BaseFrontMm + p.BaseBackMm;
-        double fAboveBaseZ = p.SeatLiftMm + p.GripHeightMm;
-
-        double fBase = fOuterX * fOuterY * p.BaseThicknessMm;
-
-        // Two uprights: each spans WallMm + SlotClearanceMm + GripDepthMm in X,
-        // and the slot depth plus two walls in Y.
-        double fUprightX = p.WallMm + p.SlotClearanceMm + p.GripDepthMm;
-        double fUprightY = p.BoardThicknessMm + 2 * p.SlotClearanceMm + 2 * p.WallMm;
-        double fUprights = 2.0 * fUprightX * fUprightY * fAboveBaseZ;
-
-        // Each slot removes its own box from the upright it is cut into.
-        double fSlotX = p.SlotClearanceMm + p.GripDepthMm;
-        double fSlotY = p.BoardThicknessMm + 2 * p.SlotClearanceMm;
-        double fSlots = 2.0 * fSlotX * fSlotY * p.GripHeightMm;
-
-        return fBase + fUprights - fSlots;
+        // And the reason v0.1 failed, so the next fixture does not repeat it.
+        Assert.Contains("JST connectors", strSidecar);
     }
 }

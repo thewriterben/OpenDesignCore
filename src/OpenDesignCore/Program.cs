@@ -614,20 +614,20 @@ if (args is ["run-camera-mount", ..])
 
     CameraMountParams oMount = new()
     {
-        BoardWidthMm = FMount("board-width-mm", oMountDefault.BoardWidthMm),
-        BoardLengthMm = FMount("board-length-mm", oMountDefault.BoardLengthMm),
-        BoardThicknessMm = FMount("board-thickness-mm", oMountDefault.BoardThicknessMm),
-        LensProtrusionMm = FMount("lens-protrusion-mm", oMountDefault.LensProtrusionMm),
-        LensDiameterMm = FMount("lens-diameter-mm", oMountDefault.LensDiameterMm),
-        TotalDepthMm = FMount("total-depth-mm", oMountDefault.TotalDepthMm),
-        SlotClearanceMm = FMount("slot-clearance-mm", oMountDefault.SlotClearanceMm),
-        GripDepthMm = FMount("grip-depth-mm", oMountDefault.GripDepthMm),
-        WallMm = FMount("wall-mm", oMountDefault.WallMm),
+        BarrelDiameterMm = FMount("barrel-diameter-mm", oMountDefault.BarrelDiameterMm),
+        BoreDiameterMm = FMount("bore-diameter-mm", oMountDefault.BoreDiameterMm),
+        BarrelFreeLengthMm = FMount("barrel-free-length-mm", oMountDefault.BarrelFreeLengthMm),
+        LipDiameterMm = FMount("lip-diameter-mm", oMountDefault.LipDiameterMm),
+        AxisToBoardBottomMm = FMount("axis-to-board-bottom-mm", oMountDefault.AxisToBoardBottomMm),
+        FloorDropMm = FMount("floor-drop-mm", oMountDefault.FloorDropMm),
+        BoreLandMm = FMount("bore-land-mm", oMountDefault.BoreLandMm),
+        PlateThicknessMm = FMount("plate-thickness-mm", oMountDefault.PlateThicknessMm),
+        LipPocketMm = FMount("lip-pocket-mm", oMountDefault.LipPocketMm),
         BaseThicknessMm = FMount("base-thickness-mm", oMountDefault.BaseThicknessMm),
         BaseFrontMm = FMount("base-front-mm", oMountDefault.BaseFrontMm),
         BaseBackMm = FMount("base-back-mm", oMountDefault.BaseBackMm),
-        SeatLiftMm = FMount("seat-lift-mm", oMountDefault.SeatLiftMm),
-        GripHeightMm = FMount("grip-height-mm", oMountDefault.GripHeightMm),
+        WidthMm = FMount("width-mm", oMountDefault.WidthMm),
+        PlateHeadroomMm = FMount("plate-headroom-mm", oMountDefault.PlateHeadroomMm),
     };
 
     try
@@ -640,26 +640,29 @@ if (args is ["run-camera-mount", ..])
 
         Console.WriteLine($"run {oResult.RunId}: PASS  {CameraMountModel.StrModelId}");
         Console.WriteLine(
-            $"  board      {oMount.BoardWidthMm:F2} x {oMount.BoardLengthMm:F2} x "
-            + $"{oMount.BoardThicknessMm:F2} mm, lens {oMount.LensProtrusionMm:F2} mm proud "
-            + "(MEASURED, not from the datasheet)");
+            $"  fixture    {oResult.Geometry.BBoxXMm:F2} x {oResult.Geometry.BBoxYMm:F2} x "
+            + $"{oResult.Geometry.BBoxZMm:F2} mm (voxel {fMountVoxelMm:F4} mm)");
         Console.WriteLine(
-            $"  fixture    {oResult.Geometry.BBoxXMm:F3} x {oResult.Geometry.BBoxYMm:F3} x "
-            + $"{oResult.Geometry.BBoxZMm:F3} mm (voxel {fMountVoxelMm:F4} mm)");
+            $"  bore       {oMount.BoreDiameterMm:F2} mm nominal through "
+            + $"{oMount.BoreLandMm:F2} mm of land, for a {oMount.BarrelDiameterMm:F2} mm "
+            + $"barrel with {oMount.BarrelFreeLengthMm:F2} mm free");
         Console.WriteLine(
-            $"  slot       {oMount.BoardThicknessMm + 2 * oMount.SlotClearanceMm:F2} mm wide, "
-            + $"gripping {oMount.GripDepthMm:F2} mm per side over {oMount.GripHeightMm:F2} mm");
+            $"  lip seat   {oMount.LipPocketMm:F2} mm square pocket for a "
+            + $"{oMount.LipDiameterMm:F2} mm lip");
+        Console.WriteLine(
+            $"  axis       {CameraMountModel.FAxisHeightMm(oMount):F2} mm above the bench, "
+            + $"board edge resting {oMount.FloorDropMm:F2} mm above the base");
         Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
         Console.WriteLine($"  stl        {oResult.ArtifactPath}");
         Console.WriteLine();
-        Console.WriteLine("  The slot clearance is a guess until a part exists. Print it, try the");
-        Console.WriteLine("  board, and if it binds or rattles change --slot-clearance-mm rather");
-        Console.WriteLine("  than forcing the board into a fixture that does not fit it.");
+        Console.WriteLine("  THE BORE IS PROVISIONAL. It is the nominal to cut, not the barrel's");
+        Console.WriteLine("  14.95 mm -- a printed hole comes out undersize and by how much is a");
+        Console.WriteLine("  property of this printer. Print lens-fit-gauge/0.1, find the rung that");
+        Console.WriteLine("  slides on snugly, then re-run with --bore-diameter-mm set to it.");
         Console.WriteLine();
-        Console.WriteLine("  Acceptance is measurable. In Oh-Ben-Claw, with and without the mount:");
+        Console.WriteLine("  Acceptance, in Oh-Ben-Claw, with and without the fixture:");
         Console.WriteLine("    python scripts/vision/bench_floor.py knock-test 60 1.0 COM10 20");
-        Console.WriteLine("  Knock the desk mid-run and compare the `edge` peak. This fixture");
-        Console.WriteLine("  exists to make the detector's `nudge` class rare; that is the test.");
+        Console.WriteLine("  Knock the desk mid-run and compare the `edge` peak.");
         return 0;
     }
     catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException or ArgumentException)
