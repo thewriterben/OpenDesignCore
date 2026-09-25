@@ -46,6 +46,30 @@ V = (Ex + 2c + 2w)(Ey + 2c + 2w)(w + Ez + c) − (Ex + 2c)(Ey + 2c)(Ez + c)
 
 **If it starts failing:** the geometry composition or the volume measurement changed, not the discretisation. A box's exact volume does not drift.
 
+### `CameraMountVolumeTest` — voxel volume against exact geometry, at two resolutions
+
+**Source:** none needed; derived in the test from the model's own parameters. The mount is a base slab plus two uprights, each with a slot cut into it — five boxes, two cavities — so:
+
+```
+V = baseX·baseY·bt  +  2·(ux·uy·uz)  −  2·(sx·sy·gh)
+```
+
+Each slot lies wholly inside its upright, so it subtracts once with no intersection term.
+
+**Inputs:** the measured `CameraMountParams.ODefault()` — board 27.90 × 68.25 × 1.25 mm, wall 2.40, slot clearance 0.20, grip 3.00 × 40.00, base 4.00 thick reaching 32.00 front / 13.00 back, seat lift 3.00. Voxel 0.30 mm, and 0.15 mm for the convergence case.
+
+**Expected:** 8641.920 mm³, over a derived surface area of 6188.4 mm².
+
+**Tolerance and why:** `|V_voxel − V_exact| ≤ A · voxel_size`, the same one-voxel-band argument as `EnclosureVolumeTest`. The area term matters more here than there, and it is derived rather than estimated because **the slots contribute less area than they appear to**: a slot removes its opening from the upright's inboard face and its mouth from the upright's top, and adds its far wall, its floor and its two side walls — the first two pairs cancel term for term, so each slot's net contribution is exactly its two side walls. A closed form that missed that cancellation would produce a plausible number. It was checked twice, by hand and in code, and both give 6188.4 mm².
+
+**Measured:** 0.240 % (20.723 mm³ against a bound of 1856.520 mm³ — 1.12 % of the ceiling), Windows x64, 2026-09-25.
+
+**Convergence:** this case does what `EnclosureVolumeTest` does not — it runs at 0.30 and 0.15 mm and asserts the finer error is smaller. Measured: 20.723 mm³ → 2.166 mm³.
+
+**The ratio of 9.57 is not a convergence rate and must not be read as one.** The error changes *sign* between the two resolutions: the coarse field under-reports (8621.197 against 8641.920) and the fine field over-reports (8644.086). Two errors of opposite sign are not the same quantity, so their ratio measures a crossing rather than an order of accuracy. The assertion is therefore only on direction — the weakest defensible form of the rule on this page — and it stays that way until enough runs exist to say something about rate honestly. Tightening it to a rate on the strength of this one figure is exactly what rule 4 above forbids.
+
+**If it starts failing:** on the volume case, the geometry composition or the volume measurement changed — five boxes have an exact volume and it does not drift. On the convergence case, refining made the answer worse, which means the error is no longer dominated by surface discretisation and something resolution-dependent is wrong in the composition.
+
 **Gap against the convergence rule above:** this case pins one resolution and does not yet check that halving the voxel size moves the answer toward the reference at the expected rate. That is a real omission measured against the rules on this page, not a design choice. It is not written yet because an unrun convergence assertion fails identically for a genuine bug and for an error already down at float noise, and telling those apart needs the measured figures this directory has only just started producing.
 
 **Still missing from the list at the top of this page:** sphere and torus volume, thick-walled cylinder stress, cantilever tip deflection. The first two would characterise the kernel's discretisation rather than this repo's composition, which is arguably upstream's to defend — but they are what calibrates the expectation for every case that *is* ours, so the intent recorded here stands.

@@ -35,7 +35,7 @@ public sealed class OdcTools
     internal static string StrJson(object oValue) => JsonSerializer.Serialize(oValue, s_oJson);
 
     [McpServerTool(Name = "list_models")]
-    [Description("List the geometry models this engine can run, with their parameters and resolution-floor rule.")]
+    [Description("List the geometry models this engine has, with their parameters and resolution-floor rule. `run_tool` names the tool that runs each one, or is null for models this server cannot run — those are CLI-only and are listed anyway so their absence is visible rather than silent.")]
     public static string ListModels() => StrJson(new[]
     {
         new
@@ -44,6 +44,7 @@ public sealed class OdcTools
             summary = "Open-top tray around a part envelope from the cited parts registry.",
             parameters = new[] { "part_id", "voxel_mm", "clearance_mm", "wall_mm" },
             resolution_floor = "wall_mm / 2",
+            run_tool = (string?)"run_enclosure",
         },
         new
         {
@@ -51,6 +52,30 @@ public sealed class OdcTools
             summary = "Foam-insert-style cradle carved to fit an imported scan.",
             parameters = new[] { "stl_path", "units", "voxel_mm", "clearance_mm", "wall_mm", "split_fraction" },
             resolution_floor = "min(wall_mm / 2, clearance_mm)",
+            run_tool = (string?)"run_cradle",
+        },
+        // The two below have no run tool on this surface. They were missing from
+        // this list entirely — calibration-block since it shipped — which is the
+        // worse failure of the two available: a model absent from the catalogue
+        // cannot be asked about, while one present and marked unrunnable can.
+        // Same reasoning as `not_offered` in list_parts.
+        new
+        {
+            id = CalibrationBlockModel.StrModelId,
+            summary = "The block whose measurement closes the shrinkage-compensation loop. "
+                + "Deliberately unequal on every axis so a transposed reading is visible.",
+            parameters = new[] { "x_mm", "y_mm", "z_mm", "step_z_mm", "tall_depth_y_mm", "instrument_accuracy_mm", "voxel_mm" },
+            resolution_floor = "step_z_mm / 20",
+            run_tool = (string?)null,
+        },
+        new
+        {
+            id = CameraMountModel.StrModelId,
+            summary = "Bench fixture holding a camera board upright in two grooved slots. "
+                + "Board dimensions are measurements of one physical board, not a datasheet.",
+            parameters = new[] { "board_width_mm", "board_length_mm", "board_thickness_mm", "lens_protrusion_mm", "lens_diameter_mm", "total_depth_mm", "slot_clearance_mm", "grip_depth_mm", "grip_height_mm", "wall_mm", "base_thickness_mm", "base_front_mm", "base_back_mm", "seat_lift_mm", "voxel_mm" },
+            resolution_floor = "min(wall_mm / 2, (board_thickness_mm + 2 * slot_clearance_mm) / 2)",
+            run_tool = (string?)null,
         },
     });
 
