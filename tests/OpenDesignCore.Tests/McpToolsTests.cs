@@ -120,6 +120,7 @@ public sealed class McpToolsTests : IDisposable
         Assert.Equal("run_cradle", oRunTools["scan-cradle/0.1"]);
         Assert.Null(oRunTools["calibration-block/0.2"]);
         Assert.Null(oRunTools["camera-mount/0.1"]);
+        Assert.Null(oRunTools["lens-fit-gauge/0.1"]);
     }
 
     /// <summary>Point the tools at a fixture registry (ADR-0016) for the duration of a test.</summary>

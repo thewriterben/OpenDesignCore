@@ -70,6 +70,15 @@ public sealed class OdcTools
         },
         new
         {
+            id = LensFitGaugeModel.StrModelId,
+            summary = "A ladder of bores for finding what nominal diameter this printer "
+                + "turns into a hole a given cylinder actually fits. Measured, not computed.",
+            parameters = new[] { "bore_start_mm", "bore_step_mm", "bore_count", "bore_spacing_mm", "plate_thickness_mm", "edge_margin_mm", "tally_dot_mm", "voxel_mm" },
+            resolution_floor = "bore_step_mm / 4",
+            run_tool = (string?)null,
+        },
+        new
+        {
             id = CameraMountModel.StrModelId,
             summary = "Bench fixture holding a camera board upright in two grooved slots. "
                 + "Board dimensions are measurements of one physical board, not a datasheet.",

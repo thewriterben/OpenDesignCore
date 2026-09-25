@@ -506,6 +506,83 @@ if (args is ["run-calibration-block", ..])
     }
 }
 
+if (args is ["run-lens-gauge", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    LensFitGaugeParams oGaugeDefault = LensFitGaugeParams.ODefault();
+    float FGauge(string strKey, float fDefault)
+        => oOpts.TryGetValue(strKey, out string? s)
+            ? float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)
+            : fDefault;
+
+    LensFitGaugeParams oGauge = new()
+    {
+        BoreStartMm = FGauge("bore-start-mm", oGaugeDefault.BoreStartMm),
+        BoreStepMm = FGauge("bore-step-mm", oGaugeDefault.BoreStepMm),
+        BoreCount = oOpts.TryGetValue("bore-count", out string? strBc)
+            ? int.Parse(strBc, System.Globalization.CultureInfo.InvariantCulture)
+            : oGaugeDefault.BoreCount,
+        BoreSpacingMm = FGauge("bore-spacing-mm", oGaugeDefault.BoreSpacingMm),
+        EdgeMarginMm = FGauge("edge-margin-mm", oGaugeDefault.EdgeMarginMm),
+        PlateThicknessMm = FGauge("plate-thickness-mm", oGaugeDefault.PlateThicknessMm),
+        TallyDotMm = FGauge("tally-dot-mm", oGaugeDefault.TallyDotMm),
+    };
+
+    // Defaults to the model's own floor, which is a quarter of the bore step
+    // rather than a constant. Overridable, but going coarser is refused.
+    float fGaugeVoxel = oOpts.TryGetValue("voxel-mm", out string? strGv)
+        ? float.Parse(strGv, System.Globalization.CultureInfo.InvariantCulture)
+        : LensFitGaugeModel.FResolutionFloorMm(oGauge);
+
+    try
+    {
+        LensFitGaugeRunResult oResult = LensFitGaugeRun.Execute(
+            oGauge, fGaugeVoxel,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+
+        Console.WriteLine($"run {oResult.RunId}: PASS  {LensFitGaugeModel.StrModelId}");
+        Console.WriteLine(
+            $"  plate      {oResult.Geometry.BBoxXMm:F2} x {oResult.Geometry.BBoxYMm:F2} x "
+            + $"{oResult.Geometry.BBoxZMm:F2} mm (voxel {fGaugeVoxel:F4} mm)");
+        Console.WriteLine("  bores      dots  nominal");
+        for (int n = 0; n < oGauge.BoreCount; n++)
+        {
+            Console.WriteLine(
+                $"             {new string('.', n + 1),-5} "
+                + $"{LensFitGaugeModel.FBoreDiameterMm(oGauge, n):F2} mm");
+        }
+        Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine($"  stl        {oResult.ArtifactPath}");
+        Console.WriteLine();
+        Console.WriteLine("  Print flat, no supports. Push the lens barrel through each bore.");
+        Console.WriteLine("  The one that goes in snugly without force is the answer; count its");
+        Console.WriteLine("  DOTS, not its position. Then size the real bore from that nominal");
+        Console.WriteLine("  figure, not from the barrel's measured diameter -- the difference");
+        Console.WriteLine("  between the two is this printer's offset, which is the point.");
+        Console.WriteLine();
+        Console.WriteLine("  If the smallest bore is already loose, the ladder was aimed wrong:");
+        Console.WriteLine("  re-run with a lower --bore-start-mm.");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 if (args is ["run-camera-mount", ..])
 {
     Dictionary<string, string> oOpts = [];
