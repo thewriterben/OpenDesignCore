@@ -1,4 +1,6 @@
 using System.Numerics;
+using OpenDesignCore.Data;
+using OpenDesignCore.Fit;
 using PicoGK;
 
 namespace OpenDesignCore.Models;
@@ -45,11 +47,12 @@ public sealed record CameraMountParams
     /// How far below the PCB's bottom edge the base sits, mm.
     ///
     /// <para>
-    /// Not zero, and the reason matters: the bottom edge carries a micro-USB and
-    /// two JST connectors whose bodies reach the edge. A floor flush with the
-    /// laminate would bear on those instead. This gap lets them hang clear, at
-    /// the cost of bounding roll rather than eliminating it — the board can
-    /// rotate about the lens axis until a bottom corner touches down.
+    /// Not zero, and the reason matters: the bottom edge carries a USB-C
+    /// receptacle and two JST connectors. v0.2 chose 1.0 mm believing their
+    /// bodies stopped at the edge. The vendor STEP says they overhang it by
+    /// 1.60 and 1.65 mm (OpenPartsCore features, V1.0-V1.1), so at 1.0 they sit
+    /// inside the base — which the assembly check reports (ADR-0023) and which
+    /// is one of the two reasons v0.2 could not be used.
     /// </para>
     /// </summary>
     public required float FloorDropMm { get; init; }
@@ -78,6 +81,25 @@ public sealed record CameraMountParams
     /// <summary>Material above the lip pocket before the plate ends, mm.</summary>
     public required float PlateHeadroomMm { get; init; }
 
+    // ── Where the lens sits on the board: needed to place the board's
+    //    features for the assembly check (ADR-0023). ──
+
+    /// <summary>Lens tip to the PCB face it stands on, mm. Measured.</summary>
+    public required float LensTipFromPcbMm { get; init; }
+
+    /// <summary>
+    /// Lens axis to the laminate edge at the registry's low x, mm, in the
+    /// board frame of OpenPartsCore's features. Null until measured — and
+    /// while it is null the board cannot be placed, so the run refuses.
+    /// </summary>
+    public float? LensAxisFromLowXEdgeMm { get; init; }
+
+    /// <summary>
+    /// True if the lens stands on the laminate face at the registry's z = 0
+    /// (the face carrying FPC1), false if on the other. Null until confirmed.
+    /// </summary>
+    public bool? LensOnLowZFace { get; init; }
+
     /// <summary>
     /// The bench board as measured with calipers on 2026-09-25, plus fixture
     /// figures chosen for a 0.4 mm nozzle.
@@ -89,6 +111,11 @@ public sealed record CameraMountParams
         BarrelFreeLengthMm = 5.10f,
         LipDiameterMm = 16.65f,
         AxisToBoardBottomMm = 35.00f,
+        LensTipFromPcbMm = 24.00f,
+        // Not yet measured (asked 2026-09-26): where the axis sits across the
+        // board, and which face the lens stands on. Null, not a guess.
+        LensAxisFromLowXEdgeMm = null,
+        LensOnLowZFace = null,
 
         // ── Derived from a measurement, no longer a guess ──
         // The barrel is 14.95 and this is not, because a printed hole comes out
@@ -124,23 +151,33 @@ public sealed record CameraMountParams
 /// <b>Why v0.1 failed, recorded here because the fixture must not repeat it.</b>
 /// <para>
 /// v0.1 gripped the board's long edges in slots, 3 mm inboard, for 40 mm. The
-/// board's lower region carries a micro-USB and two JST connectors at the very
-/// bottom corners — exactly there — so it would not enter. The outline was
+/// board's lower region carries a USB-C receptacle and two JST connectors at the
+/// very bottom corners — exactly there — so it would not enter. The outline was
 /// measured and correct; the <i>surface</i> was never captured. Every geometric
 /// check passed, because all of them compared the fixture to its own
 /// specification and none could ask whether the specification matched the board.
 /// </para>
 ///
-/// <b>Clearance zones on this board. A fixture may not touch these.</b>
+/// <b>And why v0.2 — this version — cannot be used either.</b>
+/// <para>
+/// The USB-C port points straight down into the base, so no cable can be
+/// plugged in, and its body overhangs the board edge far enough to sit inside
+/// the base. The zone list below was written from photographs and called the
+/// bottom edge safe; the vendor STEP shows it is not. The list is kept as the
+/// record of what was believed. The authority is now the board's OpenPartsCore
+/// features, which the run checks the fixture against before export (ADR-0023).
+/// </para>
+///
+/// <b>Clearance zones on this board, as written for v0.2 from photographs.</b>
 /// <list type="bullet">
-/// <item>Bottom edge, both faces: micro-USB centre, JST left (GND/3V3/TX/RX),
-/// JST right (GND/3V3/SDA/SCL). Bodies reach the board edge.</item>
+/// <item>Bottom edge, both faces: USB-C centre, JST left (GND/3V3/TX/RX),
+/// JST right (GND/3V3/SDA/SCL). Bodies overhang the board edge by about 1.6 mm.</item>
 /// <item>Rear face, upper half: the display; rear face lower: speaker and power
 /// inductors.</item>
 /// <item>Front face around the camera: module body, FPC connector, a JST at the
 /// right edge, and a twisted pair exiting left.</item>
-/// <item><b>Safe:</b> the bottom edge itself — castellations are plated flush and
-/// do not stand proud — and the lens barrel, which is what this fixture uses.</item>
+/// <item><b>Believed safe:</b> the bottom edge itself — wrong, see above — and the
+/// lens barrel, which is what this fixture uses.</item>
 /// </list>
 ///
 /// <para>
@@ -189,6 +226,51 @@ public static class CameraMountModel
     /// <summary>Overall Z, mm.</summary>
     public static float FOuterZMm(CameraMountParams p) =>
         FAxisHeightMm(p) + p.LipPocketMm / 2f + p.PlateHeadroomMm;
+
+    /// <summary>The OpenPartsCore entry this fixture holds.</summary>
+    public const string StrPartId = "boards/lilygo-t-camera-plus-s3";
+
+    /// <summary>
+    /// Where the board sits in this fixture, in the frame of its OpenPartsCore
+    /// features (ADR-0023): the lens axis on the bore axis, the lip on the
+    /// pocket floor, the board's bottom edge up the fixture's +Z. The laminate
+    /// comes from the features' own <c>Board</c> item, so the placement rests
+    /// on the registry rather than on a board size typed here.
+    ///
+    /// <para>
+    /// Throws while the lens position is unmeasured. A placement guessed to
+    /// let the check run would make its answer a statement about the guess.
+    /// </para>
+    /// </summary>
+    public static PartPlacement OPlacement(CameraMountParams p, PartFeatures oFeatures)
+    {
+        if (p.LensAxisFromLowXEdgeMm is not float fLensX || p.LensOnLowZFace is not bool bLow)
+        {
+            throw new ArgumentException(
+                $"{StrModelId}: the board cannot be placed for the assembly check: "
+                + (p.LensAxisFromLowXEdgeMm is null ? "LensAxisFromLowXEdgeMm is not measured" : "")
+                + (p.LensAxisFromLowXEdgeMm is null && p.LensOnLowZFace is null ? " and " : "")
+                + (p.LensOnLowZFace is null ? "LensOnLowZFace is not confirmed" : "")
+                + ". Measure the lens axis's distance from the board's long edge and confirm which "
+                + "face it stands on; refusing to export an unchecked fixture.");
+        }
+        PartFeature oBoard = oFeatures.Items.FirstOrDefault(i => i.Kind == "board")
+            ?? throw new ArgumentException($"{oFeatures.PartId}: features have no board item to place by.");
+        (double[] aLo, double[] aHi) = oBoard.OBounds();
+
+        // The lip is the barrel's free length back from the tip, and the tip
+        // is LensTipFromPcbMm from the PCB face the lens stands on; the lip
+        // seats on the pocket floor at Y = BoreLand.
+        float fFaceY = p.BoreLandMm + (p.LensTipFromPcbMm - p.BarrelFreeLengthMm);
+        return PartPlacement.OLanding(
+            bLow ? Axis.NegX : Axis.PosX,
+            Axis.PosZ,
+            bLow ? Axis.PosY : Axis.NegY,
+            [aLo[0] + fLensX, aLo[1] + p.AxisToBoardBottomMm, bLow ? aLo[2] : aHi[2]],
+            new Vector3(0, fFaceY, FAxisHeightMm(p)),
+            $"{StrModelId}: lens axis on the bore axis, lip seated on the pocket floor, the board's "
+            + "USB edge down; lens position measured on the bench board");
+    }
 
     public static Voxels VoxBuild(Library oLib, CameraMountParams p, float fVoxelSizeMm)
     {

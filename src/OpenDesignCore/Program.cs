@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using OpenDesignCore.Data;
+using OpenDesignCore.Fit;
 using OpenDesignCore.Models;
 using OpenDesignCore.Rendering;
 using OpenDesignCore.Runs;
@@ -628,12 +629,45 @@ if (args is ["run-camera-mount", ..])
         BaseBackMm = FMount("base-back-mm", oMountDefault.BaseBackMm),
         WidthMm = FMount("width-mm", oMountDefault.WidthMm),
         PlateHeadroomMm = FMount("plate-headroom-mm", oMountDefault.PlateHeadroomMm),
+        LensTipFromPcbMm = FMount("lens-tip-from-pcb-mm", oMountDefault.LensTipFromPcbMm),
+        LensAxisFromLowXEdgeMm = oOpts.TryGetValue("lens-axis-from-low-x-edge-mm", out string? strLensX)
+            ? float.Parse(strLensX, System.Globalization.CultureInfo.InvariantCulture)
+            : oMountDefault.LensAxisFromLowXEdgeMm,
+        LensOnLowZFace = oOpts.TryGetValue("lens-on-low-z-face", out string? strLensFace)
+            ? bool.Parse(strLensFace)
+            : oMountDefault.LensOnLowZFace,
     };
+
+    // The assembly check (ADR-0023). Tolerance is an input like the voxel
+    // size: no default, because a default would be a constant nobody chose.
+    if (!oOpts.TryGetValue("tolerance-mm", out string? strMountTol)
+        || !float.TryParse(strMountTol, System.Globalization.CultureInfo.InvariantCulture,
+                           out float fMountTolMm))
+    {
+        Console.Error.WriteLine(
+            "--tolerance-mm is required: the assembly check treats surfaces closer than this as "
+            + "touching, it must span at least two voxels, and it takes no default (ADR-0023).");
+        return 2;
+    }
+    List<string> aFeatureErrors = [];
+    PartFeatures? oBoardFeatures = PartsRegistry.OLoadFeatures(
+        oOpts.GetValueOrDefault("parts", PartsRegistry.StrResolveDir(Environment.CurrentDirectory)),
+        CameraMountModel.StrPartId, aFeatureErrors);
+    if (oBoardFeatures is null)
+    {
+        foreach (string s in aFeatureErrors)
+            Console.Error.WriteLine(s);
+        return 1;
+    }
+    string[] aAcceptUnverified = oOpts.TryGetValue("accept-unverified-access", out string? strAccept)
+        ? strAccept.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : [];
 
     try
     {
         CameraMountRunResult oResult = CameraMountRun.Execute(
             oMount, fMountVoxelMm,
+            oBoardFeatures, fMountTolMm, aAcceptUnverified,
             oOpts.GetValueOrDefault("artifacts", "artifacts"),
             oOpts.GetValueOrDefault("ledger", "ledger.db"),
             StrGitCommit());
@@ -665,7 +699,8 @@ if (args is ["run-camera-mount", ..])
         Console.WriteLine("  Knock the desk mid-run and compare the `edge` peak.");
         return 0;
     }
-    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException or ArgumentException)
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException
+                                 or ArgumentException or AssemblyCheckFailedException)
     {
         Console.Error.WriteLine(e.Message);
         return 1;

@@ -1,4 +1,6 @@
 using System.Globalization;
+using OpenDesignCore.Data;
+using OpenDesignCore.Fit;
 using OpenDesignCore.Models;
 using OpenDesignCore.Provenance;
 using PicoGK;
@@ -25,19 +27,34 @@ public sealed record CameraMountRunResult
 /// </summary>
 public static class CameraMountRun
 {
+    /// <param name="oFeatures">The board's OpenPartsCore features; the fixture is checked against them before export (ADR-0023).</param>
+    /// <param name="fToleranceMm">Assembly-check tolerance, mm: surfaces closer than this count as touching. At least two voxels.</param>
+    /// <param name="aAcceptUnverifiedAccess">Feature ids whose unknown access the caller has reviewed and accepts. Recorded in the sidecar.</param>
     public static CameraMountRunResult Execute(
         CameraMountParams oParams,
         float fVoxelSizeMm,
+        PartFeatures oFeatures,
+        float fToleranceMm,
+        IReadOnlyCollection<string> aAcceptUnverifiedAccess,
         string strArtifactsDir,
         string strLedgerPath,
         string strCommit)
     {
         byte[] abStl;
         ArtifactGeometry oGeometry;
+        AssemblyCheckResult oFit;
         using (Library oLib = new(fVoxelSizeMm))
         {
             Voxels voxMount = CameraMountModel.VoxBuild(oLib, oParams, fVoxelSizeMm);
             CameraMountModel.Validate(voxMount, oParams, fVoxelSizeMm);
+
+            // Before anything is written: does the board fit? Both earlier
+            // versions of this fixture passed Validate and could not be used.
+            oFit = AssemblyCheck.Check(
+                oLib, voxMount, oFeatures, CameraMountModel.OPlacement(oParams, oFeatures),
+                fToleranceMm, fVoxelSizeMm, aAcceptUnverifiedAccess);
+            if (!oFit.BPassed)
+                throw new AssemblyCheckFailedException(oFit);
 
             Mesh mshMount = voxMount.mshAsMesh();
             if (mshMount.nTriangleCount() == 0)
@@ -92,7 +109,12 @@ public static class CameraMountRun
                 ["width_mm"] = StrF2(oParams.WidthMm),
                 ["plate_headroom_mm"] = StrF2(oParams.PlateHeadroomMm),
                 ["axis_height_mm"] = StrF2(CameraMountModel.FAxisHeightMm(oParams)),
+                ["lens_tip_from_pcb_mm"] = StrF2(oParams.LensTipFromPcbMm),
+                ["lens_axis_from_low_x_edge_mm"] = StrF2(oParams.LensAxisFromLowXEdgeMm!.Value),
+                ["lens_on_low_z_face"] = oParams.LensOnLowZFace!.Value,
+                ["assembly_tolerance_mm"] = StrF4(fToleranceMm),
             },
+            ["assembly_check"] = oFit.OProvenanceBlock(),
             ["versions"] = new Dictionary<string, object?>
             {
                 ["tool"] = EnclosureRun.StrToolVersion,
@@ -108,10 +130,11 @@ public static class CameraMountRun
                     + "loose, that is within the figure's stated uncertainty and wants a "
                     + "finer ladder, not a guess.",
                 "v0.1 of this model gripped the board's long edges and did not fit: the "
-                    + "bottom corners carry a micro-USB and two JST connectors exactly where "
+                    + "bottom corners carry a USB-C receptacle and two JST connectors exactly where "
                     + "the slots bit. The outline was right and the SURFACE was never "
-                    + "captured. This version touches only the lens barrel and the board's "
-                    + "bottom edge, where the castellations are plated flush.",
+                    + "captured. v0.2 then put the USB-C port into its base. Both are why this "
+                    + "run now checks the fixture against the board's OpenPartsCore features "
+                    + "before export; the result is under assembly_check (ADR-0023).",
                 "Retention is the bore's own friction, so a loose bore is not a cosmetic "
                     + "problem - it is the fixture failing to hold anything. If the board "
                     + "slides out under its own weight, the bore is too large; go down a rung.",

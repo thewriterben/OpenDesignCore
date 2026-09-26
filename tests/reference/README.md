@@ -72,4 +72,22 @@ Each slot lies wholly inside its upright, so it subtracts once with no intersect
 
 **Gap against the convergence rule above:** this case pins one resolution and does not yet check that halving the voxel size moves the answer toward the reference at the expected rate. That is a real omission measured against the rules on this page, not a design choice. It is not written yet because an unrun convergence assertion fails identically for a genuine bug and for an error already down at float noise, and telling those apart needs the measured figures this directory has only just started producing.
 
+### `RetroactiveFixtureCheckTest` — the assembly check rejects the two mounts that failed on the bench
+
+**Source:** the bench, not arithmetic. camera-mount/0.1 would not accept the board: its slots met the JST connectors (2026-09-25). camera-mount/0.2 held the board but the USB-C port could not be plugged in (2026-09-26). The part is OpenPartsCore's `features` for `boards/lilygo-t-camera-plus-s3` at V1.0-V1.1, read from LILYGO's STEP (model sha256 `9f8e6d6c...82ab9`). The answer, "rejected, for these features", was given by the physical parts before this check existed.
+
+**Inputs:** v0.1 rebuilt test-only from a56a7ac (`Historical/CameraMountV01.cs`); v0.2 from `CameraMountParams.ODefault()`. Voxel 0.15 mm, tolerance 0.30 mm (two voxels, the least the check accepts).
+
+**Expected:**
+- v0.1: contact at CN1 and CN2.
+- v0.2: contact at USB1; USB1's access listed as unverified, because no plug length is recorded.
+- Access at USB1 for a probe plug of `2 x tolerance + voxel`, the shortest depth the check can resolve. If that collides, every real plug does.
+- Positive control, v0.2 with the floor dropped to 4 mm: no contact violations.
+
+**Tolerance and why:** membership, not magnitude. The overlap volumes are reported and are voxel-dependent. The assertion is which features appear.
+
+**The unmeasured values:** which laminate face the lens stands on, and the lens axis's position across the board. Every case runs under both faces and at 0 and ±2 mm about the board centre. Measured 2026-09-26, the violation lists are identical across all of them. The volumes spread by up to 3.7 % (USB1 contact, 7.828 to 8.115 mm³).
+
+**If it starts failing:** the registry's features changed (the output names the revision, the model hash and the registry commit), or the check stopped seeing geometry. A check that no longer rejects these two would pass the next part that fails the same way.
+
 **Still missing from the list at the top of this page:** sphere and torus volume, thick-walled cylinder stress, cantilever tip deflection. The first two would characterise the kernel's discretisation rather than this repo's composition, which is arguably upstream's to defend — but they are what calibrates the expectation for every case that *is* ours, so the intent recorded here stands.

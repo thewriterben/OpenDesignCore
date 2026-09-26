@@ -82,8 +82,10 @@ public sealed class OdcTools
             id = CameraMountModel.StrModelId,
             summary = "Bench fixture locating a camera board on its lens barrel: the barrel "
                 + "passes through a bore and its lip seats in a pocket. Board figures are "
-                + "measurements of one physical board, not a datasheet.",
-            parameters = new[] { "barrel_diameter_mm", "bore_diameter_mm", "barrel_free_length_mm", "lip_diameter_mm", "axis_to_board_bottom_mm", "floor_drop_mm", "bore_land_mm", "plate_thickness_mm", "lip_pocket_mm", "base_thickness_mm", "base_front_mm", "base_back_mm", "width_mm", "plate_headroom_mm", "voxel_mm" },
+                + "measurements of one physical board, not a datasheet. Checked against the "
+                + "board's OpenPartsCore features before export (ADR-0023); v0.2 fails that "
+                + "check - its base blocks the USB-C port - so its run refuses.",
+            parameters = new[] { "barrel_diameter_mm", "bore_diameter_mm", "barrel_free_length_mm", "lip_diameter_mm", "axis_to_board_bottom_mm", "floor_drop_mm", "bore_land_mm", "plate_thickness_mm", "lip_pocket_mm", "base_thickness_mm", "base_front_mm", "base_back_mm", "width_mm", "plate_headroom_mm", "lens_tip_from_pcb_mm", "lens_axis_from_low_x_edge_mm", "lens_on_low_z_face", "tolerance_mm", "voxel_mm" },
             resolution_floor = "min(bore_diameter_mm / 100, bore_land_mm / 10)",
             run_tool = (string?)null,
         },
