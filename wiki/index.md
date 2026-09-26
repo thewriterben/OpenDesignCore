@@ -6,6 +6,7 @@
 - [[open-questions]] — remaining concrete decisions and the ingestion queue (2026-08-15)
 - [[platform-decisions]] — PD-1..PD-6: kernel, registry, repos, licences, legality, provenance (2026-08-15)
 - [[bingo-odc-provenance-contract]] — draft v0 contract, hash-verified design traceability (2026-08-15)
+- [[makerspace-operations]] — a shared-machine facility as a fabrication node with people in it; the book's operating model mapped onto propose-only, ledger and calibration contracts; **no peer owns certification**; procedure designs with variants by facility type (2026-09-25)
 
 ## Entities
 - [[opendesigncore]] — this repo; deterministic mech-engineering core on PicoGK
@@ -36,3 +37,4 @@
 - [[advancedstudio-research-report]] — K2 two-API problem; slicer-side compensation; fit tolerances
 - [[openscan-2026-09]] — OpenScan devices + OpenScan3 beta firmware; the cited "benchmark" behind the accuracy figures contains no measurement, so the figures are unsourced (2026-09-11)
 - [[ai-cad-mcp-landscape-2026-09]] — text-to-CAD, MCP-for-CAD, Noyron/nTop, Gaussian-splatting reconstruction; **orientation-grade** — mostly unfetched, states its own standing (2026-09-11)
+- [[creating-makerspaces-2025]] — Apress trade book by the Penn Bio-MakerSpace's operators; read in full; operating model for shared machines at concept level, no code or schema, no provenance; every figure in it barred from `data/` (2026-09-25)
