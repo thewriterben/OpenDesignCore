@@ -25,12 +25,19 @@ namespace OpenDesignCore.Tests.Reference;
 /// </para>
 ///
 /// <para>
-/// <b>What is not known, and how the test copes.</b> Two facts about where the
-/// board sits in v0.2 are not yet measured: which laminate face the lens
-/// stands on, and the lens axis's position across the board. Rather than
-/// assume them, every assertion here must hold under each combination of
-/// face and a ±2 mm offset about the board centre. A conclusion that depended
-/// on the unmeasured values would fail at least one case.
+/// <b>What is not known, and how the test copes.</b> The lens axis's position
+/// across the board is not yet measured, so every assertion must hold at the
+/// board centre and ±2 mm either side. For the historical mounts both lens
+/// faces are swept as well, as they were before the face was confirmed
+/// (2026-09-26); for v0.3 the confirmed face is used. A conclusion that
+/// depended on an unmeasured value would fail at least one case.
+/// </para>
+///
+/// <para>
+/// <b>And the positive control is v0.3</b>, the same plate and bore with the
+/// board hung USB edge up. The check must find nothing there, including for a
+/// plug longer than the fixture is tall. A check that cannot say yes proves
+/// nothing by saying no.
 /// </para>
 ///
 /// <para>
@@ -112,7 +119,8 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         Assert.Contains(r.Violations, v => v is { FeatureId: "CN2", Kind: "contact" });
     }
 
-    // ── v0.2: board hung on its lens barrel, bottom edge above the base ──────
+
+    // ── v0.2: board hung on its lens barrel, USB edge down ───────────────────
 
     public static TheoryData<bool, double> FacesAndOffsets
     {
@@ -126,20 +134,14 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         }
     }
 
-    /// <summary>
-    /// The run's own placement (CameraMountModel.OPlacement) under one
-    /// hypothesis for the two unmeasured values, so the reference case tests
-    /// the code that ships rather than a copy of it.
-    /// </summary>
-    private static PartPlacement OV02Placement(PartFeatures oF, CameraMountParams p, bool bLensOnLowFace, double fLensOffsetXMm)
+    /// <summary>The registry's features with one item's access depth replaced, for a probe.</summary>
+    private static PartFeatures OWithDepth(PartFeatures oF, string strId, double fDepthMm, string strWhy) => oF with
     {
-        (double[] aLo, double[] aHi) = OLaminate(oF);
-        return CameraMountModel.OPlacement(p with
+        Items = [.. oF.Items.Select(i => i.Id != strId ? i : i with
         {
-            LensAxisFromLowXEdgeMm = (float)((aHi[0] - aLo[0]) / 2 + fLensOffsetXMm),
-            LensOnLowZFace = bLensOnLowFace,
-        }, oF);
-    }
+            Access = i.Access! with { DepthMm = fDepthMm, Source = strWhy },
+        })],
+    };
 
     [Theory]
     [MemberData(nameof(FacesAndOffsets))]
@@ -148,12 +150,10 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null)
             return;
-        CameraMountParams p = CameraMountParams.ODefault();
-        PartPlacement oPlace = OV02Placement(oF, p, bLensOnLowFace, fOffsetMm);
-
         using Library oLib = new(Voxel);
-        Voxels vox = CameraMountModel.VoxBuild(oLib, p, Voxel);
-        AssemblyCheckResult r = AssemblyCheck.Check(oLib, vox, oF, oPlace, Tol, Voxel);
+        Voxels vox = CameraMountV02.VoxBuild(oLib, Voxel);
+        AssemblyCheckResult r = AssemblyCheck.Check(
+            oLib, vox, oF, CameraMountV02.OPlacement(oF, bLensOnLowFace, fOffsetMm), Tol, Voxel);
         Report($"v0.2, lens on {(bLensOnLowFace ? "z=0" : "z=top")} face, offset {fOffsetMm:+0.0;-0.0;0}", r);
 
         // The receptacle body overhangs the board edge by 1.6 mm and the base
@@ -178,43 +178,79 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         if (oF is null)
             return;
         float fShortest = 2 * Tol + Voxel;
-        PartFeatures oProbe = oF with
-        {
-            Items = [.. oF.Items.Select(i => i.Id != "USB1" ? i : i with
-            {
-                Access = i.Access! with { DepthMm = fShortest, Source = "probe: shortest resolvable depth" },
-            })],
-        };
-        CameraMountParams p = CameraMountParams.ODefault();
+        PartFeatures oProbe = OWithDepth(oF, "USB1", fShortest, "probe: shortest resolvable depth");
         using Library oLib = new(Voxel);
-        Voxels vox = CameraMountModel.VoxBuild(oLib, p, Voxel);
+        Voxels vox = CameraMountV02.VoxBuild(oLib, Voxel);
         AssemblyCheckResult r = AssemblyCheck.Check(
-            oLib, vox, oProbe, OV02Placement(oF, p, bLensOnLowFace, fOffsetMm), Tol, Voxel);
+            oLib, vox, oProbe, CameraMountV02.OPlacement(oF, bLensOnLowFace, fOffsetMm), Tol, Voxel);
         Report($"v0.2 probe {fShortest:F2} mm plug, lens on {(bLensOnLowFace ? "z=0" : "z=top")}, offset {fOffsetMm}", r);
 
         Assert.Contains(r.Violations, v => v is { FeatureId: "USB1", Kind: "access" });
     }
 
-    [Theory]
-    [MemberData(nameof(FacesAndOffsets))]
-    public void RaisingTheBoardClearOfTheBaseRemovesTheContactViolations(bool bLensOnLowFace, double fOffsetMm)
+    // ── v0.3: the same hold, USB edge up — the positive control ──────────────
+
+    public static TheoryData<double> Offsets => new() { -2.0, 0.0, 2.0 };
+
+    /// <summary>
+    /// The shipping model's placement (CameraMountModel.OPlacement), with the
+    /// one value still unmeasured — the axis's offset across the board — set
+    /// to a hypothesis. The lens face is confirmed (2026-09-26) and not swept.
+    /// </summary>
+    private static PartPlacement OV03Placement(PartFeatures oF, CameraMountParams p, double fLensOffsetXMm)
     {
-        // Positive control: the same fixture with the floor dropped 4 mm
-        // instead of 1. The overhanging bodies then hang 2.35 mm clear, and a
-        // check that still reported contact would be seeing something that is
-        // not there. Access stays unverified — raising the board does not make
-        // a plug length known.
+        (double[] aLo, double[] aHi) = OLaminate(oF);
+        return CameraMountModel.OPlacement(p with
+        {
+            LensAxisFromLowXEdgeMm = (float)((aHi[0] - aLo[0]) / 2 + fLensOffsetXMm),
+        }, oF);
+    }
+
+    [Theory]
+    [MemberData(nameof(Offsets))]
+    public void CameraMountV03TouchesNothingOnTheBoard(double fOffsetMm)
+    {
+        // The check must be able to say yes. If it found contact here, where
+        // the board hangs in open air on its barrel, it would be reporting
+        // geometry that is not there, and its rejections of v0.1 and v0.2
+        // would mean nothing.
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null)
             return;
-        CameraMountParams p = CameraMountParams.ODefault() with { FloorDropMm = 4.0f };
+        CameraMountParams p = CameraMountParams.ODefault();
         using Library oLib = new(Voxel);
         Voxels vox = CameraMountModel.VoxBuild(oLib, p, Voxel);
-        AssemblyCheckResult r = AssemblyCheck.Check(
-            oLib, vox, oF, OV02Placement(oF, p, bLensOnLowFace, fOffsetMm), Tol, Voxel);
-        Report($"v0.2 raised, lens on {(bLensOnLowFace ? "z=0" : "z=top")}, offset {fOffsetMm}", r);
+        AssemblyCheckResult r = AssemblyCheck.Check(oLib, vox, oF, OV03Placement(oF, p, fOffsetMm), Tol, Voxel);
+        Report($"v0.3, offset {fOffsetMm:+0.0;-0.0;0}", r);
 
-        Assert.DoesNotContain(r.Violations, v => v.Kind == "contact");
+        Assert.Empty(r.Violations);
+        Assert.Empty(r.TooSmallToCheck);
         Assert.NotEmpty(r.NotModelled);
+    }
+
+    [Theory]
+    [MemberData(nameof(Offsets))]
+    public void EveryPlugLengthReachesV03sPorts(double fOffsetMm)
+    {
+        // The reverse of the v0.2 probe. Give USB1, CN1 and CN2 an access
+        // depth taller than the whole fixture: if nothing blocks that, nothing
+        // blocks any real plug, whatever its length turns out to be when
+        // measured. The depth is the fixture's own height, not a cable figure.
+        PartFeatures? oF = OFeaturesOrNull();
+        if (oF is null)
+            return;
+        CameraMountParams p = CameraMountParams.ODefault();
+        double fTaller = CameraMountModel.FOuterZMm(p) + CameraMountModel.FOuterYMm(p);
+        PartFeatures oProbe = oF;
+        foreach (string strId in new[] { "USB1", "CN1", "CN2" })
+            oProbe = OWithDepth(oProbe, strId, fTaller, "probe: deeper than the fixture is tall");
+
+        using Library oLib = new(Voxel);
+        Voxels vox = CameraMountModel.VoxBuild(oLib, p, Voxel);
+        AssemblyCheckResult r = AssemblyCheck.Check(oLib, vox, oProbe, OV03Placement(oF, p, fOffsetMm), Tol, Voxel);
+        Report($"v0.3 probe {fTaller:F0} mm plugs, offset {fOffsetMm:+0.0;-0.0;0}", r);
+
+        Assert.Empty(r.Violations);
+        Assert.DoesNotContain(r.AccessUnverified, s => s.StartsWith("USB1:", StringComparison.Ordinal));
     }
 }

@@ -40,19 +40,21 @@ public sealed record CameraMountParams
     /// <summary>Diameter across the lip the barrel seats on, mm.</summary>
     public required float LipDiameterMm { get; init; }
 
-    /// <summary>Lens axis to the PCB's bottom edge, mm. Sets how high the axis sits.</summary>
-    public required float AxisToBoardBottomMm { get; init; }
+    /// <summary>Lens axis to the PCB edge carrying the USB-C and both JSTs, mm. Measured.</summary>
+    public required float AxisToUsbEdgeMm { get; init; }
+
+    /// <summary>PCB length, USB edge to the opposite edge, mm. Measured.</summary>
+    public required float BoardLengthMm { get; init; }
 
     /// <summary>
-    /// How far below the PCB's bottom edge the base sits, mm.
+    /// Gap between the base and the board's lower edge, mm.
     ///
     /// <para>
-    /// Not zero, and the reason matters: the bottom edge carries a USB-C
-    /// receptacle and two JST connectors. v0.2 chose 1.0 mm believing their
-    /// bodies stopped at the edge. The vendor STEP says they overhang it by
-    /// 1.60 and 1.65 mm (OpenPartsCore features, V1.0-V1.1), so at 1.0 they sit
-    /// inside the base — which the assembly check reports (ADR-0023) and which
-    /// is one of the two reasons v0.2 could not be used.
+    /// Since v0.3 the lower edge is the one <i>opposite</i> the USB-C: the board
+    /// hangs USB edge up, because v0.2 hung it USB edge down onto a base that
+    /// swallowed the port (ADR-0023). Nothing on the vendor model overhangs
+    /// the lower edge, so this gap only has to keep the board off the base and
+    /// bound its roll about the lens axis.
     /// </para>
     /// </summary>
     public required float FloorDropMm { get; init; }
@@ -96,7 +98,7 @@ public sealed record CameraMountParams
 
     /// <summary>
     /// True if the lens stands on the laminate face at the registry's z = 0
-    /// (the face carrying FPC1), false if on the other. Null until confirmed.
+    /// (the face carrying FPC1), false if on the other. Null means unconfirmed.
     /// </summary>
     public bool? LensOnLowZFace { get; init; }
 
@@ -110,12 +112,16 @@ public sealed record CameraMountParams
         BarrelDiameterMm = 14.95f,
         BarrelFreeLengthMm = 5.10f,
         LipDiameterMm = 16.65f,
-        AxisToBoardBottomMm = 35.00f,
+        AxisToUsbEdgeMm = 35.00f,
+        BoardLengthMm = 68.25f,
         LensTipFromPcbMm = 24.00f,
+        // Confirmed by the user 2026-09-26: the lens is on the face opposite
+        // the display, the face carrying the camera's FPC connector (FPC1 is
+        // at the registry's z = 0 face).
+        LensOnLowZFace = true,
         // Not yet measured (asked 2026-09-26): where the axis sits across the
-        // board, and which face the lens stands on. Null, not a guess.
+        // board. Null, not a guess, and the run refuses while it is.
         LensAxisFromLowXEdgeMm = null,
-        LensOnLowZFace = null,
 
         // ── Derived from a measurement, no longer a guess ──
         // The barrel is 14.95 and this is not, because a printed hole comes out
@@ -129,7 +135,7 @@ public sealed record CameraMountParams
         PlateThicknessMm = 6.00f,
         LipPocketMm = 19.00f,    // clears the 16.65 lip
         BaseThicknessMm = 4.00f,
-        FloorDropMm = 1.00f,
+        FloorDropMm = 2.00f,     // nothing overhangs the lower edge; this only keeps it off the base
         BaseFrontMm = 10.00f,
         BaseBackMm = 40.00f,     // the board and display hang ~23 mm behind the plate
         WidthMm = 34.00f,
@@ -144,8 +150,22 @@ public sealed record CameraMountParams
 /// <para>
 /// A vertical plate with a bore. The barrel passes through it and its 16.65 mm
 /// lip seats in a square pocket in the plate's rear face, so only
-/// <c>BoreLandMm</c> of material is in the barrel's way. The board hangs behind,
-/// touching nothing but its own bottom edge resting on the base.
+/// <c>BoreLandMm</c> of material is in the barrel's way. The board hangs behind
+/// it <b>USB edge up</b>, touching nothing but the barrel: the USB-C port and
+/// both JSTs face open air. The camera therefore sees the scene upside down,
+/// which the firmware corrects with the sensor's vertical-flip and mirror
+/// settings (together a 180° rotation).
+/// </para>
+///
+/// <b>v0.3.</b>
+/// <para>
+/// The same plate and bore as v0.2, with the board turned over. The assembly
+/// check (ADR-0023) finds no contact and no blocked access for any plug length
+/// and any lens offset within ±2 mm of centre
+/// (<c>tests/reference/RetroactiveFixtureCheckTest.cs</c>). The run still
+/// refuses to export until the lens axis's position across the board is
+/// measured, and until the connector access the registry does not know is
+/// either measured or explicitly accepted.
 /// </para>
 ///
 /// <b>Why v0.1 failed, recorded here because the fixture must not repeat it.</b>
@@ -158,7 +178,7 @@ public sealed record CameraMountParams
 /// specification and none could ask whether the specification matched the board.
 /// </para>
 ///
-/// <b>And why v0.2 — this version — cannot be used either.</b>
+/// <b>And why v0.2 could not be used either.</b>
 /// <para>
 /// The USB-C port points straight down into the base, so no cable can be
 /// plugged in, and its body overhangs the board edge far enough to sit inside
@@ -194,7 +214,7 @@ public sealed record CameraMountParams
 /// </summary>
 public static class CameraMountModel
 {
-    public const string StrModelId = "camera-mount/0.2";
+    public const string StrModelId = "camera-mount/0.3";
 
     /// <summary>
     /// Largest voxel size at which this model is meaningful.
@@ -212,9 +232,13 @@ public static class CameraMountModel
     public static float FResolutionFloorMm(CameraMountParams p) =>
         Math.Min(p.BoreDiameterMm / 100f, p.BoreLandMm / 10f);
 
-    /// <summary>Height of the lens axis above the base's underside, mm.</summary>
+    /// <summary>
+    /// Height of the lens axis above the base's underside, mm: base, gap, then
+    /// the axis's distance from the board's lower edge — the edge opposite the
+    /// USB-C, since the board hangs USB edge up.
+    /// </summary>
     public static float FAxisHeightMm(CameraMountParams p) =>
-        p.BaseThicknessMm + p.FloorDropMm + p.AxisToBoardBottomMm;
+        p.BaseThicknessMm + p.FloorDropMm + (p.BoardLengthMm - p.AxisToUsbEdgeMm);
 
     /// <summary>Overall X, mm.</summary>
     public static float FOuterXMm(CameraMountParams p) => p.WidthMm;
@@ -261,15 +285,19 @@ public static class CameraMountModel
         // The lip is the barrel's free length back from the tip, and the tip
         // is LensTipFromPcbMm from the PCB face the lens stands on; the lip
         // seats on the pocket floor at Y = BoreLand.
+        //
+        // USB edge UP: the board's +y (away from the USB edge) runs down the
+        // fixture's -Z. The lens looks down -Y, so the lens face's outward
+        // normal maps to -Y; x follows from keeping it a rotation.
         float fFaceY = p.BoreLandMm + (p.LensTipFromPcbMm - p.BarrelFreeLengthMm);
         return PartPlacement.OLanding(
-            bLow ? Axis.NegX : Axis.PosX,
-            Axis.PosZ,
+            bLow ? Axis.PosX : Axis.NegX,
+            Axis.NegZ,
             bLow ? Axis.PosY : Axis.NegY,
-            [aLo[0] + fLensX, aLo[1] + p.AxisToBoardBottomMm, bLow ? aLo[2] : aHi[2]],
+            [aLo[0] + fLensX, aLo[1] + p.AxisToUsbEdgeMm, bLow ? aLo[2] : aHi[2]],
             new Vector3(0, fFaceY, FAxisHeightMm(p)),
             $"{StrModelId}: lens axis on the bore axis, lip seated on the pocket floor, the board's "
-            + "USB edge down; lens position measured on the bench board");
+            + "USB edge up; lens face confirmed and axis offset measured on the bench board");
     }
 
     public static Voxels VoxBuild(Library oLib, CameraMountParams p, float fVoxelSizeMm)
@@ -352,6 +380,12 @@ public static class CameraMountModel
             throw new ArgumentException("Plate, base and width must be > 0.");
         if (p.FloorDropMm < 0 || p.PlateHeadroomMm <= 0)
             throw new ArgumentException("FloorDropMm must be >= 0 and PlateHeadroomMm > 0.");
+        if (p.AxisToUsbEdgeMm <= 0 || p.BoardLengthMm <= p.AxisToUsbEdgeMm)
+        {
+            throw new ArgumentException(
+                $"The lens axis must lie on the board: {p.AxisToUsbEdgeMm} mm from the USB edge of a "
+                + $"{p.BoardLengthMm} mm board.");
+        }
 
         // The barrel has to reach through the land, or it never seats.
         if (p.BoreLandMm >= p.BarrelFreeLengthMm)

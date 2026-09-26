@@ -119,7 +119,7 @@ public sealed class McpToolsTests : IDisposable
         Assert.Equal("run_enclosure", oRunTools["enclosure-shell/0.1"]);
         Assert.Equal("run_cradle", oRunTools["scan-cradle/0.1"]);
         Assert.Null(oRunTools["calibration-block/0.2"]);
-        Assert.Null(oRunTools["camera-mount/0.2"]);
+        Assert.Null(oRunTools[OpenDesignCore.Models.CameraMountModel.StrModelId]);
         Assert.Null(oRunTools["lens-fit-gauge/0.1"]);
     }
 

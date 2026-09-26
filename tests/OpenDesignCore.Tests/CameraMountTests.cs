@@ -19,9 +19,9 @@ namespace OpenDesignCore.Tests;
 /// passed every geometric check here, because those checks compared the
 /// fixture with its own specification. Since ADR-0023 the run also checks the
 /// fixture against the board's OpenPartsCore features and refuses to export
-/// on a collision — so v0.2's run now refuses, geometry is tested at the
-/// model, and the run is tested for its refusal. The run's byte-identity and
-/// sidecar tests return with the first version that passes.
+/// on a collision. v0.3 hangs the board USB edge up and passes; geometry is
+/// tested at the model, and the run is tested both for refusing (unmeasured
+/// offset, unknown access) and for exporting once the unknowns are accepted.
 /// </para>
 /// </summary>
 public sealed class CameraMountTests : IDisposable
@@ -60,16 +60,20 @@ public sealed class CameraMountTests : IDisposable
         Assert.Equal(14.95f, o.BarrelDiameterMm);
         Assert.Equal(5.10f, o.BarrelFreeLengthMm);
         Assert.Equal(16.65f, o.LipDiameterMm);
-        Assert.Equal(35.00f, o.AxisToBoardBottomMm);
+        Assert.Equal(35.00f, o.AxisToUsbEdgeMm);
+        Assert.Equal(68.25f, o.BoardLengthMm);
         Assert.Equal(24.00f, o.LensTipFromPcbMm);
     }
 
     [Fact]
-    public void TheUnmeasuredLensPositionIsNullNotAGuess()
+    public void TheUnmeasuredLensOffsetIsNullNotAGuess()
     {
+        // The face was confirmed on 2026-09-26; the offset across the board
+        // was not measured, and a default here would let the run export a
+        // fixture checked against a number nobody took.
         CameraMountParams o = CameraMountParams.ODefault();
         Assert.Null(o.LensAxisFromLowXEdgeMm);
-        Assert.Null(o.LensOnLowZFace);
+        Assert.True(o.LensOnLowZFace);
     }
 
     [Fact]
@@ -163,11 +167,12 @@ public sealed class CameraMountTests : IDisposable
     [Fact]
     public void TheAxisSitsWhereTheBoardsGeometryPutsIt()
     {
-        // Base, plus the deliberate gap under the board's bottom edge, plus the
-        // measured 35 mm from that edge to the lens centre.
+        // Base, plus the gap under the board's lower edge, plus the axis's
+        // distance from that edge. The board hangs USB edge up, so the lower
+        // edge is the far one: board length less the measured 35 mm.
         CameraMountParams o = CameraMountParams.ODefault();
         Assert.Equal(
-            o.BaseThicknessMm + o.FloorDropMm + o.AxisToBoardBottomMm,
+            o.BaseThicknessMm + o.FloorDropMm + (o.BoardLengthMm - o.AxisToUsbEdgeMm),
             CameraMountModel.FAxisHeightMm(o),
             4);
     }
@@ -242,31 +247,97 @@ public sealed class CameraMountTests : IDisposable
         Assert.False(Directory.Exists(StrArtifacts), "nothing may be written for an unchecked fixture");
     }
 
-    [Fact]
-    public void TheRunRefusesV02AndSaysTheUsbPortIsInTheBase()
+
+    // ── the run against the real board, under a stated hypothesis ───────────
+    //
+    // These need the sibling OpenPartsCore checkout and return early without
+    // it. The lens offset is the board's centre — a HYPOTHESIS, used only
+    // because the reference case shows v0.3 passes for any offset within
+    // ±2 mm. It is fine for testing the run's behaviour and not for printing.
+
+    private CameraMountParams? OHypothesis(out PartFeatures oF)
     {
-        // The real board, from the sibling OpenPartsCore checkout. The lens
-        // position here is a hypothesis (board centre, FPC1's face); the
-        // reference case shows the collision holds under every combination of
-        // face and a ±2 mm offset, which is why a hypothesis is enough to test
-        // the refusal and not enough to export anything.
+        oF = null!;
         string? strRegistry = TestRegistry.StrSiblingRegistryOrNull();
         if (strRegistry is null)
-            return;
+            return null;
         List<string> aErrors = [];
-        PartFeatures? oF = PartsRegistry.OLoadFeatures(strRegistry, CameraMountModel.StrPartId, aErrors);
-        Assert.True(oF is not null, string.Join("; ", aErrors));
-        (double[] aLo, double[] aHi) = oF!.Items.Single(i => i.Id == "Board").OBounds();
-        CameraMountParams p = CameraMountParams.ODefault() with
-        {
-            LensAxisFromLowXEdgeMm = (float)((aHi[0] - aLo[0]) / 2),
-            LensOnLowZFace = true,
-        };
+        PartFeatures? o = PartsRegistry.OLoadFeatures(strRegistry, CameraMountModel.StrPartId, aErrors);
+        Assert.True(o is not null, string.Join("; ", aErrors));
+        oF = o!;
+        (double[] aLo, double[] aHi) = oF.Items.Single(i => i.Id == "Board").OBounds();
+        return CameraMountParams.ODefault() with { LensAxisFromLowXEdgeMm = (float)((aHi[0] - aLo[0]) / 2) };
+    }
+
+    private static string[] AUnknownAccess(PartFeatures oF) =>
+        [.. oF.Items.Where(i => i.Access is { BKnown: false }).Select(i => i.Id)];
+
+    [Fact]
+    public void TheRunRefusesWhileConnectorAccessIsUnknownButNothingCollides()
+    {
+        CameraMountParams? p = OHypothesis(out PartFeatures oF);
+        if (p is null)
+            return;
 
         AssemblyCheckFailedException oEx = Assert.Throws<AssemblyCheckFailedException>(() => CameraMountRun.Execute(
             p, FVoxel(), oF, 2 * FVoxel(), [], StrArtifacts, StrLedger, "test-commit"));
-        Assert.Contains(oEx.Result.Violations, v => v is { FeatureId: "USB1", Kind: "contact" });
-        Assert.Contains("USB1", oEx.Message);
-        Assert.False(Directory.Exists(StrArtifacts), "a fixture that fails the check is not exported");
+        Assert.Empty(oEx.Result.Violations);
+        Assert.Equal(AUnknownAccess(oF).Length, oEx.Result.AccessUnverified.Count);
+        Assert.False(Directory.Exists(StrArtifacts), "unverified access is not a pass");
+    }
+
+    private CameraMountRunResult ORunAccepted(CameraMountParams p, PartFeatures oF)
+        => CameraMountRun.Execute(
+            p, FVoxel(), oF, 2 * FVoxel(), AUnknownAccess(oF), StrArtifacts, StrLedger, "test-commit");
+
+    [Fact]
+    public void WithUnknownAccessAcceptedTheRunExportsAndRecordsWhatWasAccepted()
+    {
+        CameraMountParams? p = OHypothesis(out PartFeatures oF);
+        if (p is null)
+            return;
+        CameraMountRunResult oResult = ORunAccepted(p, oF);
+        string strSidecar = File.ReadAllText(Path.Combine(
+            StrArtifacts, oResult.ProvenanceSha256[..2], oResult.ProvenanceSha256 + ".provenance.json"));
+
+        Assert.True(File.Exists(oResult.ArtifactPath));
+        Assert.Contains("\"assembly_check\"", strSidecar);
+        Assert.Contains("\"passed\":true", strSidecar);
+        Assert.Contains("\"access_accepted\"", strSidecar);
+        Assert.Contains("USB1: access depth unknown", strSidecar);
+        Assert.Contains("camera module and lens", strSidecar);
+        Assert.Contains(oF.ModelSha256, strSidecar);
+    }
+
+    [Fact]
+    public void TwoRunsOfTheSameInputsAreByteIdentical()
+    {
+        CameraMountParams? p = OHypothesis(out PartFeatures oF);
+        if (p is null)
+            return;
+        CameraMountRunResult oA = ORunAccepted(p, oF);
+        CameraMountRunResult oB = ORunAccepted(p, oF);
+        Assert.Equal(oA.ArtifactSha256, oB.ArtifactSha256);
+        Assert.Equal(oA.ProvenanceSha256, oB.ProvenanceSha256);
+    }
+
+    [Fact]
+    public void TheSidecarSaysWhereTheBoreCameFromAndCarriesNoTimestamp()
+    {
+        // The bore is measured, but only to half the gauge's ladder step. An
+        // artifact that stated the figure without its provenance would read as
+        // though it were exact.
+        CameraMountParams? p = OHypothesis(out PartFeatures oF);
+        if (p is null)
+            return;
+        CameraMountRunResult oResult = ORunAccepted(p, oF);
+        string strSidecar = File.ReadAllText(Path.Combine(
+            StrArtifacts, oResult.ProvenanceSha256[..2], oResult.ProvenanceSha256 + ".provenance.json"));
+
+        Assert.DoesNotContain("created", strSidecar);
+        Assert.Contains("measured 2026-09-25 from a printed lens-fit-gauge", strSidecar);
+        Assert.Contains("0.25 +/- 0.13 mm undersize", strSidecar);
+        Assert.Contains("measured 2026-09-25 with calipers", strSidecar);
+        Assert.Contains("JST connectors", strSidecar);
     }
 }

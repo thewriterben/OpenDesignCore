@@ -76,17 +76,18 @@ Each slot lies wholly inside its upright, so it subtracts once with no intersect
 
 **Source:** the bench, not arithmetic. camera-mount/0.1 would not accept the board: its slots met the JST connectors (2026-09-25). camera-mount/0.2 held the board but the USB-C port could not be plugged in (2026-09-26). The part is OpenPartsCore's `features` for `boards/lilygo-t-camera-plus-s3` at V1.0-V1.1, read from LILYGO's STEP (model sha256 `9f8e6d6c...82ab9`). The answer, "rejected, for these features", was given by the physical parts before this check existed.
 
-**Inputs:** v0.1 rebuilt test-only from a56a7ac (`Historical/CameraMountV01.cs`); v0.2 from `CameraMountParams.ODefault()`. Voxel 0.15 mm, tolerance 0.30 mm (two voxels, the least the check accepts).
+**Inputs:** v0.1 and v0.2, each frozen test-only as cut (`Historical/CameraMountV01.cs`, a56a7ac; `Historical/CameraMountV02.cs`, 28796e7). v0.3 from `CameraMountParams.ODefault()` through the shipping `CameraMountModel.OPlacement`. Voxel 0.15 mm, tolerance 0.30 mm (two voxels, the least the check accepts).
 
 **Expected:**
 - v0.1: contact at CN1 and CN2.
 - v0.2: contact at USB1; USB1's access listed as unverified, because no plug length is recorded.
-- Access at USB1 for a probe plug of `2 x tolerance + voxel`, the shortest depth the check can resolve. If that collides, every real plug does.
-- Positive control, v0.2 with the floor dropped to 4 mm: no contact violations.
+- v0.2: access at USB1 for a probe plug of `2 x tolerance + voxel`, the shortest depth the check can resolve. If that collides, every real plug does.
+- Positive control, v0.3 (board hung USB edge up): no violations of any kind, including with USB1, CN1 and CN2 given an access depth greater than the fixture's height plus depth. That depth is the fixture's own size, not a cable figure.
+- Freezing v0.2 was checked, not assumed: the historical copy reproduces the violation volumes the shipping model gave before v0.3 replaced it, to the thousandth of a mm³ (USB1 8.051, CN1 5.336, CN2 5.318 at centre, FPC1 face).
 
 **Tolerance and why:** membership, not magnitude. The overlap volumes are reported and are voxel-dependent. The assertion is which features appear.
 
-**The unmeasured values:** which laminate face the lens stands on, and the lens axis's position across the board. Every case runs under both faces and at 0 and ±2 mm about the board centre. Measured 2026-09-26, the violation lists are identical across all of them. The volumes spread by up to 3.7 % (USB1 contact, 7.828 to 8.115 mm³).
+**The unmeasured values:** the lens axis's position across the board, and, until 2026-09-26, which laminate face the lens stands on. Every case runs at 0 and ±2 mm about the board centre. The historical mounts are also swept over both faces; v0.3 uses the confirmed face. Measured 2026-09-26, the violation lists are identical across all of them. The volumes spread by up to 3.7 % (USB1 contact, 7.828 to 8.115 mm³).
 
 **If it starts failing:** the registry's features changed (the output names the revision, the model hash and the registry commit), or the check stopped seeing geometry. A check that no longer rejects these two would pass the next part that fails the same way.
 

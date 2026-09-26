@@ -87,7 +87,8 @@ public static class CameraMountRun
                 ["barrel_diameter_mm"] = StrF2(oParams.BarrelDiameterMm),
                 ["barrel_free_length_mm"] = StrF2(oParams.BarrelFreeLengthMm),
                 ["lip_diameter_mm"] = StrF2(oParams.LipDiameterMm),
-                ["axis_to_board_bottom_mm"] = StrF2(oParams.AxisToBoardBottomMm),
+                ["axis_to_usb_edge_mm"] = StrF2(oParams.AxisToUsbEdgeMm),
+                ["board_length_mm"] = StrF2(oParams.BoardLengthMm),
                 ["board_source"] =
                     "measured 2026-09-25 with calipers; LILYGO T-CameraPlus-S3 V1.1, "
                     + "node obc-esp32-s3-003",

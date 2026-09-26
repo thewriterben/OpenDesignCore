@@ -619,7 +619,8 @@ if (args is ["run-camera-mount", ..])
         BoreDiameterMm = FMount("bore-diameter-mm", oMountDefault.BoreDiameterMm),
         BarrelFreeLengthMm = FMount("barrel-free-length-mm", oMountDefault.BarrelFreeLengthMm),
         LipDiameterMm = FMount("lip-diameter-mm", oMountDefault.LipDiameterMm),
-        AxisToBoardBottomMm = FMount("axis-to-board-bottom-mm", oMountDefault.AxisToBoardBottomMm),
+        AxisToUsbEdgeMm = FMount("axis-to-usb-edge-mm", oMountDefault.AxisToUsbEdgeMm),
+        BoardLengthMm = FMount("board-length-mm", oMountDefault.BoardLengthMm),
         FloorDropMm = FMount("floor-drop-mm", oMountDefault.FloorDropMm),
         BoreLandMm = FMount("bore-land-mm", oMountDefault.BoreLandMm),
         PlateThicknessMm = FMount("plate-thickness-mm", oMountDefault.PlateThicknessMm),
@@ -685,8 +686,12 @@ if (args is ["run-camera-mount", ..])
             + $"{oMount.LipDiameterMm:F2} mm lip");
         Console.WriteLine(
             $"  axis       {CameraMountModel.FAxisHeightMm(oMount):F2} mm above the bench, "
-            + $"board edge resting {oMount.FloorDropMm:F2} mm above the base");
+            + $"board hung USB edge up, lower edge {oMount.FloorDropMm:F2} mm above the base");
         Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine();
+        Console.WriteLine("  Assembly check PASSED against the board's OpenPartsCore features.");
+        Console.WriteLine("  The camera now sees the scene upside down: set the sensor's vflip and");
+        Console.WriteLine("  hmirror together (a 180 degree rotation) in the firmware.");
         Console.WriteLine($"  stl        {oResult.ArtifactPath}");
         Console.WriteLine();
         Console.WriteLine("  The bore is 14.95 + 0.25, the offset MEASURED on 2026-09-25 from a");
