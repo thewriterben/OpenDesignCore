@@ -1,0 +1,10 @@
+{
+  "id": "materials/creality-hyper-pla",
+  "name": "Creality Hyper PLA (FDM, 1.75 mm)",
+  "description": "Source document: Creality TDS v1.0, private vault copy, terms checked by thewriterben 2026-11-06. A specific filament, not a generic class, so a calibration measurement can attach to the spool that produced it. The vendor TDS v1.0 (cited) gives density 1.24 g/cm3, Tg 62 C and a 190-230 C nozzle range, all held with page citations in OpenPartsCore material/creality-hyper-pla. It gives no shrinkage figure and no dimensional tolerance, so shrinkage_pct_range and fdm_tolerance_mm are absent here: absent means unmeasured, never zero. They are discharged only by a calibration run in the ledger (ADR-0006, ADR-0013). Loaded in the K2 Plus CFS as RFID 01001 on 2026-11-06.",
+  "source": {
+    "citation": "vault:sha256:aff153a93c869fc70737cf70062380de0e4155ca31914698569599e49dfdf3bb",
+    "url": "https://assets.spoolscout.com/tds-sds/creality/tds/creality-pla-hyper-tds-v1.0-2024-06.pdf",
+    "retrieved": "2026-11-06"
+  }
+}
