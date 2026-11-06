@@ -5,6 +5,7 @@
 - [[use-case-exploration]] — personas and seven use-case domains for the Computational Engineering system (2026-08-15)
 - [[open-questions]] — remaining concrete decisions and the ingestion queue (2026-08-15)
 - [[platform-decisions]] — PD-1..PD-6: kernel, registry, repos, licences, legality, provenance (2026-08-15)
+- [[device-pipeline]] — Phase 1 (print) + Phase 2 (PCB, firmware, deploy) hop table, records, what is new and what is a human step (2026-11-04)
 - [[bingo-odc-provenance-contract]] — draft v0 contract, hash-verified design traceability (2026-08-15)
 
 ## Entities

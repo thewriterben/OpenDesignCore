@@ -90,6 +90,18 @@ public sealed class OdcTools
             resolution_floor = "min(bore_diameter_mm / 100, bore_land_mm / 10)",
             run_tool = (string?)null,
         },
+        new
+        {
+            id = SensorNodeEnclosureModel.StrModelId,
+            summary = "Two-part screwed enclosure (base and lid) for the OpenCircuitCore sensor-node, "
+                + "cut around the board's OpenPartsCore features: M3 bosses with trapped nuts, header "
+                + "windows over J1/J2, a baffled and vented BME280 chamber, and thin plastic with no "
+                + "fasteners over the antenna zone. Checked against the features before export (ADR-0023). "
+                + "CLI only: run-sensor-node-enclosure.",
+            parameters = new[] { "voxel_mm", "tolerance_mm", "accept_unverified_access" },
+            resolution_floor = "min(thin wall, vent, baffle, edge clearance, seam gap, nut pocket clearance / 2) / 2",
+            run_tool = (string?)null,
+        },
     });
 
     [McpServerTool(Name = "list_parts")]

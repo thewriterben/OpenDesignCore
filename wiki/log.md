@@ -822,3 +822,6 @@ Both would have failed reconstruction in a way that looks like a scale problem.
 **Not done:** dense reconstruction and meshing, which is what an end-to-end ADR-0020 round
 trip needs. The camera-derived scale is the ground truth that round trip must reproduce, and
 ODC's v0 import wants a watertight mesh while Poisson output is not automatically watertight.
+
+## [2026-11-04] concept | Device pipeline (Phase 1 + 2) written
+Research pass (KiCad 10.0.5 IPC API scope, FreeRouting 2.5.0 native CLI, ESP-IDF 6.0, esp-hal 1.0, OrcaSlicer 2.4.2, PicoGK 2.3.0, OFD dataset 2026.11.04). New [[device-pipeline]] concept page: spec → netlist → placed/routed PCB → STEP → enclosure → material-pinned print project; firmware pin map derived from the netlist; deploy stays a human step. Implemented the same day: OBCSlicer `obcslice material pin` (`obc-material/0.1` from OFD, manifest-verified) and obc3mf temperature check; OpenCircuitCore `boards/sensor-node`, `route_board.py`, `make_firmware.py`; OpenPartsCore strapping pins on `electronic/esp32-s3-wroom-1`.

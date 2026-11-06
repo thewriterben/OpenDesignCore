@@ -712,6 +712,75 @@ if (args is ["run-camera-mount", ..])
     }
 }
 
+if (args is ["run-sensor-node-enclosure", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+    if (!oOpts.TryGetValue("voxel-mm", out string? strEncVoxel)
+        || !float.TryParse(strEncVoxel, System.Globalization.CultureInfo.InvariantCulture, out float fEncVoxelMm))
+    {
+        Console.Error.WriteLine(
+            "--voxel-mm is required and takes no default: voxel size is an explicit "
+            + "input to every model run (ADR-0003).");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("tolerance-mm", out string? strEncTol)
+        || !float.TryParse(strEncTol, System.Globalization.CultureInfo.InvariantCulture, out float fEncTolMm))
+    {
+        Console.Error.WriteLine(
+            "--tolerance-mm is required: the assembly check treats surfaces closer than this as "
+            + "touching, it must span at least two voxels, and it takes no default (ADR-0023).");
+        return 2;
+    }
+    List<string> aEncErrors = [];
+    PartFeatures? oNodeFeatures = PartsRegistry.OLoadFeatures(
+        oOpts.GetValueOrDefault("parts", PartsRegistry.StrResolveDir(Environment.CurrentDirectory)),
+        SensorNodeEnclosureModel.StrPartId, aEncErrors);
+    if (oNodeFeatures is null)
+    {
+        foreach (string s in aEncErrors)
+            Console.Error.WriteLine(s);
+        return 1;
+    }
+    string[] aEncAccept = oOpts.TryGetValue("accept-unverified-access", out string? strEncAccept)
+        ? strEncAccept.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : [];
+
+    try
+    {
+        SensorNodeEnclosureRunResult oEnc = SensorNodeEnclosureRun.Execute(
+            SensorNodeEnclosureParams.ODefault(), fEncVoxelMm, oNodeFeatures, fEncTolMm, aEncAccept,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+        Console.WriteLine($"PASS  {SensorNodeEnclosureModel.StrModelId} (voxel {fEncVoxelMm:F4} mm)");
+        foreach (SensorNodeEnclosurePartResult o in new[] { oEnc.Base, oEnc.Lid })
+        {
+            Console.WriteLine(
+                $"  run {o.RunId} {o.Part,-4}  {o.Geometry.BBoxXMm:F2} x {o.Geometry.BBoxYMm:F2} x "
+                + $"{o.Geometry.BBoxZMm:F2} mm  sha256:{o.ArtifactSha256}");
+            Console.WriteLine($"            {o.ArtifactPath}");
+        }
+        Console.WriteLine(
+            $"  Assembly check PASSED; access accepted unverified: {string.Join(", ", oEnc.Fit.AccessAccepted.Select(s => s.Split(':')[0]))}");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException
+                                 or ArgumentException or AssemblyCheckFailedException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 if (args is ["compensate", ..])
 {
     Dictionary<string, string> oOpts = [];
