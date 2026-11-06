@@ -11,12 +11,12 @@ dotnet run --project src/OpenDesignCore -c Release -- run-sensor-node-enclosure 
 
 | Part | Ledger run | Size (mm) | STL sha256 | Sidecar sha256 |
 |---|---|---|---|---|
-| Base, floor down | 96 | 49.00 x 56.20 x 10.00 | `f21d5a03…fafe73d` | `27b6547e…99501d1e337` |
-| Lid, top down | 97 | 49.00 x 56.20 x 6.40 | `2e7f0d45…f048c60fc1` | `d8249452…b693b9f5` |
+| Base, floor down | 99 | 49.00 x 56.20 x 10.00 | `f21d5a03…fafe73d` | `5bd73ed2…f0b24373` |
+| Lid, top down | 100 | 49.00 x 56.20 x 6.40 | `2e7f0d45…f048c60fc1` | `70ed923b…2c0894bb` |
 
-Runs 90/91 produced the same STLs with an earlier sidecar wording; 96/97 supersede them. Each sidecar records its sibling's STL hash and the full assembly-check block.
+Runs 90/91 and 96/97 produced the same STLs; 99/100 supersede them. Each sidecar records its sibling's STL hash and the full assembly-check block.
 
-The run's `commit` field is the OpenDesignCore HEAD at run time. The generator code was not committed yet at that point, so rerun after committing for a clean pin. The output is deterministic, so the hashes should not change.
+Runs 99/100 were made from commit `e992a5c` with no uncommitted changes in the working tree, and their sidecars record that commit. Runs 96/97 recorded a HEAD from before the generator was committed. The STL hashes are identical across all three pairs, so the slices below were made from runs 96/97 and still match runs 99/100.
 
 The run used 0.1 mm voxels, which is the resolution floor. Anything coarser is refused.
 
