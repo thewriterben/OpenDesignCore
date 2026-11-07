@@ -90,12 +90,41 @@ public static class DataStore
         string Rel(string strFile) => Path.Combine(strNamespace, Path.GetFileName(strFile));
     }
 
+    // Rejection patterns and labels copied from OpenKnowledgeCore okc/validate.py (REJECTIONS),
+    // per its ADR-0001 "SiYuan is a projection, never a source". Keep in step with that file.
+    private static readonly (string strLabel, System.Text.RegularExpressions.Regex oPattern)[] s_aSiyuanRejections =
+    [
+        ("siyuan URL", new(@"siyuan://", System.Text.RegularExpressions.RegexOptions.IgnoreCase)),
+        ("SiYuan block id", new(@"\b\d{14}-[a-z0-9]{7}\b")),
+        ("SiYuan kernel address", new(@"(localhost|127\.0\.0\.1|\[::1\]):6806\b")),
+        ("SiYuan .sy file path", new(@"(^|[\\/ ])[^\s\\/]+\.sy(\b|$)")),
+    ];
+
+    /// <summary>The label of the first SiYuan pattern the text matches, or null when it references none.</summary>
+    internal static string? StrSiyuanReference(string? strText)
+    {
+        if (string.IsNullOrEmpty(strText)) return null;
+        foreach ((string strLabel, System.Text.RegularExpressions.Regex oPattern) in s_aSiyuanRejections)
+        {
+            if (oPattern.IsMatch(strText)) return strLabel;
+        }
+        return null;
+    }
+
     private static void ValidateCommon(string strId, string strNamespace, SourceCitation oSource, List<string> aErrors)
     {
         if (!strId.StartsWith(strNamespace + "/", StringComparison.Ordinal))
             aErrors.Add($"{strId}: id must start with '{strNamespace}/'");
         if (string.IsNullOrWhiteSpace(oSource.Citation))
             aErrors.Add($"{strId}: empty citation — uncited values are invalid (ADR-0006)");
+        foreach (string? strText in new[] { oSource.Citation, oSource.Url })
+        {
+            if (StrSiyuanReference(strText) is { } strLabel)
+            {
+                aErrors.Add($"{strId}: citation references SiYuan ({strLabel}): a projection is never a source (OpenKnowledgeCore ADR-0001)");
+                break;
+            }
+        }
     }
 
     private static void ValidateMaterial(MaterialEntry oMaterial, List<string> aErrors)

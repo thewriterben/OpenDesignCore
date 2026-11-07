@@ -169,6 +169,10 @@ public static class PartsRegistry
                 $"{strId}: envelope_mm has no citation of its own — the entry-level source does not cover it " +
                 "(OpenPartsCore ADR-0006; uncited values are invalid, ADR-0006)");
         }
+        else if ((DataStore.StrSiyuanReference(strCitation) ?? DataStore.StrSiyuanReference(strUrl)) is { } strSiyuan)
+        {
+            aErrors.Add($"{strId}: envelope_mm citation references SiYuan ({strSiyuan}): a projection is never a source (OpenKnowledgeCore ADR-0001)");
+        }
 
         if (aErrors.Count > nBefore)
             return null;

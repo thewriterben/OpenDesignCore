@@ -192,6 +192,39 @@ public sealed class DataStoreTests : IDisposable
         Assert.Throws<DataValidationException>(() => DataStore.LoadAll(strData, strRegistry));
     }
 
+    [Theory]
+    [InlineData("siyuan://blocks/20240101120000-abc1234", "siyuan URL")]
+    [InlineData("see block 20240101120000-abc1234", "SiYuan block id")]
+    public void MaterialCitingSiYuan_IsRejected(string strCitation, string strLabel)
+    {
+        string strDir = StrWriteEntry("materials", "siyuan.json", $$"""
+            {
+              "id": "materials/siyuan",
+              "name": "SiYuan cited",
+              "source": { "citation": "{{strCitation}}" }
+            }
+            """);
+
+        DataValidationException oEx =
+            Assert.Throws<DataValidationException>(() => DataStore.LoadAll(strDir, TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore"))));
+        Assert.Contains(oEx.Errors, s => s.Contains("materials/siyuan") && s.Contains($"references SiYuan ({strLabel})"));
+    }
+
+    [Fact]
+    public void MaterialWithVaultCitation_Loads()
+    {
+        string strDir = StrWriteEntry("materials", "vaulted.json", $$"""
+            {
+              "id": "materials/vaulted",
+              "name": "Vault cited",
+              "source": { "citation": "vault:sha256:{{new string('a', 64)}}" }
+            }
+            """);
+
+        DataSet oData = DataStore.LoadAll(strDir, TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore")));
+        Assert.Contains(oData.Materials, o => o.Id == "materials/vaulted");
+    }
+
     [Fact]
     public void MalformedShrinkageRange_IsRejected()
     {
