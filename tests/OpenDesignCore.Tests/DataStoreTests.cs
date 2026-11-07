@@ -63,7 +63,9 @@ public sealed class DataStoreTests : IDisposable
         Assert.Equal(25.5, oPart.EnvelopeMm.Y);
         Assert.Equal(3.1, oPart.EnvelopeMm.Z);
         Assert.Equal(0.2, oPart.ToleranceMm);
-        Assert.Contains("Table 1-1", oPart.Source.Citation);
+        // Since OpenPartsCore PR #17 the envelope cites the archived datasheet by hash, at
+        // Section 10.1 Module Dimensions (v1.8, page 42); the prose moved to source.note there.
+        Assert.Equal("vault:sha256:27d71971da07c280c6068d08c74720d1a25b8f20cf8494dc1765bdd28d40d435#page=42", oPart.Source.Citation);
 
         // The generic multi-bridge board can never carry an envelope, and is
         // listed as not offered rather than dropped.
