@@ -221,12 +221,19 @@ public static class CompensationRun
     /// beyond it proposes. Here the line falls one step earlier, because a
     /// material profile shapes every future print and a human approving a
     /// number in a dashboard has no way to see the machine underneath it.
+    ///
+    /// <paramref name="fPrintedFlowRatio"/> is the flow the measured part was
+    /// printed at (see <see cref="GcodeFlowRatio"/>). When given it travels as
+    /// <c>printed_flow_ratio</c>, and the studio refuses the proposal if it is
+    /// not the profile's calibrated flow (AdvancedStudio ADR-0004). When
+    /// absent the approver sees "printed flow not declared".
     /// </summary>
     public static string StrPropose(
         CompensationRunResult oResult,
         string strStudioUrl,
         string strProfileKey,
-        MachineCalibration oMachine)
+        MachineCalibration oMachine,
+        double? fPrintedFlowRatio = null)
     {
         if (!oResult.Proposal.Actionable)
         {
@@ -274,32 +281,38 @@ public static class CompensationRun
         }
 
         using HttpClient oHttp = StudioClient.OCreate();
+        Dictionary<string, object?> oParams = new()
+        {
+            ["key"] = strProfileKey,
+            ["nominal_xy_mm"] = oResult.Proposal.NominalXyMm,
+            ["measured_xy_mm"] = oResult.Proposal.MeasuredXyMm,
+            // The material rides in the origin string as well as being
+            // gated on, so the stored value is self-describing even to a
+            // reader who never fetches the comparison record.
+            // The machine rides along too. A reader six months from now
+            // asking "was the printer any good when this was measured?"
+            // should not have to take it on trust.
+            // The spool rides along when one was named. A profile keyed
+            // "pla" that was measured on one specific spool should say so:
+            // the next person to wonder whether the number transfers to a
+            // different brand can see that it might not. The prefix is
+            // unchanged — AdvancedStudio matches on `odc-comparison:<sha>`.
+            ["origin"] = $"odc-comparison:{oResult.ComparisonSha256} ({oResult.Material}"
+                         + (oResult.FilamentRef == "undeclared"
+                             ? ", spool undeclared"
+                             : $", spool {oResult.FilamentRef}")
+                         + $", machine {oMachine.MachineId} worst axis residual "
+                         + $"{oMachine.WorstResidualPct?.ToString("F3", CultureInfo.InvariantCulture)} %)",
+        };
+        // A number, as the studio parses it. Omitted rather than sent as null
+        // when unknown, so the studio's "not declared" path is what it sees.
+        if (fPrintedFlowRatio is double fFlow)
+            oParams["printed_flow_ratio"] = fFlow;
+
         Dictionary<string, object?> oBody = new()
         {
             ["action"] = "profile_update",
-            ["params"] = new Dictionary<string, object?>
-            {
-                ["key"] = strProfileKey,
-                ["nominal_xy_mm"] = oResult.Proposal.NominalXyMm,
-                ["measured_xy_mm"] = oResult.Proposal.MeasuredXyMm,
-                // The material rides in the origin string as well as being
-                // gated on, so the stored value is self-describing even to a
-                // reader who never fetches the comparison record.
-                // The machine rides along too. A reader six months from now
-                // asking "was the printer any good when this was measured?"
-                // should not have to take it on trust.
-                // The spool rides along when one was named. A profile keyed
-                // "pla" that was measured on one specific spool should say so:
-                // the next person to wonder whether the number transfers to a
-                // different brand can see that it might not. The prefix is
-                // unchanged — AdvancedStudio matches on `odc-comparison:<sha>`.
-                ["origin"] = $"odc-comparison:{oResult.ComparisonSha256} ({oResult.Material}"
-                             + (oResult.FilamentRef == "undeclared"
-                                 ? ", spool undeclared"
-                                 : $", spool {oResult.FilamentRef}")
-                             + $", machine {oMachine.MachineId} worst axis residual "
-                             + $"{oMachine.WorstResidualPct?.ToString("F3", CultureInfo.InvariantCulture)} %)",
-            },
+            ["params"] = oParams,
         };
 
         HttpResponseMessage oResp;

@@ -36,7 +36,7 @@ public sealed class McpToolsTests : IDisposable
     }
 
     [Fact]
-    public void ListModels_DeclaresBothModelsAndTheirFloors()
+    public void ListModels_DeclaresEveryModelAndItsFloor()
     {
         using JsonDocument oDoc = JsonDocument.Parse(OdcTools.ListModels());
         List<string> aIds = [.. oDoc.RootElement.EnumerateArray().Select(o => o.GetProperty("id").GetString()!)];
@@ -45,6 +45,82 @@ public sealed class McpToolsTests : IDisposable
         Assert.Contains("scan-cradle/0.1", aIds);
         Assert.All(oDoc.RootElement.EnumerateArray(),
             o => Assert.False(string.IsNullOrWhiteSpace(o.GetProperty("resolution_floor").GetString())));
+    }
+
+    /// <summary>
+    /// Every model the engine declares must appear in the catalogue.
+    ///
+    /// <para>
+    /// This test replaces the hole that let `calibration-block/0.2` sit missing
+    /// from `list_models` from the day it shipped until 2026-09-25. The check
+    /// above asserts `Contains` on ids written out by hand, so it cannot fail
+    /// when a model is added — it was named `...DeclaresBothModels` and stayed
+    /// true while the engine grew to four. A catalogue that nothing compares
+    /// against the thing it catalogues goes stale silently, which is this
+    /// repo's recurring failure and the reason
+    /// `tests/firmware_identity_roster.rs` exists in the sibling project.
+    /// </para>
+    ///
+    /// <para>
+    /// Models are found by reflection on the `StrModelId` const every model
+    /// declares, so adding a model to the engine and not to the catalogue is a
+    /// red test rather than a quiet omission. A model that genuinely cannot be
+    /// run here is still listed, with a null `run_tool` saying so.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void ListModels_OmitsNoModelTheEngineDeclares()
+    {
+        // Scoped to the Models namespace on purpose. `StrModelId` is spelled the
+        // same in two unrelated roles here: a geometry model's id, and a record
+        // schema's id in Verification (`blender-crosscheck/0.1`,
+        // `dimensional-compare/0.1`, `compensation-proposal/0.1`,
+        // `blender-thumbnail/0.1`). The first version of this test found all
+        // eight and demanded the catalogue list records it has no business
+        // listing. The namespace is the real boundary; the shared name is a
+        // GLOSSARY problem for another change.
+        List<string> aDeclared = [.. typeof(OpenDesignCore.Models.EnclosureShellModel).Assembly
+            .GetTypes()
+            .Where(t => t.Namespace == "OpenDesignCore.Models")
+            .Select(t => t.GetField(
+                "StrModelId",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+            .Where(f => f is not null && f.IsLiteral && f.FieldType == typeof(string))
+            .Select(f => (string)f!.GetRawConstantValue()!)
+            .Distinct()];
+
+        Assert.True(aDeclared.Count >= 4, $"expected the engine to declare several models, found {aDeclared.Count}");
+
+        using JsonDocument oDoc = JsonDocument.Parse(OdcTools.ListModels());
+        List<string> aListed = [.. oDoc.RootElement.EnumerateArray().Select(o => o.GetProperty("id").GetString()!)];
+
+        List<string> aMissing = [.. aDeclared.Where(s => !aListed.Contains(s))];
+        Assert.True(
+            aMissing.Count == 0,
+            $"the engine declares [{string.Join(", ", aMissing)}] but list_models does not offer "
+            + $"them. Listed: [{string.Join(", ", aListed)}]. A model absent from the catalogue "
+            + "cannot be asked about; if it cannot be run here, list it with a null run_tool.");
+    }
+
+    [Fact]
+    public void ListModels_SaysWhichModelsItCannotActuallyRun()
+    {
+        // The catalogue lists more models than this server can run, so it has to
+        // say which — otherwise listing them turns a silent omission into a
+        // silent lie, which is worse.
+        using JsonDocument oDoc = JsonDocument.Parse(OdcTools.ListModels());
+
+        Dictionary<string, string?> oRunTools = oDoc.RootElement.EnumerateArray().ToDictionary(
+            o => o.GetProperty("id").GetString()!,
+            o => o.GetProperty("run_tool").ValueKind == JsonValueKind.Null
+                ? null
+                : o.GetProperty("run_tool").GetString());
+
+        Assert.Equal("run_enclosure", oRunTools["enclosure-shell/0.1"]);
+        Assert.Equal("run_cradle", oRunTools["scan-cradle/0.1"]);
+        Assert.Null(oRunTools["calibration-block/0.2"]);
+        Assert.Null(oRunTools[OpenDesignCore.Models.CameraMountModel.StrModelId]);
+        Assert.Null(oRunTools["lens-fit-gauge/0.1"]);
     }
 
     /// <summary>Point the tools at a fixture registry (ADR-0016) for the duration of a test.</summary>

@@ -663,3 +663,43 @@ The determinism claim is pinned by a test that renders twice and compares hashes
 **Decision.** Option 3. In a strict namespace a citation must match one of `vault:sha256:<hex>(#page=N)`, `repo:owner/name@sha:path`, `ledger:<db>:<id>`, `doi:`, `arxiv:` or `standard:<body> <number>:<year>`; anything else fails load naming the entry. The patterns are copied from OpenPartsCore and must be kept in step with that file. Prose that explains a citation goes in `description`, since `SourceCitation` has no `note` (OpenPartsCore has one, its ADR-0009; nothing here needs it yet). The research report was archived in the OpenKnowledgeCore vault (sha256 `20269f9b...`, unchanged since 2026-07-12) and `pla-generic.json` now cites it by hash.
 
 **Consequences.** `pla-generic.json` keeps its values and its `TODO(source)`, now in the description: pinning the report by hash makes the citation followable, not the values primary. Only a vendor TDS or a ledger measurement discharges it (as ADR-0013 already says). A new strict namespace is one line in `DataStore.StrictNamespaces` plus migrating its entries. ODC's SiYuan check still reads only `citation` and `url`, not every string as OpenPartsCore does; that gap is unchanged here.
+
+## ADR-0024 - A fixture is checked against the part it holds, not against itself
+
+**Date:** 2026-09-26
+**Status:** accepted. Consumes OpenPartsCore ADR-0008.
+
+**Context.** Two camera mounts for the LILYGO T-CameraPlus-S3 were printed and neither could be used. camera-mount/0.1 gripped the board's long edges and met the JST connectors at the bottom corners. camera-mount/0.2 held the board by its lens and put a solid base under the USB-C port. Both passed everything this repo had: resolution floor, bounding box, analytic volume, byte-identical rerun. Every one of those compares a fixture with its own parameters. None of them could ask whether the parameters described the board, and the board was described by an outline and a few caliper readings. The vendor STEP had held the connector positions the whole time.
+
+The user's stated goal for the project is exactly this situation: a part with useful features, no usable case or stand models anywhere, and no reliable way to use it without engineering. A system that answers that has to know where the part's features are and prove a fixture leaves them alone *before* anything is printed.
+
+**Options.**
+1. More care in the model. This is what v0.2 was, and it failed the same way from the other direction.
+2. A per-model clearance list typed into each fixture. That is still the fixture describing the part, and it repeats for every fixture.
+3. The part describes itself once, in the registry (OpenPartsCore `features`), and every fixture is checked against that description by one engine-level check.
+
+**Decision.** Option 3: `OpenDesignCore.Fit.AssemblyCheck`.
+- **Inputs:** the fixture's voxels, the part's `features` (strict reader: `PartsRegistry.OLoadFeatures`), a `PartPlacement`, a tolerance, and the voxel size. An entry without features is an error, not a clearance.
+- **Placement** is a proper rotation restricted to signed axis permutations, plus a translation, usually built as "this part point lands on that fixture point" (`OLanding`). Mirror placements are refused. The restriction keeps every box a box, so the check is exact. A general rotation waits for a fixture that needs one.
+- **What counts as a violation:** every item is a keep-out. Every known access volume is also a keep-out: the item's face extruded along its direction by its depth. Each is placed, shrunk by the tolerance, voxelised in the fixture's library and intersected with the fixture. Any remaining volume is a violation. Contact and access are reported separately, with volumes.
+- **Tolerance is a distance and an input.** It is never defaulted, and it must span at least two voxels, or the check refuses (like a resolution floor). Surfaces closer than the tolerance count as touching. That is how a slip-fit bore passes and a base the USB body sinks 0.6 mm into does not.
+- **What fails the check besides a collision** (`BPassed` is false):
+  - an access volume whose direction or depth the registry marks unknown, unless the caller names that item in an explicit acceptance list, which is recorded;
+  - an item under two voxels thick, which cannot be voxelised faithfully (run finer).
+- **What is reported but does not fail it:**
+  - items too thin for the full shrink, checked with a smaller one that keeps two voxels, each listed with the shrink actually used;
+  - the registry's `not_modelled` gaps, which are carried into every result verbatim.
+- **Wired in:** `CameraMountRun` runs the check after `Validate` and before anything is written, and throws `AssemblyCheckFailedException` naming every violation. On a pass, the whole result goes into the sidecar under `assembly_check`. `run-camera-mount` requires `--tolerance-mm` and reads the registry with `--parts`.
+- **Proof, retroactively** (`tests/reference/RetroactiveFixtureCheckTest.cs`):
+  - v0.1, rebuilt test-only from a56a7ac, is rejected for contact at CN1 and CN2 (and at SW2, CN4, CARD1 and others it would also have met).
+  - v0.2 is rejected for contact at USB1, CN1 and CN2.
+  - Any USB-C plug body at all, down to the shortest length the check can resolve, is an access violation at USB1.
+  - A positive control (the same fixture with the board raised clear) has no contact violations.
+  - Every case holds under both candidate lens faces and a ±2 mm lens offset. Those two values are not yet measured, and a conclusion that depended on them would fail one of the cases.
+  - The PicoGK behaviour the check depends on is measured, not assumed: intersection volume against the analytic overlap, non-mutation of the operands, and a clipped `voxLatticeBeam` giving a flat-ended cylinder.
+
+**Consequences.**
+- camera-mount/0.2's run now refuses, correctly. Its geometry tests moved to the model. The run's byte-identity and sidecar tests return with the first version that passes, which needs the lens position measured (`LensAxisFromLowXEdgeMm` and `LensOnLowZFace` are null until then, and the run says so).
+- The check is only as good as the features, and the vendor model omits the camera module and the display. The result says so every time rather than letting "no violations" stand for "fits".
+- Unknown access depths block a pass until someone measures them or explicitly accepts them. That is friction on purpose: the USB port was exactly such an unknown.
+- Every future fixture generator gets this check by calling one function with a placement it already knows, which is where "reliable" comes from.

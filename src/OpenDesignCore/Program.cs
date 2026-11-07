@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Reflection;
 using OpenDesignCore.Data;
+using OpenDesignCore.Fit;
 using OpenDesignCore.Models;
 using OpenDesignCore.Rendering;
 using OpenDesignCore.Runs;
@@ -506,6 +507,280 @@ if (args is ["run-calibration-block", ..])
     }
 }
 
+if (args is ["run-lens-gauge", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    LensFitGaugeParams oGaugeDefault = LensFitGaugeParams.ODefault();
+    float FGauge(string strKey, float fDefault)
+        => oOpts.TryGetValue(strKey, out string? s)
+            ? float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)
+            : fDefault;
+
+    LensFitGaugeParams oGauge = new()
+    {
+        BoreStartMm = FGauge("bore-start-mm", oGaugeDefault.BoreStartMm),
+        BoreStepMm = FGauge("bore-step-mm", oGaugeDefault.BoreStepMm),
+        BoreCount = oOpts.TryGetValue("bore-count", out string? strBc)
+            ? int.Parse(strBc, System.Globalization.CultureInfo.InvariantCulture)
+            : oGaugeDefault.BoreCount,
+        BoreSpacingMm = FGauge("bore-spacing-mm", oGaugeDefault.BoreSpacingMm),
+        EdgeMarginMm = FGauge("edge-margin-mm", oGaugeDefault.EdgeMarginMm),
+        PlateThicknessMm = FGauge("plate-thickness-mm", oGaugeDefault.PlateThicknessMm),
+        TallyDotMm = FGauge("tally-dot-mm", oGaugeDefault.TallyDotMm),
+    };
+
+    // Defaults to the model's own floor, which is a quarter of the bore step
+    // rather than a constant. Overridable, but going coarser is refused.
+    float fGaugeVoxel = oOpts.TryGetValue("voxel-mm", out string? strGv)
+        ? float.Parse(strGv, System.Globalization.CultureInfo.InvariantCulture)
+        : LensFitGaugeModel.FResolutionFloorMm(oGauge);
+
+    try
+    {
+        LensFitGaugeRunResult oResult = LensFitGaugeRun.Execute(
+            oGauge, fGaugeVoxel,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+
+        Console.WriteLine($"run {oResult.RunId}: PASS  {LensFitGaugeModel.StrModelId}");
+        Console.WriteLine(
+            $"  plate      {oResult.Geometry.BBoxXMm:F2} x {oResult.Geometry.BBoxYMm:F2} x "
+            + $"{oResult.Geometry.BBoxZMm:F2} mm (voxel {fGaugeVoxel:F4} mm)");
+        Console.WriteLine("  bores      dots  nominal");
+        for (int n = 0; n < oGauge.BoreCount; n++)
+        {
+            Console.WriteLine(
+                $"             {new string('.', n + 1),-5} "
+                + $"{LensFitGaugeModel.FBoreDiameterMm(oGauge, n):F2} mm");
+        }
+        Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine($"  stl        {oResult.ArtifactPath}");
+        Console.WriteLine();
+        Console.WriteLine("  Print flat, no supports. Push the lens barrel through each bore.");
+        Console.WriteLine("  The one that goes in snugly without force is the answer; count its");
+        Console.WriteLine("  DOTS, not its position. Then size the real bore from that nominal");
+        Console.WriteLine("  figure, not from the barrel's measured diameter -- the difference");
+        Console.WriteLine("  between the two is this printer's offset, which is the point.");
+        Console.WriteLine();
+        Console.WriteLine("  If the smallest bore is already loose, the ladder was aimed wrong:");
+        Console.WriteLine("  re-run with a lower --bore-start-mm.");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException or ArgumentException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
+if (args is ["run-camera-mount", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+
+    if (!oOpts.TryGetValue("voxel-mm", out string? strMountVoxel)
+        || !float.TryParse(strMountVoxel, System.Globalization.CultureInfo.InvariantCulture,
+                           out float fMountVoxelMm))
+    {
+        Console.Error.WriteLine(
+            "--voxel-mm is required and takes no default: voxel size is an explicit "
+            + "input to every model run (ADR-0003).");
+        return 2;
+    }
+
+    CameraMountParams oMountDefault = CameraMountParams.ODefault();
+    float FMount(string strKey, float fDefault)
+        => oOpts.TryGetValue(strKey, out string? s)
+            ? float.Parse(s, System.Globalization.CultureInfo.InvariantCulture)
+            : fDefault;
+
+    CameraMountParams oMount = new()
+    {
+        BarrelDiameterMm = FMount("barrel-diameter-mm", oMountDefault.BarrelDiameterMm),
+        BoreDiameterMm = FMount("bore-diameter-mm", oMountDefault.BoreDiameterMm),
+        BarrelFreeLengthMm = FMount("barrel-free-length-mm", oMountDefault.BarrelFreeLengthMm),
+        LipDiameterMm = FMount("lip-diameter-mm", oMountDefault.LipDiameterMm),
+        AxisToUsbEdgeMm = FMount("axis-to-usb-edge-mm", oMountDefault.AxisToUsbEdgeMm),
+        BoardLengthMm = FMount("board-length-mm", oMountDefault.BoardLengthMm),
+        FloorDropMm = FMount("floor-drop-mm", oMountDefault.FloorDropMm),
+        BoreLandMm = FMount("bore-land-mm", oMountDefault.BoreLandMm),
+        PlateThicknessMm = FMount("plate-thickness-mm", oMountDefault.PlateThicknessMm),
+        LipPocketMm = FMount("lip-pocket-mm", oMountDefault.LipPocketMm),
+        BaseThicknessMm = FMount("base-thickness-mm", oMountDefault.BaseThicknessMm),
+        BaseFrontMm = FMount("base-front-mm", oMountDefault.BaseFrontMm),
+        BaseBackMm = FMount("base-back-mm", oMountDefault.BaseBackMm),
+        WidthMm = FMount("width-mm", oMountDefault.WidthMm),
+        PlateHeadroomMm = FMount("plate-headroom-mm", oMountDefault.PlateHeadroomMm),
+        LensTipFromPcbMm = FMount("lens-tip-from-pcb-mm", oMountDefault.LensTipFromPcbMm),
+        LensAxisFromLowXEdgeMm = oOpts.TryGetValue("lens-axis-from-low-x-edge-mm", out string? strLensX)
+            ? float.Parse(strLensX, System.Globalization.CultureInfo.InvariantCulture)
+            : oMountDefault.LensAxisFromLowXEdgeMm,
+        LensOnLowZFace = oOpts.TryGetValue("lens-on-low-z-face", out string? strLensFace)
+            ? bool.Parse(strLensFace)
+            : oMountDefault.LensOnLowZFace,
+    };
+
+    // The assembly check (ADR-0024). Tolerance is an input like the voxel
+    // size: no default, because a default would be a constant nobody chose.
+    if (!oOpts.TryGetValue("tolerance-mm", out string? strMountTol)
+        || !float.TryParse(strMountTol, System.Globalization.CultureInfo.InvariantCulture,
+                           out float fMountTolMm))
+    {
+        Console.Error.WriteLine(
+            "--tolerance-mm is required: the assembly check treats surfaces closer than this as "
+            + "touching, it must span at least two voxels, and it takes no default (ADR-0024).");
+        return 2;
+    }
+    List<string> aFeatureErrors = [];
+    PartFeatures? oBoardFeatures = PartsRegistry.OLoadFeatures(
+        oOpts.GetValueOrDefault("parts", PartsRegistry.StrResolveDir(Environment.CurrentDirectory)),
+        CameraMountModel.StrPartId, aFeatureErrors);
+    if (oBoardFeatures is null)
+    {
+        foreach (string s in aFeatureErrors)
+            Console.Error.WriteLine(s);
+        return 1;
+    }
+    string[] aAcceptUnverified = oOpts.TryGetValue("accept-unverified-access", out string? strAccept)
+        ? strAccept.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : [];
+
+    try
+    {
+        CameraMountRunResult oResult = CameraMountRun.Execute(
+            oMount, fMountVoxelMm,
+            oBoardFeatures, fMountTolMm, aAcceptUnverified,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+
+        Console.WriteLine($"run {oResult.RunId}: PASS  {CameraMountModel.StrModelId}");
+        Console.WriteLine(
+            $"  fixture    {oResult.Geometry.BBoxXMm:F2} x {oResult.Geometry.BBoxYMm:F2} x "
+            + $"{oResult.Geometry.BBoxZMm:F2} mm (voxel {fMountVoxelMm:F4} mm)");
+        Console.WriteLine(
+            $"  bore       {oMount.BoreDiameterMm:F2} mm nominal through "
+            + $"{oMount.BoreLandMm:F2} mm of land, for a {oMount.BarrelDiameterMm:F2} mm "
+            + $"barrel with {oMount.BarrelFreeLengthMm:F2} mm free");
+        Console.WriteLine(
+            $"  lip seat   {oMount.LipPocketMm:F2} mm square pocket for a "
+            + $"{oMount.LipDiameterMm:F2} mm lip");
+        Console.WriteLine(
+            $"  axis       {CameraMountModel.FAxisHeightMm(oMount):F2} mm above the bench, "
+            + $"board hung USB edge up, lower edge {oMount.FloorDropMm:F2} mm above the base");
+        Console.WriteLine($"  artifact   sha256:{oResult.ArtifactSha256}");
+        Console.WriteLine();
+        Console.WriteLine("  Assembly check PASSED against the board's OpenPartsCore features.");
+        Console.WriteLine("  The camera now sees the scene upside down: set the sensor's vflip and");
+        Console.WriteLine("  hmirror together (a 180 degree rotation) in the firmware.");
+        Console.WriteLine($"  stl        {oResult.ArtifactPath}");
+        Console.WriteLine();
+        Console.WriteLine("  The bore is 14.95 + 0.25, the offset MEASURED on 2026-09-25 from a");
+        Console.WriteLine("  printed lens-fit-gauge (run 86). It is known to about half that");
+        Console.WriteLine("  gauge's 0.25 mm ladder step, so a tight or loose fit is inside the");
+        Console.WriteLine("  figure's uncertainty and wants a finer ladder, not a guess.");
+        Console.WriteLine();
+        Console.WriteLine("  Acceptance, in Oh-Ben-Claw, with and without the fixture:");
+        Console.WriteLine("    python scripts/vision/bench_floor.py knock-test 60 1.0 COM10 20");
+        Console.WriteLine("  Knock the desk mid-run and compare the `edge` peak.");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException
+                                 or ArgumentException or AssemblyCheckFailedException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
+if (args is ["run-sensor-node-enclosure", ..])
+{
+    Dictionary<string, string> oOpts = [];
+    for (int i = 1; i < args.Length - 1; i += 2)
+    {
+        if (!args[i].StartsWith("--", StringComparison.Ordinal))
+        {
+            Console.Error.WriteLine($"Unexpected argument '{args[i]}'.");
+            return 2;
+        }
+        oOpts[args[i][2..]] = args[i + 1];
+    }
+    if (!oOpts.TryGetValue("voxel-mm", out string? strEncVoxel)
+        || !float.TryParse(strEncVoxel, System.Globalization.CultureInfo.InvariantCulture, out float fEncVoxelMm))
+    {
+        Console.Error.WriteLine(
+            "--voxel-mm is required and takes no default: voxel size is an explicit "
+            + "input to every model run (ADR-0003).");
+        return 2;
+    }
+    if (!oOpts.TryGetValue("tolerance-mm", out string? strEncTol)
+        || !float.TryParse(strEncTol, System.Globalization.CultureInfo.InvariantCulture, out float fEncTolMm))
+    {
+        Console.Error.WriteLine(
+            "--tolerance-mm is required: the assembly check treats surfaces closer than this as "
+            + "touching, it must span at least two voxels, and it takes no default (ADR-0024).");
+        return 2;
+    }
+    List<string> aEncErrors = [];
+    PartFeatures? oNodeFeatures = PartsRegistry.OLoadFeatures(
+        oOpts.GetValueOrDefault("parts", PartsRegistry.StrResolveDir(Environment.CurrentDirectory)),
+        SensorNodeEnclosureModel.StrPartId, aEncErrors);
+    if (oNodeFeatures is null)
+    {
+        foreach (string s in aEncErrors)
+            Console.Error.WriteLine(s);
+        return 1;
+    }
+    string[] aEncAccept = oOpts.TryGetValue("accept-unverified-access", out string? strEncAccept)
+        ? strEncAccept.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : [];
+
+    try
+    {
+        SensorNodeEnclosureRunResult oEnc = SensorNodeEnclosureRun.Execute(
+            SensorNodeEnclosureParams.ODefault(), fEncVoxelMm, oNodeFeatures, fEncTolMm, aEncAccept,
+            oOpts.GetValueOrDefault("artifacts", "artifacts"),
+            oOpts.GetValueOrDefault("ledger", "ledger.db"),
+            StrGitCommit());
+        Console.WriteLine($"PASS  {SensorNodeEnclosureModel.StrModelId} (voxel {fEncVoxelMm:F4} mm)");
+        foreach (SensorNodeEnclosurePartResult o in new[] { oEnc.Base, oEnc.Lid })
+        {
+            Console.WriteLine(
+                $"  run {o.RunId} {o.Part,-4}  {o.Geometry.BBoxXMm:F2} x {o.Geometry.BBoxYMm:F2} x "
+                + $"{o.Geometry.BBoxZMm:F2} mm  sha256:{o.ArtifactSha256}");
+            Console.WriteLine($"            {o.ArtifactPath}");
+        }
+        Console.WriteLine(
+            $"  Assembly check PASSED; access accepted unverified: {string.Join(", ", oEnc.Fit.AccessAccepted.Select(s => s.Split(':')[0]))}");
+        return 0;
+    }
+    catch (Exception e) when (e is ResolutionFloorException or GeometryValidationException
+                                 or ArgumentException or AssemblyCheckFailedException)
+    {
+        Console.Error.WriteLine(e.Message);
+        return 1;
+    }
+}
+
 if (args is ["compensate", ..])
 {
     Dictionary<string, string> oOpts = [];
@@ -584,11 +859,31 @@ if (args is ["compensate", ..])
             MachineCalibration oMachine = MachineCalibration.ORead(strMachines, strMachineId);
             Console.WriteLine($"  calibration: {oMachine.State} — {oMachine.Reason}");
 
+            // The flow the part was printed at, from its own G-code
+            // (AdvancedStudio ADR-0004). The comparison does not record which
+            // G-code was printed, so it is named here. A file with no flow
+            // ratio fails rather than proposing without one.
+            double? fPrintedFlow = null;
+            if (oOpts.TryGetValue("gcode", out string? strGcode))
+            {
+                fPrintedFlow = GcodeFlowRatio.FRead(strGcode);
+                Console.WriteLine(
+                    $"  printed flow: {fPrintedFlow.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} "
+                    + $"(from {Path.GetFileName(strGcode)})");
+            }
+            else
+            {
+                Console.WriteLine(
+                    "  printed flow: not declared — pass --gcode <file the part was printed from> "
+                    + "so the studio can check it matches the profile's calibrated flow");
+            }
+
             string strConfirmation = CompensationRun.StrPropose(
                 oResult,
                 oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
                 strProfileKey,
-                oMachine);
+                oMachine,
+                fPrintedFlow);
             Console.WriteLine(
                 $"  proposal {strConfirmation} — awaiting human approval in the studio dashboard");
         }
@@ -819,7 +1114,8 @@ Console.WriteLine("                              (each measured dimension takes 
 Console.WriteLine("                              [--nominal-step-z-mm <v>] [--instrument-accuracy-mm <v>]");
 Console.WriteLine("                              [--filament-ref <catalog>:<dataset-version>:<path>[#uuid]]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
-Console.WriteLine("                                 [--propose-to-profile <key> --machines <path> --machine-id <id>]");
+Console.WriteLine("                                 [--propose-to-profile <key> --machines <path> --machine-id <id>");
+Console.WriteLine("                                  [--gcode <file the part was printed from>]]");
 Console.WriteLine("                                 [--studio <url>] [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>]");
 Console.WriteLine("                              [--upload <gcode>] [--print <gcode>]");
