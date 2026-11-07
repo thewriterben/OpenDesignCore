@@ -859,11 +859,31 @@ if (args is ["compensate", ..])
             MachineCalibration oMachine = MachineCalibration.ORead(strMachines, strMachineId);
             Console.WriteLine($"  calibration: {oMachine.State} — {oMachine.Reason}");
 
+            // The flow the part was printed at, from its own G-code
+            // (AdvancedStudio ADR-0004). The comparison does not record which
+            // G-code was printed, so it is named here. A file with no flow
+            // ratio fails rather than proposing without one.
+            double? fPrintedFlow = null;
+            if (oOpts.TryGetValue("gcode", out string? strGcode))
+            {
+                fPrintedFlow = GcodeFlowRatio.FRead(strGcode);
+                Console.WriteLine(
+                    $"  printed flow: {fPrintedFlow.Value.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)} "
+                    + $"(from {Path.GetFileName(strGcode)})");
+            }
+            else
+            {
+                Console.WriteLine(
+                    "  printed flow: not declared — pass --gcode <file the part was printed from> "
+                    + "so the studio can check it matches the profile's calibrated flow");
+            }
+
             string strConfirmation = CompensationRun.StrPropose(
                 oResult,
                 oOpts.GetValueOrDefault("studio", "http://localhost:8770").TrimEnd('/'),
                 strProfileKey,
-                oMachine);
+                oMachine,
+                fPrintedFlow);
             Console.WriteLine(
                 $"  proposal {strConfirmation} — awaiting human approval in the studio dashboard");
         }
@@ -1094,7 +1114,8 @@ Console.WriteLine("                              (each measured dimension takes 
 Console.WriteLine("                              [--nominal-step-z-mm <v>] [--instrument-accuracy-mm <v>]");
 Console.WriteLine("                              [--filament-ref <catalog>:<dataset-version>:<path>[#uuid]]");
 Console.WriteLine("       OpenDesignCore compensate --comparison <sha256> --max-axis-spread-pct <v>");
-Console.WriteLine("                                 [--propose-to-profile <key> --machines <path> --machine-id <id>]");
+Console.WriteLine("                                 [--propose-to-profile <key> --machines <path> --machine-id <id>");
+Console.WriteLine("                                  [--gcode <file the part was printed from>]]");
 Console.WriteLine("                                 [--studio <url>] [--artifacts <dir>] [--ledger <path>]");
 Console.WriteLine("       OpenDesignCore handoff --run <id> --stage <dir> [--studio <url>]");
 Console.WriteLine("                              [--upload <gcode>] [--print <gcode>]");

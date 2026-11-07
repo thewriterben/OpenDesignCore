@@ -49,3 +49,6 @@ ledger.db
 !tests/reference/**/*.step
 !tests/reference/**/*.stl
 !examples/**/*.step
+
+# Test runs
+TestResults/

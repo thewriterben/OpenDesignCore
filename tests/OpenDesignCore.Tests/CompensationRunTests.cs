@@ -367,6 +367,76 @@ public sealed class CompensationRunTests : IDisposable
         Assert.DoesNotContain("unreachable", oEx.Message);
     }
 
+    /// <summary>
+    /// AdvancedStudio ADR-0004: a shrinkage is refused unless it was measured
+    /// at the profile's calibrated flow, and the studio can only check a flow
+    /// it is told. The figure comes from the G-code the part was printed from.
+    /// </summary>
+    [Fact]
+    public void TheFlowFromTheGcodeTravelsAsPrintedFlowRatio()
+    {
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        string strGcode = Path.Combine(_strTempDir, "part.gcode");
+        File.WriteAllLines(strGcode,
+        [
+            "; HEADER_BLOCK_START", "; HEADER_BLOCK_END", "G28", "G1 X10 Y10 E1",
+            "; CONFIG_BLOCK_START",
+            "; bottom_solid_infill_flow_ratio = 1",
+            "; filament_flow_ratio = 0.95",
+            "; first_layer_flow_ratio = 1",
+            "; CONFIG_BLOCK_END",
+        ]);
+        double fFlow = GcodeFlowRatio.FRead(strGcode);
+
+        using StudioHandoffTests.StudioStub oStub = new(
+            """{"confirmation_id":"cfm123","action":"profile_update"}""", 200);
+        string strConfirmation = CompensationRun.StrPropose(
+            oResult, oStub.StrUrl, "pla", TestMachines.OCalibrated(StrArtifacts), fFlow);
+
+        Assert.Equal("cfm123", strConfirmation);
+        string strRequest = Assert.Single(oStub.ARequests, r => r.StartsWith("POST /api/propose", StringComparison.Ordinal));
+        using JsonDocument oDoc = JsonDocument.Parse(strRequest[(strRequest.IndexOf('{'))..]);
+        JsonElement oParams = oDoc.RootElement.GetProperty("params");
+        // A JSON number, which is what the studio's float() check expects.
+        Assert.Equal(JsonValueKind.Number, oParams.GetProperty("printed_flow_ratio").ValueKind);
+        Assert.Equal(0.95, oParams.GetProperty("printed_flow_ratio").GetDouble(), tolerance: 1e-9);
+    }
+
+    [Fact]
+    public void WithoutAGcodeTheFieldIsOmittedNotSentAsNull()
+    {
+        // The studio's "not declared" path keys on the field being absent; a
+        // null would read the same today, but absent is the contract.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        using StudioHandoffTests.StudioStub oStub = new("""{"confirmation_id":"cfm456"}""", 200);
+        CompensationRun.StrPropose(oResult, oStub.StrUrl, "pla", TestMachines.OCalibrated(StrArtifacts));
+
+        string strRequest = Assert.Single(oStub.ARequests, r => r.StartsWith("POST /api/propose", StringComparison.Ordinal));
+        Assert.DoesNotContain("printed_flow_ratio", strRequest);
+    }
+
+    [Fact]
+    public void AStudioFlowMismatchRefusalReachesTheUser()
+    {
+        // What the studio says when the part was sliced before the flow
+        // calibration. It must surface verbatim, not as a generic failure.
+        string strComparison = StrCompare(0.993f, 0.993f, 0.993f, fAccuracyMm: 0.05f);
+        CompensationRunResult oResult = OCompensate(strComparison, fMaxSpreadPct: 0.2);
+
+        using StudioHandoffTests.StudioStub oStub = new(
+            """{"detail":"the measured part was printed at flow 1.000, but PLA's calibrated flow is 0.950. Re-slice with the calibrated flow and print it again."}""",
+            409);
+        CompensationException oEx = Assert.Throws<CompensationException>(
+            () => CompensationRun.StrPropose(
+                oResult, oStub.StrUrl, "pla", TestMachines.OCalibrated(StrArtifacts), 1.0));
+        Assert.Contains("409", oEx.Message);
+        Assert.Contains("Re-slice", oEx.Message);
+    }
+
     [Fact]
     public void AnUnknownComparisonHashIsRefusedByName()
     {
