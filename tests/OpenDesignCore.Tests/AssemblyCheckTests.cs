@@ -284,4 +284,89 @@ public sealed class AssemblyCheckTests(ITestOutputHelper oOutput) : IDisposable
         Assert.Null(PartsRegistry.OLoadFeatures(_strDir, "boards/fixture-silent", aErrors));
         Assert.Contains(aErrors, s => s.Contains("must declare access"));
     }
+
+    private List<string> AErrorsFor(string strFeatures)
+    {
+        TestRegistry.StrWrite(_strDir);
+        TestRegistry.StrWriteEntry(_strDir, "boards", "fixture-loose.json", """
+            {
+              "schema_version": 0, "id": "boards/fixture-loose", "namespace": "boards",
+              "name": "fixture-loose", "source": { "citation": "test fixture - synthetic" },
+              "features": FEATURES
+            }
+            """.Replace("FEATURES", strFeatures));
+        List<string> aErrors = [];
+        Assert.Null(PartsRegistry.OLoadFeatures(_strDir, "boards/fixture-loose", aErrors));
+        return aErrors;
+    }
+
+    private static string StrFeatures(string strSourceExtra = "", string strItem = "", string strAccess = "")
+        => $$"""
+            {
+              "source": { "citation": "synthetic", "model_sha256": "{{new string('0', 64)}}", "revision": "T1"{{strSourceExtra}} },
+              "frame": "synthetic", "not_modelled": [],
+              "items": [ { "id": "J1", "kind": "connector", "source": "synthetic"{{strItem}},
+                           "box_mm": { "min_mm": [0, 0, 0], "max_mm": [1, 1, 1] },
+                           "access": { "direction": "-y", "depth_mm": null, "source": "synthetic"{{strAccess}} } } ]
+            }
+            """;
+
+    [Fact]
+    public void TheGoodLooseFixtureLoads()
+    {
+        TestRegistry.StrWrite(_strDir);
+        TestRegistry.StrWriteEntry(_strDir, "boards", "fixture-loose.json", """
+            { "schema_version": 0, "id": "boards/fixture-loose", "namespace": "boards",
+              "name": "fixture-loose", "source": { "citation": "test fixture - synthetic" }, "features": FEATURES }
+            """.Replace("FEATURES", StrFeatures(", \"url\": \"https://example.invalid/board\"")));
+        List<string> aErrors = [];
+        Assert.NotNull(PartsRegistry.OLoadFeatures(_strDir, "boards/fixture-loose", aErrors));
+        Assert.Empty(aErrors);
+    }
+
+    [Fact]
+    public void FeatureSourcesThatReferenceSiyuanAreRejected()
+    {
+        // The same gate main applies to citations (OpenKnowledgeCore ADR-0001).
+        string strBlock = "20260106123456-abcdefg";
+        Assert.Contains(AErrorsFor(StrFeatures(", \"url\": \"siyuan://blocks/" + strBlock + "\"")),
+            s => s.Contains(".source.url references SiYuan"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"citation\": \"synthetic\"", "\"citation\": \"note " + strBlock + "\"")),
+            s => s.Contains(".source.citation references SiYuan"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"kind\": \"connector\", \"source\": \"synthetic\"",
+            "\"kind\": \"connector\", \"source\": \"http://127.0.0.1:6806/api/block/get\"")),
+            s => s.Contains("'J1'.source references SiYuan"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"depth_mm\": null, \"source\": \"synthetic\"",
+            "\"depth_mm\": null, \"source\": \"data/" + strBlock + ".sy\"")),
+            s => s.Contains("access.source references SiYuan"));
+    }
+
+    [Fact]
+    public void UnknownKeysInsideNestedBlocksAreRejected()
+    {
+        Assert.Contains(AErrorsFor(StrFeatures(", \"licence\": \"x\"")), s => s.Contains(".source has unknown key 'licence'"));
+        Assert.Contains(AErrorsFor(StrFeatures(strAccess: ", \"depth\": 3")), s => s.Contains(".access has unknown key 'depth'"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"max_mm\": [1, 1, 1]", "\"max_mm\": [1, 1, 1], \"max\": 2")),
+            s => s.Contains(".box_mm has unknown key 'max'"));
+    }
+
+    [Fact]
+    public void MalformedJsonAndWrongKindsAreReportedNotThrown()
+    {
+        Assert.Contains(AErrorsFor("{ \"source\": "), s => s.Contains("not valid JSON"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"not_modelled\": []", "\"not_modelled\": [3]")),
+            s => s.Contains(".not_modelled[0] must be a string"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"id\": \"J1\"", "\"id\": 1")),
+            s => s.Contains("id, a known kind and a source are all required"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"direction\": \"-y\"", "\"direction\": 5")),
+            s => s.Contains("access.direction must be"));
+        Assert.Contains(AErrorsFor(StrFeatures().Replace("\"box_mm\": { \"min_mm\": [0, 0, 0], \"max_mm\": [1, 1, 1] }", "\"box_mm\": 4")),
+            s => s.Contains("box_mm must be an object"));
+
+        TestRegistry.StrWrite(_strDir);
+        TestRegistry.StrWriteEntry(_strDir, "boards", "fixture-idnum.json", "{ \"id\": 7 }");
+        List<string> aErrors = [];
+        Assert.Null(PartsRegistry.OLoadFeatures(_strDir, "boards/fixture-idnum", aErrors));
+        Assert.Contains(aErrors, s => s.Contains("id does not match"));
+    }
 }
