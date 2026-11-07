@@ -117,3 +117,6 @@ public sealed record PartFeatures
     public required string FileSha256 { get; init; }
     public required string RegistryCommit { get; init; }
 }
+
+/// <summary>A mounting hole centre in the features frame, mm (<see cref="PartsRegistry.OLoadMountingHoles"/>).</summary>
+public sealed record MountingHole(string Ref, double XMm, double YMm);

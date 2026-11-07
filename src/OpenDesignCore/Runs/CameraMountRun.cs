@@ -43,7 +43,7 @@ public static class CameraMountRun
         byte[] abStl;
         ArtifactGeometry oGeometry;
         AssemblyCheckResult oFit;
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             Voxels voxMount = CameraMountModel.VoxBuild(oLib, oParams, fVoxelSizeMm);
             CameraMountModel.Validate(voxMount, oParams, fVoxelSizeMm);

@@ -80,7 +80,7 @@ public sealed class CameraMountVolumeTest(ITestOutputHelper oOutput)
 
     private static double FMeasuredVolumeCubicMm(CameraMountParams p, float fVoxelSizeMm)
     {
-        using Library oLib = new(fVoxelSizeMm);
+        using OdcLibrary oLib = new(fVoxelSizeMm);
         Voxels voxMount = CameraMountModel.VoxBuild(oLib, p, fVoxelSizeMm);
         voxMount.CalculateProperties(out float fVolume, out BBox3 _);
         return fVolume;

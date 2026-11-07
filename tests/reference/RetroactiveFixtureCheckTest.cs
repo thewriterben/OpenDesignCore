@@ -62,7 +62,7 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         PartFeatures? o = PartsRegistry.OLoadFeatures(strDir, PartId, aErrors);
         Assert.True(o is not null,
             "OpenPartsCore is checked out but gives no usable features for the camera board. "
-            + "These tests need OpenPartsCore ADR-0008's data (branch features-lilygo-camera): "
+            + "These tests need OpenPartsCore ADR-0008's data (on its main since PR #18): "
             + string.Join("; ", aErrors));
         return o;
     }
@@ -109,7 +109,7 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
             new Vector3(0, 0, CameraMountV01.SeatZMm),
             "v0.1: laminate centred between the slots, mid-plane on Y = 0, bottom edge on the slot floor");
 
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels vox = CameraMountV01.VoxBuild(oLib, Voxel);
         AssemblyCheckResult r = AssemblyCheck.Check(oLib, vox, oF, oPlace, Tol, Voxel);
         Report($"v0.1, lens on {(bLensOnLowFace ? "z=0" : "z=top")} face", r);
@@ -150,7 +150,7 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null)
             return;
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels vox = CameraMountV02.VoxBuild(oLib, Voxel);
         AssemblyCheckResult r = AssemblyCheck.Check(
             oLib, vox, oF, CameraMountV02.OPlacement(oF, bLensOnLowFace, fOffsetMm), Tol, Voxel);
@@ -179,7 +179,7 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
             return;
         float fShortest = 2 * Tol + Voxel;
         PartFeatures oProbe = OWithDepth(oF, "USB1", fShortest, "probe: shortest resolvable depth");
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels vox = CameraMountV02.VoxBuild(oLib, Voxel);
         AssemblyCheckResult r = AssemblyCheck.Check(
             oLib, vox, oProbe, CameraMountV02.OPlacement(oF, bLensOnLowFace, fOffsetMm), Tol, Voxel);
@@ -218,7 +218,7 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         if (oF is null)
             return;
         CameraMountParams p = CameraMountParams.ODefault();
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels vox = CameraMountModel.VoxBuild(oLib, p, Voxel);
         AssemblyCheckResult r = AssemblyCheck.Check(oLib, vox, oF, OV03Placement(oF, p, fOffsetMm), Tol, Voxel);
         Report($"v0.3, offset {fOffsetMm:+0.0;-0.0;0}", r);
@@ -245,7 +245,7 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         foreach (string strId in new[] { "USB1", "CN1", "CN2" })
             oProbe = OWithDepth(oProbe, strId, fTaller, "probe: deeper than the fixture is tall");
 
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels vox = CameraMountModel.VoxBuild(oLib, p, Voxel);
         AssemblyCheckResult r = AssemblyCheck.Check(oLib, vox, oProbe, OV03Placement(oF, p, fOffsetMm), Tol, Voxel);
         Report($"v0.3 probe {fTaller:F0} mm plugs, offset {fOffsetMm:+0.0;-0.0;0}", r);

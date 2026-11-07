@@ -84,7 +84,7 @@ public sealed class EnclosureVolumeTest(ITestOutputHelper oOutput)
         double fBound = fArea * fVoxelSizeMm;
 
         double fMeasured;
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             Voxels voxShell = EnclosureShellModel.VoxBuild(oLib, oParams, fVoxelSizeMm);
             voxShell.CalculateProperties(out float fVolume, out BBox3 _);

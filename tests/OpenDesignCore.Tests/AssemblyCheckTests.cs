@@ -34,7 +34,7 @@ public sealed class AssemblyCheckTests(ITestOutputHelper oOutput) : IDisposable
     public void IntersectionVolumeIsTheOverlapAndLeavesTheOperandsAlone()
     {
         // Two 10 mm cubes offset by 4 mm in x overlap in a 6 x 10 x 10 slab.
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels voxA = new(Utils.mshCreateCube(oLib, new Vector3(10), Vector3.Zero));
         Voxels voxB = new(Utils.mshCreateCube(oLib, new Vector3(10), new Vector3(4, 0, 0)));
         voxA.CalculateProperties(out float fBefore, out BBox3 _);
@@ -53,7 +53,7 @@ public sealed class AssemblyCheckTests(ITestOutputHelper oOutput) : IDisposable
     [Fact]
     public void DisjointShapesIntersectToNothing()
     {
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels voxA = new(Utils.mshCreateCube(oLib, new Vector3(10), Vector3.Zero));
         Voxels voxB = new(Utils.mshCreateCube(oLib, new Vector3(10), new Vector3(10 + 2 * Tol, 0, 0)));
         Assert.True(voxA.voxBoolIntersect(voxB).bIsEmpty());
@@ -65,7 +65,7 @@ public sealed class AssemblyCheckTests(ITestOutputHelper oOutput) : IDisposable
         // voxLatticeBeam has hemispherical ends; the check clips them to the
         // registry's flat-ended cylinder. Radius 3 over 10 mm: without the
         // clip it would reach 16 mm and hold two extra hemispheres.
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels voxBeam = Voxels.voxLatticeBeam(oLib, Vector3.Zero, 3f, new Vector3(0, 0, 10), 3f);
         Voxels voxSpan = new(Utils.mshCreateCube(oLib, new Vector3(8, 8, 10), new Vector3(0, 0, 5)));
         Voxels voxCyl = voxBeam.voxBoolIntersect(voxSpan);
@@ -141,7 +141,7 @@ public sealed class AssemblyCheckTests(ITestOutputHelper oOutput) : IDisposable
 
     private static AssemblyCheckResult ORun(PartFeatures o, Vector3 vecBoxMin, Vector3 vecBoxMax, IReadOnlyCollection<string>? aAccept = null)
     {
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels voxFixture = new(Utils.mshCreateCube(oLib, vecBoxMax - vecBoxMin, (vecBoxMin + vecBoxMax) / 2f));
         return AssemblyCheck.Check(oLib, voxFixture, o, s_oIdentity, Tol, Voxel, aAccept);
     }
@@ -247,7 +247,7 @@ public sealed class AssemblyCheckTests(ITestOutputHelper oOutput) : IDisposable
     public void AToleranceUnderTwoVoxelsIsRefused()
     {
         PartFeatures o = OBoard();
-        using Library oLib = new(Voxel);
+        using OdcLibrary oLib = new(Voxel);
         Voxels vox = new(Utils.mshCreateCube(oLib, new Vector3(1), new Vector3(50)));
         Assert.Throws<ResolutionFloorException>(
             () => AssemblyCheck.Check(oLib, vox, o, s_oIdentity, 1.5f * Voxel, Voxel));

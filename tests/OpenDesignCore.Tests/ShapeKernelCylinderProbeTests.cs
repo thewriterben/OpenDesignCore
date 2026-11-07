@@ -18,7 +18,7 @@ namespace OpenDesignCore.Tests;
 /// ShapeKernel's shapes build through the parameterless <c>new Mesh()</c>, which
 /// resolves PicoGK's <b>ambient library singleton</b> — populated only by
 /// <c>Library.Go(...)</c>. This repository does not use <c>Library.Go</c>: every
-/// run does <c>using (Library oLib = new(voxelSize))</c> and threads
+/// run does <c>using (OdcLibrary oLib = new(voxelSize))</c> and threads
 /// <c>oLib</c> explicitly into the Library-taking overloads. Under that pattern
 /// ShapeKernel throws <c>"Your code relies on being called using Library::Go"</c>
 /// before it draws anything. Measured 2026-09-25.
@@ -137,7 +137,7 @@ public sealed class ShapeKernelCylinderProbeTests(ITestOutputHelper oOutput)
 
         double fMeasured;
         BBox3 oBox;
-        using (Library oLib = new(FVoxelMm))
+        using (OdcLibrary oLib = new(FVoxelMm))
         {
             Voxels voxBeam = Voxels.voxLatticeBeam(oLib, vecA, FRadiusMm, vecB, FRadiusMm);
             voxBeam.CalculateProperties(out float fVolume, out BBox3 oBBox);
@@ -171,7 +171,7 @@ public sealed class ShapeKernelCylinderProbeTests(ITestOutputHelper oOutput)
     public void ALatticeBeamIsTwoRadiiAcrossAndCappedByOneRadius()
     {
         BBox3 oBox;
-        using (Library oLib = new(FVoxelMm))
+        using (OdcLibrary oLib = new(FVoxelMm))
         {
             Voxels voxBeam = Voxels.voxLatticeBeam(
                 oLib, new Vector3(0, 0, 0), FRadiusMm, new Vector3(0, 0, FLengthMm), FRadiusMm);

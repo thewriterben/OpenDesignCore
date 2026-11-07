@@ -16,9 +16,10 @@
 
 .EXAMPLE
   # Same, and offer it to the studio profile. Refused unless k2-plus has all
-  # three axes recorded in the OpenBuildCore machine registry.
+  # three axes recorded in the OpenBuildCore machine registry. -Gcode names the
+  # file the block was printed from, so the studio can check its flow ratio.
   .\examples\calibration-loop\measure.ps1 -X 39.98 -Y 59.97 -ZLow 4.01 -ZHigh 25.02 `
-      -Material pla -ProposeToProfile pla
+      -Material pla -ProposeToProfile pla -Gcode .\calibration-block.gcode
 #>
 [CmdletBinding()]
 param(
@@ -48,6 +49,11 @@ param(
     # Omit to compute and record only. Supply a profile key to also offer it to
     # the studio -- which needs -MachineId calibrated in the registry.
     [string] $ProposeToProfile,
+
+    # The G-code the block was printed from. Only used with -ProposeToProfile:
+    # compensate reads its flow ratio (AdvancedStudio ADR-0004) so the studio
+    # can check it matches the profile's calibrated flow.
+    [string] $Gcode,
 
     [string] $MachineId = 'k2-plus',
     [string] $MachinesJson = '../OpenBuildCore/example/machines.json',
@@ -108,6 +114,14 @@ if ($ProposeToProfile) {
         '--machine-id', $MachineId
         '--studio', $StudioUrl
     )
+    if ($Gcode) {
+        if (-not (Test-Path $Gcode)) { throw "No G-code at $Gcode." }
+        $compensateArgs += @('--gcode', (Resolve-Path $Gcode).Path)
+    } else {
+        Write-Host "No -Gcode given: the proposal will carry no printed flow ratio." -ForegroundColor Yellow
+    }
+} elseif ($Gcode) {
+    throw "-Gcode is only used with -ProposeToProfile; compensate reads it when proposing."
 }
 
 dotnet run --project src/OpenDesignCore -c Release -- @compensateArgs

@@ -49,7 +49,7 @@ public static class CradleRun
         MeshTopologyReport oTopology;
         ArtifactGeometry oGeometry;
 
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             ScanImportResult oScan = ScanImport.OImport(
                 oLib, strStlPath, eUnits, fPostScale, eOrigin, oScaleRef, strArtifactsDir);

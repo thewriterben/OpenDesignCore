@@ -75,7 +75,7 @@ public sealed class ScanScaleTests : IDisposable
     [Fact]
     public void BinaryStl_IsActuallyScaled()
     {
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         string strStl = StrBinaryStl(oLib);
 
         ScanImportResult oOne = ScanImport.OImport(
@@ -93,7 +93,7 @@ public sealed class ScanScaleTests : IDisposable
     [Fact]
     public void AsciiStl_IsActuallyScaled()
     {
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         string strStl = StrAsciiStl();
 
         ScanImportResult oOne = ScanImport.OImport(
@@ -112,7 +112,7 @@ public sealed class ScanScaleTests : IDisposable
     [Fact]
     public void AClosedMeshReportsClosed()
     {
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         Voxels vox = Voxels.voxSphere(oLib, new System.Numerics.Vector3(0, 0, 0), 8.0f);
         MeshTopologyReport oReport = MeshTopology.OAnalyse(vox.mshAsMesh());
 
@@ -132,7 +132,7 @@ public sealed class ScanScaleTests : IDisposable
         // Pins the measurement the design rests on. If a future PicoGK welds on
         // load, this fails and MeshTopology's weld becomes redundant rather
         // than load-bearing — which is worth being told about.
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         string strStl = StrBinaryStl(oLib);
         Mesh msh = Mesh.mshFromStlFile(strStl, Mesh.EStlUnit.MM, 1.0f, null, oLib);
 
@@ -158,7 +158,7 @@ public sealed class ScanScaleTests : IDisposable
         string strPath = Path.Combine(_strTempDir, "open-box.stl");
         WriteOpenBox(strPath);
 
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         ScanImportResult oResult = ScanImport.OImport(
             oLib, strPath, Mesh.EStlUnit.MM, 1.0f,
             EScanOrigin.MetrologyScan, null, StrArtifacts);
@@ -177,7 +177,7 @@ public sealed class ScanScaleTests : IDisposable
         string strPath = Path.Combine(_strTempDir, "two-boxes.stl");
         WriteTouchingBoxes(strPath);
 
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         ScanImportResult oResult = ScanImport.OImport(
             oLib, strPath, Mesh.EStlUnit.MM, 1.0f,
             EScanOrigin.CadExport, null, StrArtifacts);
@@ -261,7 +261,7 @@ public sealed class ScanScaleTests : IDisposable
     {
         // The two paths compute the same thing by different routes; that they
         // agree is the property that broke.
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         string strAscii = StrAsciiStl();
 
         ScanImportResult oMm = ScanImport.OImport(

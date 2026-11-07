@@ -24,7 +24,7 @@ public sealed class CompareRunTests : IDisposable
     {
         string strDesign = Path.Combine(_strTempDir, $"design-{fScale}.stl");
         string strScan = Path.Combine(_strTempDir, $"scan-{fScale}.stl");
-        using Library oLib = new(0.2f);
+        using OdcLibrary oLib = new(0.2f);
 
         Mesh mshDesign = Utils.mshCreateCube(oLib, new Vector3(20, 30, 10), Vector3.Zero);
         mshDesign.SaveToStlFile(strDesign, Mesh.EStlUnit.MM);
@@ -124,7 +124,7 @@ public sealed class CompareRunTests : IDisposable
         // isotropic compensation is the wrong correction.
         string strDesign = Path.Combine(_strTempDir, "aniso-design.stl");
         string strScan = Path.Combine(_strTempDir, "aniso-scan.stl");
-        using (Library oLib = new(0.2f))
+        using (OdcLibrary oLib = new(0.2f))
         {
             Mesh mshDesign = Utils.mshCreateCube(oLib, new Vector3(20, 30, 10), Vector3.Zero);
             mshDesign.SaveToStlFile(strDesign, Mesh.EStlUnit.MM);

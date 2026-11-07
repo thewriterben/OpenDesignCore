@@ -36,7 +36,7 @@ public static class LensFitGaugeRun
     {
         byte[] abStl;
         ArtifactGeometry oGeometry;
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             Voxels voxGauge = LensFitGaugeModel.VoxBuild(oLib, oParams, fVoxelSizeMm);
             LensFitGaugeModel.Validate(voxGauge, oParams, fVoxelSizeMm);
