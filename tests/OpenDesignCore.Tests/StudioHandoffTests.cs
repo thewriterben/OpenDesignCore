@@ -61,7 +61,7 @@ public sealed class StudioHandoffTests : IDisposable
     /// So this records what it actually managed to do, and <see cref="StrDiagnose"/>
     /// turns that into the sentence the next failure should have printed.
     /// </summary>
-    private sealed class StudioStub : IDisposable
+    internal sealed class StudioStub : IDisposable
     {
         private readonly HttpListener _oListener;
         private readonly Thread _oPump;

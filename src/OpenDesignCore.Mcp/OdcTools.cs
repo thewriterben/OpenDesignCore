@@ -35,7 +35,7 @@ public sealed class OdcTools
     internal static string StrJson(object oValue) => JsonSerializer.Serialize(oValue, s_oJson);
 
     [McpServerTool(Name = "list_models")]
-    [Description("List the geometry models this engine can run, with their parameters and resolution-floor rule.")]
+    [Description("List the geometry models this engine has, with their parameters and resolution-floor rule. `run_tool` names the tool that runs each one, or is null for models this server cannot run — those are CLI-only and are listed anyway so their absence is visible rather than silent.")]
     public static string ListModels() => StrJson(new[]
     {
         new
@@ -44,6 +44,7 @@ public sealed class OdcTools
             summary = "Open-top tray around a part envelope from the cited parts registry.",
             parameters = new[] { "part_id", "voxel_mm", "clearance_mm", "wall_mm" },
             resolution_floor = "wall_mm / 2",
+            run_tool = (string?)"run_enclosure",
         },
         new
         {
@@ -51,6 +52,55 @@ public sealed class OdcTools
             summary = "Foam-insert-style cradle carved to fit an imported scan.",
             parameters = new[] { "stl_path", "units", "voxel_mm", "clearance_mm", "wall_mm", "split_fraction" },
             resolution_floor = "min(wall_mm / 2, clearance_mm)",
+            run_tool = (string?)"run_cradle",
+        },
+        // The two below have no run tool on this surface. They were missing from
+        // this list entirely — calibration-block since it shipped — which is the
+        // worse failure of the two available: a model absent from the catalogue
+        // cannot be asked about, while one present and marked unrunnable can.
+        // Same reasoning as `not_offered` in list_parts.
+        new
+        {
+            id = CalibrationBlockModel.StrModelId,
+            summary = "The block whose measurement closes the shrinkage-compensation loop. "
+                + "Deliberately unequal on every axis so a transposed reading is visible.",
+            parameters = new[] { "x_mm", "y_mm", "z_mm", "step_z_mm", "tall_depth_y_mm", "instrument_accuracy_mm", "voxel_mm" },
+            resolution_floor = "step_z_mm / 20",
+            run_tool = (string?)null,
+        },
+        new
+        {
+            id = LensFitGaugeModel.StrModelId,
+            summary = "A ladder of bores for finding what nominal diameter this printer "
+                + "turns into a hole a given cylinder actually fits. Measured, not computed.",
+            parameters = new[] { "bore_start_mm", "bore_step_mm", "bore_count", "bore_spacing_mm", "plate_thickness_mm", "edge_margin_mm", "tally_dot_mm", "voxel_mm" },
+            resolution_floor = "bore_step_mm / 4",
+            run_tool = (string?)null,
+        },
+        new
+        {
+            id = CameraMountModel.StrModelId,
+            summary = "Bench fixture locating a camera board on its lens barrel: the barrel "
+                + "passes through a bore and its lip seats in a pocket. Board figures are "
+                + "measurements of one physical board, not a datasheet. Checked against the "
+                + "board's OpenPartsCore features before export (ADR-0024). v0.3 hangs the "
+                + "board USB edge up so the ports face open air; v0.2 hung it USB edge down "
+                + "onto a base that blocked the USB-C port.",
+            parameters = new[] { "barrel_diameter_mm", "bore_diameter_mm", "barrel_free_length_mm", "lip_diameter_mm", "axis_to_usb_edge_mm", "board_length_mm", "floor_drop_mm", "bore_land_mm", "plate_thickness_mm", "lip_pocket_mm", "base_thickness_mm", "base_front_mm", "base_back_mm", "width_mm", "plate_headroom_mm", "lens_tip_from_pcb_mm", "lens_axis_from_low_x_edge_mm", "lens_on_low_z_face", "tolerance_mm", "voxel_mm" },
+            resolution_floor = "min(bore_diameter_mm / 100, bore_land_mm / 10)",
+            run_tool = (string?)null,
+        },
+        new
+        {
+            id = SensorNodeEnclosureModel.StrModelId,
+            summary = "Two-part screwed enclosure (base and lid) for the OpenCircuitCore sensor-node, "
+                + "cut around the board's OpenPartsCore features: M3 bosses with trapped nuts, header "
+                + "windows over J1/J2, a baffled and vented BME280 chamber, and thin plastic with no "
+                + "fasteners over the antenna zone. Checked against the features before export (ADR-0024). "
+                + "CLI only: run-sensor-node-enclosure.",
+            parameters = new[] { "voxel_mm", "tolerance_mm", "accept_unverified_access" },
+            resolution_floor = "min(thin wall, vent, baffle, edge clearance, seam gap, nut pocket clearance / 2) / 2",
+            run_tool = (string?)null,
         },
     });
 

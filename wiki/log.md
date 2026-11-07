@@ -852,3 +852,6 @@ as the authors' description and marked unverified — NEMO in particular is name
 adopt-before-build candidate on the strength of a paragraph, which is exactly the standing a reader
 should not assume is better. The skill built from the book for Benji's own use stays outside the
 repo: its chapter notes are the long restatement this wiki's schema calls a failed page.
+
+## [2026-11-04] concept | Device pipeline (Phase 1 + 2) written
+Research pass (KiCad 10.0.5 IPC API scope, FreeRouting 2.5.0 native CLI, ESP-IDF 6.0, esp-hal 1.0, OrcaSlicer 2.4.2, PicoGK 2.3.0, OFD dataset 2026.11.04). New [[device-pipeline]] concept page: spec → netlist → placed/routed PCB → STEP → enclosure → material-pinned print project; firmware pin map derived from the netlist; deploy stays a human step. Implemented the same day: OBCSlicer `obcslice material pin` (`obc-material/0.1` from OFD, manifest-verified) and obc3mf temperature check; OpenCircuitCore `boards/sensor-node`, `route_board.py`, `make_firmware.py`; OpenPartsCore strapping pins on `electronic/esp32-s3-wroom-1`.

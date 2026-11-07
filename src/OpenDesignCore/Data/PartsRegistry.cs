@@ -111,6 +111,285 @@ public static class PartsRegistry
         };
     }
 
+    /// <summary>
+    /// The <c>features</c> block of one entry (OpenPartsCore ADR-0008), or null
+    /// with the reason in <paramref name="aErrors"/>. Strict, like the
+    /// envelope: this engine places geometry against these numbers, so an
+    /// unknown key or a malformed item is an error rather than something to
+    /// skip. An entry without <c>features</c> is an error too — the caller
+    /// asked for a clearance check, and "nothing described" is not "clear".
+    /// </summary>
+    public static PartFeatures? OLoadFeatures(string strRegistryDir, string strId, List<string> aErrors)
+    {
+        int nSlash = strId.IndexOf('/');
+        string strFile = nSlash < 0 ? "" : Path.Combine(
+            strRegistryDir, "data", strId[..nSlash], strId[(nSlash + 1)..] + ".json");
+        if (!File.Exists(strFile))
+        {
+            aErrors.Add($"{strId}: no registry file at {strFile}. Check out OpenPartsCore or set {StrEnvVar}.");
+            return null;
+        }
+        byte[] abFile = File.ReadAllBytes(strFile);
+        using JsonDocument? oDoc = ODocOrError(abFile, strFile, aErrors);
+        if (oDoc is null)
+            return null;
+        JsonElement oRoot = oDoc.RootElement;
+        if (oRoot.ValueKind != JsonValueKind.Object || !oRoot.TryGetProperty("id", out JsonElement oId)
+            || oId.ValueKind != JsonValueKind.String || oId.GetString() != strId)
+        {
+            aErrors.Add($"{strFile}: id does not match '{strId}'");
+            return null;
+        }
+        if (!oRoot.TryGetProperty("features", out JsonElement oFeat) || oFeat.ValueKind != JsonValueKind.Object)
+        {
+            aErrors.Add(
+                $"{strId}: the registry has no features for this part (OpenPartsCore ADR-0008). "
+                + "A clearance check against nothing would pass everything; refusing.");
+            return null;
+        }
+
+        int nBefore = aErrors.Count;
+        void Err(string s) => aErrors.Add($"{strId}: features{s}");
+
+        foreach (JsonProperty o in oFeat.EnumerateObject())
+            if (o.Name is not ("source" or "frame" or "not_modelled" or "items"))
+                Err($" has unknown key '{o.Name}'");
+
+        string StrOf(JsonElement o, string strKey, string strWhere)
+        {
+            if (o.TryGetProperty(strKey, out JsonElement v) && v.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(v.GetString()))
+                return v.GetString()!;
+            Err($"{strWhere}.{strKey} missing or empty");
+            return "";
+        }
+
+        string strCitation = "", strSha = "", strRevision = "";
+        if (oFeat.TryGetProperty("source", out JsonElement oSrc) && oSrc.ValueKind == JsonValueKind.Object)
+        {
+            UnknownKeys(oSrc, ".source", Err, "citation", "model_sha256", "revision", "url", "retrieved", "note");
+            strCitation = StrOf(oSrc, "citation", ".source");
+            strSha = StrOf(oSrc, "model_sha256", ".source");
+            strRevision = StrOf(oSrc, "revision", ".source");
+            NoSiyuan(strCitation, ".source.citation", Err);
+            NoSiyuan(StrOrNull(oSrc, "url"), ".source.url", Err);
+        }
+        else
+        {
+            Err(".source missing - features carry their own source");
+        }
+        string strFrame = StrOf(oFeat, "frame", "");
+
+        List<string> aNotModelled = [];
+        if (oFeat.TryGetProperty("not_modelled", out JsonElement oNm) && oNm.ValueKind == JsonValueKind.Array)
+        {
+            int n = 0;
+            foreach (JsonElement o in oNm.EnumerateArray())
+            {
+                if (o.ValueKind == JsonValueKind.String)
+                    aNotModelled.Add(o.GetString()!);
+                else
+                    Err($".not_modelled[{n}] must be a string");
+                n++;
+            }
+        }
+        else
+        {
+            Err(".not_modelled missing - say what the items leave out, even if nothing");
+        }
+
+        List<PartFeature> aItems = [];
+        HashSet<string> oSeen = new(StringComparer.Ordinal);
+        if (oFeat.TryGetProperty("items", out JsonElement oItems) && oItems.ValueKind == JsonValueKind.Array)
+        {
+            int i = 0;
+            foreach (JsonElement oItem in oItems.EnumerateArray())
+            {
+                PartFeature? oF = OParseFeature(oItem, $".items[{i++}]", Err);
+                if (oF is not null && !oSeen.Add(oF.Id))
+                    Err($".items: duplicate id '{oF.Id}'");
+                else if (oF is not null)
+                    aItems.Add(oF);
+            }
+        }
+        if (aItems.Count == 0)
+            Err(".items missing or empty");
+
+        if (aErrors.Count > nBefore)
+            return null;
+
+        return new PartFeatures
+        {
+            PartId = strId,
+            Citation = strCitation,
+            ModelSha256 = strSha,
+            Revision = strRevision,
+            Frame = strFrame,
+            NotModelled = aNotModelled,
+            Items = aItems,
+            FileSha256 = Convert.ToHexStringLower(SHA256.HashData(abFile)),
+            RegistryCommit = GitHead.StrResolve(strRegistryDir) ?? "unresolved",
+        };
+    }
+
+    private static JsonDocument? ODocOrError(byte[] ab, string strFile, List<string> aErrors)
+    {
+        try
+        {
+            return JsonDocument.Parse(ab);
+        }
+        catch (JsonException e)
+        {
+            aErrors.Add($"{strFile}: not valid JSON ({e.Message})");
+            return null;
+        }
+    }
+
+    /// <summary>The string at <paramref name="strKey"/>, or null when absent or not a string.</summary>
+    private static string? StrOrNull(JsonElement o, string strKey)
+        => o.ValueKind == JsonValueKind.Object && o.TryGetProperty(strKey, out JsonElement v)
+           && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    private static void UnknownKeys(JsonElement o, string strWhere, Action<string> Err, params string[] aAllowed)
+    {
+        foreach (JsonProperty p in o.EnumerateObject())
+            if (!aAllowed.Contains(p.Name))
+                Err($"{strWhere} has unknown key '{p.Name}'");
+    }
+
+    /// <summary>The same gate DataStore applies to citations (main, PR #42): a SiYuan
+    /// block id, URL, kernel address or .sy path is a projection, never a source.</summary>
+    private static void NoSiyuan(string? strText, string strWhere, Action<string> Err)
+    {
+        if (DataStore.StrSiyuanReference(strText) is { } strLabel)
+            Err($"{strWhere} references SiYuan ({strLabel}): a projection is never a source (OpenKnowledgeCore ADR-0001)");
+    }
+
+    private static readonly string[] s_aAccessKinds = ["connector", "switch", "card_slot", "antenna", "optic"];
+    private static readonly string[] s_aKinds = ["board", "connector", "switch", "card_slot", "antenna", "optic", "component"];
+
+    private static PartFeature? OParseFeature(JsonElement o, string strWhere, Action<string> Err)
+    {
+        if (o.ValueKind != JsonValueKind.Object)
+        {
+            Err($"{strWhere} must be an object");
+            return null;
+        }
+        foreach (JsonProperty p in o.EnumerateObject())
+            if (p.Name is not ("id" or "kind" or "box_mm" or "cylinder_mm" or "source" or "access"))
+                Err($"{strWhere} has unknown key '{p.Name}'");
+
+        string? strId = StrOrNull(o, "id");
+        string? strKind = StrOrNull(o, "kind");
+        string? strSource = StrOrNull(o, "source");
+        if (string.IsNullOrWhiteSpace(strId) || strKind is null || !s_aKinds.Contains(strKind)
+            || string.IsNullOrWhiteSpace(strSource))
+        {
+            Err($"{strWhere}: id, a known kind and a source are all required");
+            return null;
+        }
+        strWhere += $" '{strId}'";
+        NoSiyuan(strSource, $"{strWhere}.source", Err);
+
+        static double[]? AVec3(JsonElement parent, string strKey)
+        {
+            if (!parent.TryGetProperty(strKey, out JsonElement v) || v.ValueKind != JsonValueKind.Array
+                || v.GetArrayLength() != 3 || v.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.Number))
+                return null;
+            return [.. v.EnumerateArray().Select(e => e.GetDouble())];
+        }
+
+        double[]? aMin = null, aMax = null;
+        FeatureCylinder? oCyl = null;
+        bool bBox = o.TryGetProperty("box_mm", out JsonElement oBox);
+        bool bCyl = o.TryGetProperty("cylinder_mm", out JsonElement oC);
+        if (bBox == bCyl)
+        {
+            Err($"{strWhere}: exactly one of box_mm or cylinder_mm");
+            return null;
+        }
+        if ((bBox ? oBox : oC).ValueKind != JsonValueKind.Object)
+        {
+            Err($"{strWhere}: {(bBox ? "box_mm" : "cylinder_mm")} must be an object");
+            return null;
+        }
+        if (bBox)
+        {
+            UnknownKeys(oBox, $"{strWhere}.box_mm", Err, "min_mm", "max_mm");
+            aMin = AVec3(oBox, "min_mm");
+            aMax = AVec3(oBox, "max_mm");
+            if (aMin is null || aMax is null || Enumerable.Range(0, 3).Any(k => aMin[k] >= aMax[k]))
+            {
+                Err($"{strWhere}: box_mm needs min_mm below max_mm on every axis");
+                return null;
+            }
+        }
+        else
+        {
+            UnknownKeys(oC, $"{strWhere}.cylinder_mm", Err, "axis", "base_mm", "length_mm", "diameter_mm");
+            Axis? eAxis = AxisExt.OParse(StrOrNull(oC, "axis"));
+            double[]? aBase = AVec3(oC, "base_mm");
+            double fLen = oC.TryGetProperty("length_mm", out JsonElement oL) && oL.ValueKind == JsonValueKind.Number ? oL.GetDouble() : 0;
+            double fDia = oC.TryGetProperty("diameter_mm", out JsonElement oD) && oD.ValueKind == JsonValueKind.Number ? oD.GetDouble() : 0;
+            if (eAxis is null || aBase is null || fLen <= 0 || fDia <= 0)
+            {
+                Err($"{strWhere}: cylinder_mm needs an axis, base_mm, and positive length_mm and diameter_mm");
+                return null;
+            }
+            oCyl = new FeatureCylinder { Axis = eAxis.Value, BaseMm = aBase, LengthMm = fLen, DiameterMm = fDia };
+        }
+
+        FeatureAccess? oAccess = null;
+        if (o.TryGetProperty("access", out JsonElement oAcc) && oAcc.ValueKind == JsonValueKind.Object)
+        {
+            UnknownKeys(oAcc, $"{strWhere}.access", Err, "direction", "depth_mm", "section_mm", "source");
+            Axis? eDir = null;
+            if (oAcc.TryGetProperty("direction", out JsonElement oDir) && oDir.ValueKind != JsonValueKind.Null)
+            {
+                eDir = AxisExt.OParse(StrOrNull(oAcc, "direction"));
+                if (eDir is null)
+                    Err($"{strWhere}: access.direction must be ±x/±y/±z or null");
+            }
+            double? fDepth = null;
+            if (oAcc.TryGetProperty("depth_mm", out JsonElement oDep) && oDep.ValueKind != JsonValueKind.Null)
+            {
+                if (oDep.ValueKind != JsonValueKind.Number || oDep.GetDouble() <= 0)
+                    Err($"{strWhere}: access.depth_mm must be positive or null");
+                else
+                    fDepth = oDep.GetDouble();
+            }
+            double[]? aSection = null;
+            if (oAcc.TryGetProperty("section_mm", out JsonElement oSec))
+            {
+                if (oSec.ValueKind != JsonValueKind.Array || oSec.GetArrayLength() != 2
+                    || oSec.EnumerateArray().Any(e => e.ValueKind != JsonValueKind.Number || e.GetDouble() <= 0))
+                    Err($"{strWhere}: access.section_mm must be two positive numbers");
+                else
+                    aSection = [.. oSec.EnumerateArray().Select(e => e.GetDouble())];
+            }
+            string strAccSource = StrOrNull(oAcc, "source") ?? "";
+            if (string.IsNullOrWhiteSpace(strAccSource))
+                Err($"{strWhere}: access has no source");
+            NoSiyuan(strAccSource, $"{strWhere}.access.source", Err);
+            oAccess = new FeatureAccess { Direction = eDir, DepthMm = fDepth, SectionMm = aSection, Source = strAccSource };
+        }
+        else if (s_aAccessKinds.Contains(strKind))
+        {
+            Err($"{strWhere}: a {strKind} must declare access (null direction/depth = unknown)");
+        }
+
+        return new PartFeature
+        {
+            Id = strId,
+            Kind = strKind,
+            MinMm = aMin,
+            MaxMm = aMax,
+            Cylinder = oCyl,
+            Source = strSource,
+            Access = oAccess,
+        };
+    }
+
     private static PartEntry? OParse(
         string strId, string strRel, JsonElement oRoot, JsonElement oEnv, byte[] abFile, List<string> aErrors)
     {
