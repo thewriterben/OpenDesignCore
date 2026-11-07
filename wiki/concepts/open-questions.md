@@ -1,7 +1,7 @@
 ---
 title: Open questions
 type: concept
-updated: 2026-09-11
+updated: 2026-09-25
 sources: []
 ---
 
@@ -162,3 +162,14 @@ sources: []
     reproduction and the measured numbers ready to paste. Marked `TODO(report)` there.
     Generalises beyond this vendor: the asterisk pattern — a precise-looking figure citing a page with no
     measurement in it — is worth checking for on every instrument spec this platform reads.
+
+22. **Who owns the certification record?** (opened 2026-09-25, from [[makerspace-operations]]). Every
+    enforcement mechanism a shared-machine facility uses — reservation refusal, badge-to-machine enable,
+    expiry, "blacklisted pending review" — hangs off one record: *person × tool × method × validator ×
+    expiry*. No peer holds it. OpenBuildCore owns machines and their calibration; AdvancedStudio approves
+    per proposal without knowing who proposed; ODC must not (ADR-0009). Three candidates: a table on
+    OpenBuildCore beside `machines.json` (it already refuses half-made calibration claims, and the same
+    validator shape fits); a new peer for people and access; or adopting NIST's open-source NEMO, which
+    the book credits with certifications, maintenance tracking and billing — **a description, not a
+    reading**, so the adopt-or-build choice needs the tool read first. Not this quarter's problem unless
+    a real facility is being run on the platform; recorded so the gap is not rediscovered.

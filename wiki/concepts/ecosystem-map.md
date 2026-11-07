@@ -1,7 +1,7 @@
 ---
 title: Ecosystem map
 type: concept
-updated: 2026-09-11
+updated: 2026-09-25
 sources:
   - Oh-Ben-Claw/README.md, docs/ECOSYSTEM-INTEGRATION.md
   - OBC-Prime/PLAN.md (§2 four-repo assessment)
@@ -44,5 +44,9 @@ Every repo independently arrived at the same patterns:
 - Schematic capture / circuit design / PCB layout (BINGO Tier 3 *assembles* PCBs; nothing *designs* them)
 - BOM generation and live component sourcing (Accelerapp's cost analyzer is closest, but no distributor integration)
 - Multi-domain co-design: board outline ↔ enclosure ↔ thermal ↔ mounting as one constrained problem
+- Facility operations for shared machines — *who is certified on what, until when*, whether a
+  machine's maintenance is current, a reservation tied to the tool. Machines and calibration have a
+  home (OpenBuildCore), approvals have one per proposal (AdvancedStudio); **nobody owns the person**.
+  See [[makerspace-operations]] (2026-09-25).
 
 See [[use-case-exploration]] for the full use-case space and [[open-questions]] for unresolved scope decisions.

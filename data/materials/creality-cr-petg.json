@@ -1,0 +1,10 @@
+{
+  "id": "materials/creality-cr-petg",
+  "name": "Creality CR-PETG (FDM, 1.75 mm)",
+  "description": "Source document: Creality TDS v1.0, private vault copy, terms checked by thewriterben 2026-11-06. A specific filament, not a generic class, so a calibration measurement can attach to the spool that produced it. The vendor TDS v1.0 (cited) gives density 1.27 g/cm3, HDT 70 C at 0.45 MPa and a 230-250 C nozzle range, all held with page citations in OpenPartsCore material/creality-cr-petg, where two mislabelled rows in the document are also flagged. It gives no shrinkage figure and no dimensional tolerance, so shrinkage_pct_range and fdm_tolerance_mm are absent here: absent means unmeasured, never zero. They are discharged only by a calibration run in the ledger (ADR-0006, ADR-0013). Loaded in the K2 Plus CFS as RFID 06001 on 2026-11-06. No filament_ref: the Open Filament Database at release dataset-v2026.11.07 lists CR-PETG with a single variant (brown), and the spools loaded in CFS slots 2 and 3 are black (#000000) and blue (#1b04ae) as reported by the printer. ADR-0013 requires the variant that was loaded, not the product line, so the reference waits for the catalogue to carry those colours.",
+  "source": {
+    "citation": "vault:sha256:ea0b2c0f7431f523d4a2615a34181b836102ac6018e55cfe035fbabb1f6328bb",
+    "url": "https://assets.spoolscout.com/tds-sds/creality/tds/creality-cr-petg-tds-v1.0-2021-11.pdf",
+    "retrieved": "2026-11-06"
+  }
+}
