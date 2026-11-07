@@ -100,6 +100,32 @@ public static class DataStore
         ("SiYuan .sy file path", new(@"(^|[\\/ ])[^\s\\/]+\.sy(\b|$)")),
     ];
 
+    // Strict citation forms, copied from OpenPartsCore scripts/validate.py (CITATION_FORMS),
+    // which follows OpenKnowledgeCore ADR-0001. Keep in step with that file (ADR-0023).
+    private static readonly (string strForm, System.Text.RegularExpressions.Regex oPattern)[] s_aCitationForms =
+    [
+        ("vault", new(@"^vault:sha256:[0-9a-f]{64}(#page=\d+)?$")),
+        ("repo", new(@"^repo:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{7,40}:[^\s:][^\s]*$")),
+        ("ledger", new(@"^ledger:[a-z0-9_-]+:[A-Za-z0-9_.-]+$")),
+        ("doi", new(@"^doi:10\.\d{4,9}/\S+$")),
+        ("arxiv", new(@"^arxiv:\d{4}\.\d{4,5}(v\d+)?$")),
+        ("standard", new(@"^standard:[A-Z][A-Z0-9/ -]*? [0-9][0-9.-]*:(19|20)\d{2}$")),
+    ];
+
+    /// <summary>Namespaces whose citations must take one of the strict forms (ADR-0023).</summary>
+    public static readonly IReadOnlySet<string> StrictNamespaces = new HashSet<string>(StringComparer.Ordinal) { "materials" };
+
+    /// <summary>The strict form the citation takes ("vault", "repo", ...), or null when it is free text.</summary>
+    public static string? StrCitationForm(string? strCitation)
+    {
+        if (string.IsNullOrEmpty(strCitation)) return null;
+        foreach ((string strForm, System.Text.RegularExpressions.Regex oPattern) in s_aCitationForms)
+        {
+            if (oPattern.IsMatch(strCitation)) return strForm;
+        }
+        return null;
+    }
+
     /// <summary>The label of the first SiYuan pattern the text matches, or null when it references none.</summary>
     internal static string? StrSiyuanReference(string? strText)
     {
@@ -117,6 +143,8 @@ public static class DataStore
             aErrors.Add($"{strId}: id must start with '{strNamespace}/'");
         if (string.IsNullOrWhiteSpace(oSource.Citation))
             aErrors.Add($"{strId}: empty citation — uncited values are invalid (ADR-0006)");
+        else if (StrictNamespaces.Contains(strNamespace) && StrCitationForm(oSource.Citation) is null)
+            aErrors.Add($"{strId}: citation is free text; '{strNamespace}' takes only vault:, repo:, ledger:, doi:, arxiv: or standard: forms, with prose in the description (ADR-0023)");
         foreach (string? strText in new[] { oSource.Citation, oSource.Url })
         {
             if (StrSiyuanReference(strText) is { } strLabel)

@@ -9,7 +9,7 @@ using Xunit.Abstractions;
 namespace OpenDesignCore.Tests;
 
 /// <summary>
-/// The assembly check (ADR-0023) on synthetic parts whose answer is known by
+/// The assembly check (ADR-0024) on synthetic parts whose answer is known by
 /// construction, plus the two PicoGK behaviours it rests on — measured, not
 /// read off a signature (CLAUDE.md: a dependency's signature is a claim).
 ///

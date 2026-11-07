@@ -17,7 +17,7 @@ namespace OpenDesignCore.Tests;
 /// carry a USB-C receptacle and two JST connectors exactly where the slots bit.
 /// v0.2 then fitted the lens and put a solid base under the USB-C port. Both
 /// passed every geometric check here, because those checks compared the
-/// fixture with its own specification. Since ADR-0023 the run also checks the
+/// fixture with its own specification. Since ADR-0024 the run also checks the
 /// fixture against the board's OpenPartsCore features and refuses to export
 /// on a collision. v0.3 hangs the board USB edge up and passes; geometry is
 /// tested at the model, and the run is tested both for refusing (unmeasured

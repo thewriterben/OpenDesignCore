@@ -15,7 +15,7 @@ namespace OpenDesignCore.Fit;
 /// square to the fixture's axes, and under a signed permutation an
 /// axis-aligned box stays an axis-aligned box — so the check stays exact
 /// rather than approximating rotated geometry. A general rotation is a change
-/// for when a fixture needs one (ADR-0023).
+/// for when a fixture needs one (ADR-0024).
 /// </para>
 /// </summary>
 public sealed record PartPlacement
@@ -110,7 +110,7 @@ public sealed record AssemblyViolation
 /// The outcome of checking one fixture against one part's features. Nothing
 /// here is advisory: every list is part of the answer, and
 /// <see cref="BPassed"/> is false while any of them says the check could not
-/// see something it needed to (ADR-0023).
+/// see something it needed to (ADR-0024).
 /// </summary>
 public sealed record AssemblyCheckResult
 {
@@ -202,7 +202,7 @@ public sealed class AssemblyCheckFailedException(AssemblyCheckResult oResult) : 
 }
 
 /// <summary>
-/// Does a fixture leave room for the part it was made for? (ADR-0023)
+/// Does a fixture leave room for the part it was made for? (ADR-0024)
 ///
 /// <para>
 /// Two camera mounts passed every check this repo had and neither could be

@@ -639,7 +639,7 @@ if (args is ["run-camera-mount", ..])
             : oMountDefault.LensOnLowZFace,
     };
 
-    // The assembly check (ADR-0023). Tolerance is an input like the voxel
+    // The assembly check (ADR-0024). Tolerance is an input like the voxel
     // size: no default, because a default would be a constant nobody chose.
     if (!oOpts.TryGetValue("tolerance-mm", out string? strMountTol)
         || !float.TryParse(strMountTol, System.Globalization.CultureInfo.InvariantCulture,
@@ -647,7 +647,7 @@ if (args is ["run-camera-mount", ..])
     {
         Console.Error.WriteLine(
             "--tolerance-mm is required: the assembly check treats surfaces closer than this as "
-            + "touching, it must span at least two voxels, and it takes no default (ADR-0023).");
+            + "touching, it must span at least two voxels, and it takes no default (ADR-0024).");
         return 2;
     }
     List<string> aFeatureErrors = [];
@@ -737,7 +737,7 @@ if (args is ["run-sensor-node-enclosure", ..])
     {
         Console.Error.WriteLine(
             "--tolerance-mm is required: the assembly check treats surfaces closer than this as "
-            + "touching, it must span at least two voxels, and it takes no default (ADR-0023).");
+            + "touching, it must span at least two voxels, and it takes no default (ADR-0024).");
         return 2;
     }
     List<string> aEncErrors = [];

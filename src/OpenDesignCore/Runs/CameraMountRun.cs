@@ -27,7 +27,7 @@ public sealed record CameraMountRunResult
 /// </summary>
 public static class CameraMountRun
 {
-    /// <param name="oFeatures">The board's OpenPartsCore features; the fixture is checked against them before export (ADR-0023).</param>
+    /// <param name="oFeatures">The board's OpenPartsCore features; the fixture is checked against them before export (ADR-0024).</param>
     /// <param name="fToleranceMm">Assembly-check tolerance, mm: surfaces closer than this count as touching. At least two voxels.</param>
     /// <param name="aAcceptUnverifiedAccess">Feature ids whose unknown access the caller has reviewed and accepts. Recorded in the sidecar.</param>
     public static CameraMountRunResult Execute(
@@ -135,7 +135,7 @@ public static class CameraMountRun
                     + "the slots bit. The outline was right and the SURFACE was never "
                     + "captured. v0.2 then put the USB-C port into its base. Both are why this "
                     + "run now checks the fixture against the board's OpenPartsCore features "
-                    + "before export; the result is under assembly_check (ADR-0023).",
+                    + "before export; the result is under assembly_check (ADR-0024).",
                 "Retention is the bore's own friction, so a loose bore is not a cosmetic "
                     + "problem - it is the fixture failing to hold anything. If the board "
                     + "slides out under its own weight, the bore is too large; go down a rung.",

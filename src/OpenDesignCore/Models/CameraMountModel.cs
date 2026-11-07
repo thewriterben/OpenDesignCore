@@ -52,7 +52,7 @@ public sealed record CameraMountParams
     /// <para>
     /// Since v0.3 the lower edge is the one <i>opposite</i> the USB-C: the board
     /// hangs USB edge up, because v0.2 hung it USB edge down onto a base that
-    /// swallowed the port (ADR-0023). Nothing on the vendor model overhangs
+    /// swallowed the port (ADR-0024). Nothing on the vendor model overhangs
     /// the lower edge, so this gap only has to keep the board off the base and
     /// bound its roll about the lens axis.
     /// </para>
@@ -84,7 +84,7 @@ public sealed record CameraMountParams
     public required float PlateHeadroomMm { get; init; }
 
     // ── Where the lens sits on the board: needed to place the board's
-    //    features for the assembly check (ADR-0023). ──
+    //    features for the assembly check (ADR-0024). ──
 
     /// <summary>Lens tip to the PCB face it stands on, mm. Measured.</summary>
     public required float LensTipFromPcbMm { get; init; }
@@ -160,7 +160,7 @@ public sealed record CameraMountParams
 /// <b>v0.3.</b>
 /// <para>
 /// The same plate and bore as v0.2, with the board turned over. The assembly
-/// check (ADR-0023) finds no contact and no blocked access for any plug length
+/// check (ADR-0024) finds no contact and no blocked access for any plug length
 /// and any lens offset within ±2 mm of centre
 /// (<c>tests/reference/RetroactiveFixtureCheckTest.cs</c>). The run still
 /// refuses to export until the lens axis's position across the board is
@@ -185,7 +185,7 @@ public sealed record CameraMountParams
 /// the base. The zone list below was written from photographs and called the
 /// bottom edge safe; the vendor STEP shows it is not. The list is kept as the
 /// record of what was believed. The authority is now the board's OpenPartsCore
-/// features, which the run checks the fixture against before export (ADR-0023).
+/// features, which the run checks the fixture against before export (ADR-0024).
 /// </para>
 ///
 /// <b>Clearance zones on this board, as written for v0.2 from photographs.</b>
@@ -256,7 +256,7 @@ public static class CameraMountModel
 
     /// <summary>
     /// Where the board sits in this fixture, in the frame of its OpenPartsCore
-    /// features (ADR-0023): the lens axis on the bore axis, the lip on the
+    /// features (ADR-0024): the lens axis on the bore axis, the lip on the
     /// pocket floor, the board's bottom edge up the fixture's +Z. The laminate
     /// comes from the features' own <c>Board</c> item, so the placement rests
     /// on the registry rather than on a board size typed here.

@@ -10,7 +10,7 @@ using Xunit.Abstractions;
 namespace OpenDesignCore.Tests.Reference;
 
 /// <summary>
-/// Reference case: the assembly check (ADR-0023) must reject the two camera
+/// Reference case: the assembly check (ADR-0024) must reject the two camera
 /// mounts that were printed and could not be used — for the reasons they
 /// actually failed on the bench.
 ///

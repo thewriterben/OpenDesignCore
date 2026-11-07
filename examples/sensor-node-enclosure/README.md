@@ -58,7 +58,7 @@ The screws clamp the board between the base bosses and the lid posts. The walls 
 
 | Check | How | Result |
 |---|---|---|
-| The board goes in with both halves on, and no plastic sits in any described part (PCB, U1, U2, R1–R3, C1–C4, J1, J2, U1-ANT) | ADR-0023 assembly check on base + lid in the assembled pose, tolerance 0.2 mm, before export | Passed. No contact violations |
+| The board goes in with both halves on, and no plastic sits in any described part (PCB, U1, U2, R1–R3, C1–C4, J1, J2, U1-ANT) | ADR-0024 assembly check on base + lid in the assembled pose, tolerance 0.2 mm, before export | Passed. No contact violations |
 | Header access (J1 SENSOR, J2 PROG) | Not provable by the assembly check: the registry has no socket-housing depth, and the pins stand above the lid top. The run accepts the unknown by id. A separate test checks that a housing 0.3 mm wider than each header on every side, from the lid top down to 0.1 mm above the board, meets no lid plastic | Passed (`ASocketHousingReachesBothHeaders`) |
 | Antenna zone (y > -13.25) is thin plastic only | A 2 x 2 mm column through the lid and the base at (22, -5) measures 1.2 mm. The same column at (22, -44) measures 2.0 mm (lid) and 3.6 mm (floor). The y = 0 end wall is 1.2 mm | Passed (`TheAntennaZoneIsThinPlasticAndTheRestIsFullWall`) |
 | No metal and no boss or post in the antenna zone | Parameter check: nut corner (r 3.40), screw head (r 2.75) and boss (r 3.25) around each hole. Holes H1/H2 at y = -17 reach y = -13.60. A hole moved into the zone is refused | Passed (`AHoleInTheAntennaZoneIsRefused`) |

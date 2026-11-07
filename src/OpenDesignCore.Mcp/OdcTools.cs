@@ -83,7 +83,7 @@ public sealed class OdcTools
             summary = "Bench fixture locating a camera board on its lens barrel: the barrel "
                 + "passes through a bore and its lip seats in a pocket. Board figures are "
                 + "measurements of one physical board, not a datasheet. Checked against the "
-                + "board's OpenPartsCore features before export (ADR-0023). v0.3 hangs the "
+                + "board's OpenPartsCore features before export (ADR-0024). v0.3 hangs the "
                 + "board USB edge up so the ports face open air; v0.2 hung it USB edge down "
                 + "onto a base that blocked the USB-C port.",
             parameters = new[] { "barrel_diameter_mm", "bore_diameter_mm", "barrel_free_length_mm", "lip_diameter_mm", "axis_to_usb_edge_mm", "board_length_mm", "floor_drop_mm", "bore_land_mm", "plate_thickness_mm", "lip_pocket_mm", "base_thickness_mm", "base_front_mm", "base_back_mm", "width_mm", "plate_headroom_mm", "lens_tip_from_pcb_mm", "lens_axis_from_low_x_edge_mm", "lens_on_low_z_face", "tolerance_mm", "voxel_mm" },
@@ -96,7 +96,7 @@ public sealed class OdcTools
             summary = "Two-part screwed enclosure (base and lid) for the OpenCircuitCore sensor-node, "
                 + "cut around the board's OpenPartsCore features: M3 bosses with trapped nuts, header "
                 + "windows over J1/J2, a baffled and vented BME280 chamber, and thin plastic with no "
-                + "fasteners over the antenna zone. Checked against the features before export (ADR-0023). "
+                + "fasteners over the antenna zone. Checked against the features before export (ADR-0024). "
                 + "CLI only: run-sensor-node-enclosure.",
             parameters = new[] { "voxel_mm", "tolerance_mm", "accept_unverified_access" },
             resolution_floor = "min(thin wall, vent, baffle, edge clearance, seam gap, nut pocket clearance / 2) / 2",
