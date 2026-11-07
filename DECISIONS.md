@@ -647,3 +647,19 @@ So the renderer is deterministic and only its metadata is not - a wall clock and
 **Consequences.** Two records can now exist for one artifact, one about numbers and one about pixels, and it must stay obvious which is which - hence the schema name, the separate model id and the caveats. Blender remains optional: absent, `render-thumbnail` exits 3 and writes nothing, the same "skipped is not passed" rule as `verify-artifact`.
 
 The determinism claim is pinned by a test that renders twice and compares hashes, and it returns early when `ODC_BLENDER` is unset, because CI has no Blender and a check that cannot run must not look like one that passed. That test also asserts the camera's ortho scale is the box diagonal times the margin - if the framing ever stops being arithmetic on the bounding box, "render it again and compare" has stopped being true, and this is where that would be caught.
+
+## ADR-0023 - Material citations take the strict forms
+
+**Date:** 2026-11-07
+**Status:** accepted
+
+**Context.** `DataStore` rejected empty citations (ADR-0006) and, since PR #42, citations that reference SiYuan. Anything else passed, so a citation could be a paragraph. OpenPartsCore went strict namespace by namespace and now runs `--strict` everywhere (its PR #14 for `material/`, PR #17 for the rest), using the forms in its `scripts/validate.py`, which follow OpenKnowledgeCore ADR-0001: a citation is a pointer to archived bytes, not prose. Here, the two Creality entries already used `vault:sha256:`; `pla-generic.json` cited the studio research report in a sentence that also carried its `TODO(source)`.
+
+**Options.**
+1. Leave ODC loose and rely on review - a free-text citation is invisible until someone tries to follow it.
+2. Strict everywhere in one change - `materials` is the only namespace this repo owns (parts come from OpenPartsCore, already strict there), so this is the same as option 3 today.
+3. A set of strict namespaces in `DataStore`, starting with `materials`, using a copy of OpenPartsCore's `CITATION_FORMS`.
+
+**Decision.** Option 3. In a strict namespace a citation must match one of `vault:sha256:<hex>(#page=N)`, `repo:owner/name@sha:path`, `ledger:<db>:<id>`, `doi:`, `arxiv:` or `standard:<body> <number>:<year>`; anything else fails load naming the entry. The patterns are copied from OpenPartsCore and must be kept in step with that file. Prose that explains a citation goes in `description`, since `SourceCitation` has no `note` (OpenPartsCore has one, its ADR-0009; nothing here needs it yet). The research report was archived in the OpenKnowledgeCore vault (sha256 `20269f9b...`, unchanged since 2026-07-12) and `pla-generic.json` now cites it by hash.
+
+**Consequences.** `pla-generic.json` keeps its values and its `TODO(source)`, now in the description: pinning the report by hash makes the citation followable, not the values primary. Only a vendor TDS or a ledger measurement discharges it (as ADR-0013 already says). A new strict namespace is one line in `DataStore.StrictNamespaces` plus migrating its entries. ODC's SiYuan check still reads only `citation` and `url`, not every string as OpenPartsCore does; that gap is unchanged here.
