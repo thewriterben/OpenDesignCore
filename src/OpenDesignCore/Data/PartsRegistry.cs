@@ -167,7 +167,7 @@ public static class PartsRegistry
         string strCitation = "", strSha = "", strRevision = "";
         if (oFeat.TryGetProperty("source", out JsonElement oSrc) && oSrc.ValueKind == JsonValueKind.Object)
         {
-            UnknownKeys(oSrc, ".source", Err, "citation", "model_sha256", "revision", "url", "retrieved");
+            UnknownKeys(oSrc, ".source", Err, "citation", "model_sha256", "revision", "url", "retrieved", "note");
             strCitation = StrOf(oSrc, "citation", ".source");
             strSha = StrOf(oSrc, "model_sha256", ".source");
             strRevision = StrOf(oSrc, "revision", ".source");

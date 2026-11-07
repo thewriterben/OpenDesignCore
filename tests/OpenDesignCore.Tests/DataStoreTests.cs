@@ -63,7 +63,9 @@ public sealed class DataStoreTests : IDisposable
         Assert.Equal(25.5, oPart.EnvelopeMm.Y);
         Assert.Equal(3.1, oPart.EnvelopeMm.Z);
         Assert.Equal(0.2, oPart.ToleranceMm);
-        Assert.Contains("Table 1-1", oPart.Source.Citation);
+        // OpenPartsCore cites the archived datasheet by hash (its strict gate);
+        // the page and table moved to the source's note, which ODC does not load.
+        Assert.StartsWith("vault:sha256:27d71971da07c280c6068d08c74720d1a25b8f20cf8494dc1765bdd28d40d435#page=", oPart.Source.Citation);
 
         // The generic multi-bridge board can never carry an envelope, and is
         // listed as not offered rather than dropped.
