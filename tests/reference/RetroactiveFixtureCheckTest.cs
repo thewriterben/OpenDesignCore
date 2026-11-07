@@ -62,7 +62,7 @@ public sealed class RetroactiveFixtureCheckTest(ITestOutputHelper oOutput)
         PartFeatures? o = PartsRegistry.OLoadFeatures(strDir, PartId, aErrors);
         Assert.True(o is not null,
             "OpenPartsCore is checked out but gives no usable features for the camera board. "
-            + "These tests need OpenPartsCore ADR-0008's data (branch features-lilygo-camera): "
+            + "These tests need OpenPartsCore ADR-0008's data (on its main since PR #18): "
             + string.Join("; ", aErrors));
         return o;
     }

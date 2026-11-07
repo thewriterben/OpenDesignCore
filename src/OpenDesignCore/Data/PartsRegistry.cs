@@ -232,6 +232,87 @@ public static class PartsRegistry
         };
     }
 
+    /// <summary>
+    /// The one frame <c>attributes.mounting_holes</c> may be written in. The
+    /// holes are absences in the Board item, not items, so they sit outside
+    /// <c>features</c> in KiCad's frame; this is the only conversion to the
+    /// features frame this engine knows. Any other wording is refused rather
+    /// than guessed at.
+    /// </summary>
+    public const string StrKiCadHoleFrame =
+        "KiCad board frame (y down from the top edge); features use the STEP frame, y negated";
+
+    /// <summary>
+    /// The mounting holes of the entry <paramref name="oFeatures"/> came from,
+    /// converted to the features frame, or null with the reason in
+    /// <paramref name="aErrors"/>. The file is read again and must hash to
+    /// <see cref="PartFeatures.FileSha256"/>, so the holes come from the same
+    /// bytes the sidecar pins. Each hole must lie inside the Board item.
+    /// </summary>
+    public static IReadOnlyList<MountingHole>? OLoadMountingHoles(
+        string strRegistryDir, PartFeatures oFeatures, List<string> aErrors)
+    {
+        string strId = oFeatures.PartId;
+        int nSlash = strId.IndexOf('/');
+        string strFile = Path.Combine(strRegistryDir, "data", strId[..nSlash], strId[(nSlash + 1)..] + ".json");
+        byte[] abFile = File.Exists(strFile) ? File.ReadAllBytes(strFile) : [];
+        if (Convert.ToHexStringLower(SHA256.HashData(abFile)) != oFeatures.FileSha256)
+        {
+            aErrors.Add($"{strId}: {strFile} changed since its features were read; refusing to mix two versions.");
+            return null;
+        }
+        using JsonDocument? oDoc = ODocOrError(abFile, strFile, aErrors);
+        if (oDoc is null)
+            return null;
+        if (!oDoc.RootElement.TryGetProperty("attributes", out JsonElement oAttr)
+            || oAttr.ValueKind != JsonValueKind.Object
+            || !oAttr.TryGetProperty("mounting_holes", out JsonElement oHoles)
+            || oHoles.ValueKind != JsonValueKind.Array || oHoles.GetArrayLength() == 0)
+        {
+            aErrors.Add($"{strId}: the registry lists no attributes.mounting_holes.");
+            return null;
+        }
+
+        PartFeature? oBoard = oFeatures.Items.FirstOrDefault(i => i.Kind == "board");
+        if (oBoard is null)
+        {
+            aErrors.Add($"{strId}: features have no board item to check the holes against.");
+            return null;
+        }
+        (double[] aMin, double[] aMax) = oBoard.OBounds();
+
+        int nBefore = aErrors.Count;
+        List<MountingHole> aOut = [];
+        int n = 0;
+        foreach (JsonElement o in oHoles.EnumerateArray())
+        {
+            string strWhere = $"{strId}: attributes.mounting_holes[{n++}]";
+            if (o.ValueKind != JsonValueKind.Object
+                || !o.TryGetProperty("ref", out JsonElement oRef) || oRef.ValueKind != JsonValueKind.String
+                || !o.TryGetProperty("x_mm", out JsonElement oX) || oX.ValueKind != JsonValueKind.Number
+                || !o.TryGetProperty("y_mm", out JsonElement oY) || oY.ValueKind != JsonValueKind.Number)
+            {
+                aErrors.Add($"{strWhere} needs ref, x_mm and y_mm.");
+                continue;
+            }
+            string? strFrame = o.TryGetProperty("frame", out JsonElement oFr) && oFr.ValueKind == JsonValueKind.String
+                ? oFr.GetString() : null;
+            if (strFrame != StrKiCadHoleFrame)
+            {
+                aErrors.Add($"{strWhere} is in frame '{strFrame ?? "(none)"}'; only '{StrKiCadHoleFrame}' is understood.");
+                continue;
+            }
+            MountingHole h = new(oRef.GetString()!, oX.GetDouble(), -oY.GetDouble());
+            if (!(h.XMm > aMin[0] && h.XMm < aMax[0] && h.YMm > aMin[1] && h.YMm < aMax[1]))
+            {
+                aErrors.Add($"{strWhere} ({h.Ref}) lands at ({h.XMm}, {h.YMm}) in the features frame, outside the board.");
+                continue;
+            }
+            aOut.Add(h);
+        }
+        return aErrors.Count > nBefore ? null : aOut;
+    }
+
     private static JsonDocument? ODocOrError(byte[] ab, string strFile, List<string> aErrors)
     {
         try

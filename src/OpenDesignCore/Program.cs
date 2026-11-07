@@ -741,10 +741,12 @@ if (args is ["run-sensor-node-enclosure", ..])
         return 2;
     }
     List<string> aEncErrors = [];
+    string strEncParts = oOpts.GetValueOrDefault("parts", PartsRegistry.StrResolveDir(Environment.CurrentDirectory));
     PartFeatures? oNodeFeatures = PartsRegistry.OLoadFeatures(
-        oOpts.GetValueOrDefault("parts", PartsRegistry.StrResolveDir(Environment.CurrentDirectory)),
-        SensorNodeEnclosureModel.StrPartId, aEncErrors);
-    if (oNodeFeatures is null)
+        strEncParts, SensorNodeEnclosureModel.StrPartId, aEncErrors);
+    IReadOnlyList<MountingHole>? aNodeHoles = oNodeFeatures is null
+        ? null : PartsRegistry.OLoadMountingHoles(strEncParts, oNodeFeatures, aEncErrors);
+    if (oNodeFeatures is null || aNodeHoles is null)
     {
         foreach (string s in aEncErrors)
             Console.Error.WriteLine(s);
@@ -757,7 +759,7 @@ if (args is ["run-sensor-node-enclosure", ..])
     try
     {
         SensorNodeEnclosureRunResult oEnc = SensorNodeEnclosureRun.Execute(
-            SensorNodeEnclosureParams.ODefault(), fEncVoxelMm, oNodeFeatures, fEncTolMm, aEncAccept,
+            SensorNodeEnclosureParams.ODefault(), fEncVoxelMm, oNodeFeatures, aNodeHoles, fEncTolMm, aEncAccept,
             oOpts.GetValueOrDefault("artifacts", "artifacts"),
             oOpts.GetValueOrDefault("ledger", "ledger.db"),
             StrGitCommit());

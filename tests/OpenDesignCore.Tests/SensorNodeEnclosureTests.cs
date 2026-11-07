@@ -36,6 +36,81 @@ public sealed class SensorNodeEnclosureTests : IDisposable
         return o;
     }
 
+    private static IReadOnlyList<MountingHole> AHoles(PartFeatures oF)
+    {
+        List<string> aErrors = [];
+        IReadOnlyList<MountingHole>? a = PartsRegistry.OLoadMountingHoles(
+            TestRegistry.StrSiblingRegistryOrNull()!, oF, aErrors);
+        Assert.True(a is not null, string.Join("; ", aErrors));
+        return a;
+    }
+
+    private static SensorNodeLayout L(PartFeatures oF) => SensorNodeLayout.OFrom(oF, AHoles(oF));
+
+    /// <summary>
+    /// A copy of the sensor-node entry in a temp registry, with
+    /// <paramref name="Edit"/> applied to its text, and the features read from it.
+    /// </summary>
+    private (string Dir, PartFeatures F)? OEditedCopy(Func<string, string> Edit)
+    {
+        string? strReg = TestRegistry.StrSiblingRegistryOrNull();
+        if (strReg is null) return null;
+        string strRel = Path.Combine("data", "boards", "opencircuitcore-sensor-node.json");
+        string strSrc = Path.Combine(strReg, strRel);
+        if (!File.Exists(strSrc)) return null;
+        string strDst = Path.Combine(_strTempDir, strRel);
+        Directory.CreateDirectory(Path.GetDirectoryName(strDst)!);
+        File.WriteAllText(strDst, Edit(File.ReadAllText(strSrc)));
+        List<string> aErrors = [];
+        PartFeatures? o = PartsRegistry.OLoadFeatures(_strTempDir, SensorNodeEnclosureModel.StrPartId, aErrors);
+        Assert.True(o is not null, string.Join("; ", aErrors));
+        return (_strTempDir, o);
+    }
+
+    [Fact]
+    public void TheHolesComeFromTheRegistryWithYNegated()
+    {
+        PartFeatures? oF = OFeaturesOrNull();
+        if (oF is null) return;
+        Assert.Equal(
+            [new(3.5f, -17f), new(40.5f, -17f), new(3.5f, -48.5f), new(40.5f, -48.5f)],
+            L(oF).HolesMm);
+    }
+
+    [Fact]
+    public void AHoleInAnUnknownFrameIsRefused()
+    {
+        var o = OEditedCopy(s => s.Replace("features use the STEP frame, y negated", "same as features"));
+        if (o is null) return;
+        (string strDir, PartFeatures oF) = o.Value;
+        List<string> aErrors = [];
+        Assert.Null(PartsRegistry.OLoadMountingHoles(strDir, oF, aErrors));
+        Assert.Contains(aErrors, e => e.Contains("only 'KiCad board frame"));
+    }
+
+    [Fact]
+    public void AHoleOffTheBoardIsRefused()
+    {
+        var o = OEditedCopy(s => s.Replace("\"y_mm\": 48.5", "\"y_mm\": 58.5"));
+        if (o is null) return;
+        (string strDir, PartFeatures oF) = o.Value;
+        List<string> aErrors = [];
+        Assert.Null(PartsRegistry.OLoadMountingHoles(strDir, oF, aErrors));
+        Assert.Contains(aErrors, e => e.Contains("outside the board"));
+    }
+
+    [Fact]
+    public void HolesFromChangedBytesAreRefused()
+    {
+        var o = OEditedCopy(s => s);
+        if (o is null) return;
+        (string strDir, PartFeatures oF) = o.Value;
+        File.AppendAllText(Path.Combine(strDir, "data", "boards", "opencircuitcore-sensor-node.json"), " ");
+        List<string> aErrors = [];
+        Assert.Null(PartsRegistry.OLoadMountingHoles(strDir, oF, aErrors));
+        Assert.Contains(aErrors, e => e.Contains("changed since its features were read"));
+    }
+
     private static float FVoxel() => SensorNodeEnclosureModel.FResolutionFloorMm(SensorNodeEnclosureParams.ODefault());
 
     private static float FVolume(Voxels vox)
@@ -72,7 +147,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
         if (oF is null) return;
         using Library oLib = new(0.2f);
         Assert.Throws<ResolutionFloorException>(() => SensorNodeEnclosureModel.VoxBuild(
-            oLib, SensorNodeEnclosureParams.ODefault(), SensorNodeLayout.OFrom(oF), EnclosurePart.Lid, false, 0.2f));
+            oLib, SensorNodeEnclosureParams.ODefault(), L(oF), EnclosurePart.Lid, false, 0.2f));
     }
 
     [Fact]
@@ -80,12 +155,12 @@ public sealed class SensorNodeEnclosureTests : IDisposable
     {
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null) return;
-        SensorNodeEnclosureParams p = SensorNodeEnclosureParams.ODefault() with
+        SensorNodeLayout l = L(oF) with
         {
             HolesMm = [new(3.5f, -12f), new(40.5f, -17f), new(3.5f, -48.5f), new(40.5f, -48.5f)],
         };
         ArgumentException e = Assert.Throws<ArgumentException>(
-            () => SensorNodeEnclosureModel.ValidateParams(p, SensorNodeLayout.OFrom(oF)));
+            () => SensorNodeEnclosureModel.ValidateParams(SensorNodeEnclosureParams.ODefault(), l));
         Assert.Contains("antenna", e.Message);
     }
 
@@ -94,7 +169,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
     {
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null) return;
-        SensorNodeLayout l = SensorNodeLayout.OFrom(oF);
+        SensorNodeLayout l = L(oF);
         Assert.Equal(-13.25f, l.AntennaZoneYMm, 3);
         SensorNodeEnclosureModel.ValidateParams(SensorNodeEnclosureParams.ODefault(), l);
     }
@@ -105,7 +180,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null) return;
         SensorNodeEnclosureParams p = SensorNodeEnclosureParams.ODefault();
-        SensorNodeLayout l = SensorNodeLayout.OFrom(oF);
+        SensorNodeLayout l = L(oF);
         float fVoxel = FVoxel();
         using Library oLib = new(fVoxel);
         Voxels voxLid = SensorNodeEnclosureModel.VoxBuild(oLib, p, l, EnclosurePart.Lid, false, fVoxel);
@@ -139,7 +214,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null) return;
         SensorNodeEnclosureParams p = SensorNodeEnclosureParams.ODefault();
-        SensorNodeLayout l = SensorNodeLayout.OFrom(oF);
+        SensorNodeLayout l = L(oF);
         float fVoxel = FVoxel();
         using Library oLib = new(fVoxel);
         Voxels voxLid = SensorNodeEnclosureModel.VoxBuild(oLib, p, l, EnclosurePart.Lid, false, fVoxel);
@@ -163,13 +238,13 @@ public sealed class SensorNodeEnclosureTests : IDisposable
         string strLedger = Path.Combine(_strTempDir, "ledger.db");
 
         Assert.Throws<AssemblyCheckFailedException>(() =>
-            SensorNodeEnclosureRun.Execute(p, fVoxel, oF, 2 * fVoxel, [], strArtA, strLedger, "test"));
+            SensorNodeEnclosureRun.Execute(p, fVoxel, oF, AHoles(oF), 2 * fVoxel, [], strArtA, strLedger, "test"));
         Assert.False(Directory.Exists(strArtA) && Directory.EnumerateFiles(strArtA, "*", SearchOption.AllDirectories).Any());
 
         SensorNodeEnclosureRunResult r1 = SensorNodeEnclosureRun.Execute(
-            p, fVoxel, oF, 2 * fVoxel, s_aAccept, strArtA, strLedger, "test");
+            p, fVoxel, oF, AHoles(oF), 2 * fVoxel, s_aAccept, strArtA, strLedger, "test");
         SensorNodeEnclosureRunResult r2 = SensorNodeEnclosureRun.Execute(
-            p, fVoxel, oF, 2 * fVoxel, s_aAccept, strArtB, strLedger, "test");
+            p, fVoxel, oF, AHoles(oF), 2 * fVoxel, s_aAccept, strArtB, strLedger, "test");
 
         Assert.True(r1.Fit.BPassed);
         Assert.Equal(s_aAccept.Order(), r1.Fit.AccessAccepted.Select(s => s.Split(':')[0]).Order());

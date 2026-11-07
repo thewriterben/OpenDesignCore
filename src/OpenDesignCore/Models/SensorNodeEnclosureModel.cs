@@ -16,9 +16,6 @@ public enum EnclosurePart { Base, Lid }
 /// </summary>
 public sealed record SensorNodeEnclosureParams
 {
-    /// <summary>M3 hole centres in the features frame (KiCad position with y negated), mm.</summary>
-    public required IReadOnlyList<Vector2> HolesMm { get; init; }
-
     /// <summary>Gap between board edge and cavity wall, per side.</summary>
     public required float EdgeClearanceMm { get; init; }
     public required float WallMm { get; init; }
@@ -53,7 +50,6 @@ public sealed record SensorNodeEnclosureParams
     /// <summary>The defaults the run uses; sources are in <see cref="SensorNodeEnclosureRun"/>.</summary>
     public static SensorNodeEnclosureParams ODefault() => new()
     {
-        HolesMm = [new(3.5f, -17f), new(40.5f, -17f), new(3.5f, -48.5f), new(40.5f, -48.5f)],
         EdgeClearanceMm = 0.5f,
         WallMm = 2.0f,
         ThinWallMm = 1.2f,
@@ -85,6 +81,8 @@ public sealed record SensorNodeLayout
 {
     public required Vector3 BoardMin { get; init; }
     public required Vector3 BoardMax { get; init; }
+    /// <summary>M3 hole centres in the features frame, from the registry's attributes.mounting_holes.</summary>
+    public required IReadOnlyList<Vector2> HolesMm { get; init; }
     public required (Vector3 Min, Vector3 Max) J1 { get; init; }
     public required (Vector3 Min, Vector3 Max) J2 { get; init; }
     public required (Vector3 Min, Vector3 Max) U1 { get; init; }
@@ -98,7 +96,7 @@ public sealed record SensorNodeLayout
     /// <summary>Highest z of anything the lid must clear except the header pins, which pass through their windows.</summary>
     public required float TallestUnderLidZMm { get; init; }
 
-    public static SensorNodeLayout OFrom(PartFeatures oF)
+    public static SensorNodeLayout OFrom(PartFeatures oF, IReadOnlyList<MountingHole> aHoles)
     {
         (Vector3, Vector3) Box(string strId)
         {
@@ -127,6 +125,7 @@ public sealed record SensorNodeLayout
         {
             BoardMin = vecBMin,
             BoardMax = vecBMax,
+            HolesMm = aHoles.Select(h => new Vector2((float)h.XMm, (float)h.YMm)).ToList(),
             J1 = Box("J1"),
             J2 = Box("J2"),
             U1 = oU1,
@@ -214,7 +213,7 @@ public static class SensorNodeEnclosureModel
             throw new ArgumentException($"{StrModelId}: every length must be > 0.");
         if (p.ThinWallMm >= p.WallMm || p.ThinWallMm >= p.LidTopMm || p.ThinWallMm >= p.FloorMm)
             throw new ArgumentException($"{StrModelId}: ThinWallMm must be thinner than the wall, floor and lid top it thins.");
-        if (p.HolesMm.Count == 0)
+        if (l.HolesMm.Count == 0)
             throw new ArgumentException($"{StrModelId}: no mounting holes.");
 
         string Fmt(float f) => f.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
@@ -248,7 +247,7 @@ public static class SensorNodeEnclosureModel
         float fNutCornerR = (p.NutAcrossFlatsMm + p.NutPocketClearanceMm) / MathF.Sqrt(3f);
         float fMetalR = MathF.Max(fNutCornerR, p.ScrewHeadDiameterMm / 2f);
         float fFixtureR = MathF.Max(fMetalR, p.BossDiameterMm / 2f);
-        foreach (Vector2 h in p.HolesMm)
+        foreach (Vector2 h in l.HolesMm)
         {
             if (h.Y + fFixtureR >= l.AntennaZoneYMm)
                 throw new ArgumentException(
@@ -357,9 +356,9 @@ public static class SensorNodeEnclosureModel
             new(vecOMin.X + p.ThinWallMm, l.AntennaZoneYMm, fZ0 + p.ThinWallMm),
             new(vecOMax.X - p.ThinWallMm, vecIMax.Y, vecIMax.Z));
 
-        foreach (Vector2 h in p.HolesMm)
+        foreach (Vector2 h in l.HolesMm)
             vox += o.CylZ(h.X, h.Y, fZf - 0.5f, 0f, p.BossDiameterMm / 2f);
-        foreach (Vector2 h in p.HolesMm)
+        foreach (Vector2 h in l.HolesMm)
         {
             vox -= o.CylZ(h.X, h.Y, fZ0 - fOver, fZt + fOver, p.ClearanceHoleMm / 2f);
             vox -= o.HexZ(h.X, h.Y, fZ0 - fOver, FNutPocketTopZ(p), p.NutAcrossFlatsMm + p.NutPocketClearanceMm);
@@ -383,14 +382,14 @@ public static class SensorNodeEnclosureModel
             new(vecOMax.X - p.ThinWallMm, fIy1, fZt - p.ThinWallMm));
 
         // Posts down to the board face, and the baffle across the cavity.
-        foreach (Vector2 h in p.HolesMm)
+        foreach (Vector2 h in l.HolesMm)
             vox += o.CylZ(h.X, h.Y, fZb, fZc + 0.5f, p.BossDiameterMm / 2f);
         float fBy = FBaffleY(l);
         vox += o.Box(
             new(fIx0 - 0.5f, fBy - p.BaffleMm / 2f, l.BoardMax.Z + p.BaffleGapMm),
             new(fIx1 + 0.5f, fBy + p.BaffleMm / 2f, fZc + 0.5f));
 
-        foreach (Vector2 h in p.HolesMm)
+        foreach (Vector2 h in l.HolesMm)
             vox -= o.CylZ(h.X, h.Y, fZb - fOver, fZt + fOver, p.ClearanceHoleMm / 2f);
 
         // Header windows through the lid top, the full lid height.

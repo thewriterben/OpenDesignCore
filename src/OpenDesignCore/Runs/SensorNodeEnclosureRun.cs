@@ -38,13 +38,14 @@ public static class SensorNodeEnclosureRun
         SensorNodeEnclosureParams oParams,
         float fVoxelSizeMm,
         PartFeatures oFeatures,
+        IReadOnlyList<MountingHole> aHoles,
         float fToleranceMm,
         IReadOnlyCollection<string> aAcceptUnverifiedAccess,
         string strArtifactsDir,
         string strLedgerPath,
         string strCommit)
     {
-        SensorNodeLayout oLayout = SensorNodeLayout.OFrom(oFeatures);
+        SensorNodeLayout oLayout = SensorNodeLayout.OFrom(oFeatures, aHoles);
         AssemblyCheckResult oFit;
         Dictionary<EnclosurePart, (byte[] Stl, ArtifactGeometry Geo)> oParts = [];
         using (Library oLib = new(fVoxelSizeMm))
@@ -157,10 +158,10 @@ public static class SensorNodeEnclosureRun
                     ? "print: floor on the bed, z shifted so the underside is z = 0"
                     : "print: lid top on the bed, rotated 180 degrees about x: (x, y, z) -> (x, -y, lid_top - z)",
                 ["board"] = SensorNodeEnclosureModel.StrPartId,
-                ["holes_mm"] = p.HolesMm.Select(h => (object?)$"{StrF2(h.X)},{StrF2(h.Y)}").ToList(),
+                ["holes_mm"] = l.HolesMm.Select(h => (object?)$"{StrF2(h.X)},{StrF2(h.Y)}").ToList(),
                 ["holes_source"] =
-                    "OpenCircuitCore boards/sensor-node/board.manifest.json (sha256 "
-                    + "1c708612b512a67e4d74bb576a9bfe28d16d0230ce2acb68db00ed83354e9751), KiCad frame with y negated",
+                    "OpenPartsCore " + SensorNodeEnclosureModel.StrPartId + " attributes.mounting_holes "
+                    + "(the file assembly_check.registry_file_sha256 pins), KiCad frame with y negated",
                 ["edge_clearance"] = V(p.EdgeClearanceMm, strDesign + "; TODO(source): a measured XY fit on the K2 Plus"),
                 ["wall"] = V(p.WallMm, strDesign + ": about five 0.4 mm line widths"),
                 ["thin_wall_antenna"] = V(p.ThinWallMm, strDesign
