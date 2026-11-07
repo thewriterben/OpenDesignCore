@@ -653,7 +653,7 @@ The determinism claim is pinned by a test that renders twice and compares hashes
 ## ADR-0023 - A fixture is checked against the part it holds, not against itself
 
 **Date:** 2026-09-26
-**Status:** accepted. Consumes OpenPartsCore ADR-0007.
+**Status:** accepted. Consumes OpenPartsCore ADR-0008.
 
 **Context.** Two camera mounts for the LILYGO T-CameraPlus-S3 were printed and neither could be used. camera-mount/0.1 gripped the board's long edges and met the JST connectors at the bottom corners. camera-mount/0.2 held the board by its lens and put a solid base under the USB-C port. Both passed everything this repo had: resolution floor, bounding box, analytic volume, byte-identical rerun. Every one of those compares a fixture with its own parameters. None of them could ask whether the parameters described the board, and the board was described by an outline and a few caliper readings. The vendor STEP had held the connector positions the whole time.
 

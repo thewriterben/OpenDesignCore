@@ -37,7 +37,7 @@ public static class AxisExt
 }
 
 /// <summary>
-/// Volume a plug, card or finger needs kept free (OpenPartsCore ADR-0007).
+/// Volume a plug, card or finger needs kept free (OpenPartsCore ADR-0008).
 /// <see cref="Direction"/> or <see cref="DepthMm"/> null means unknown, and an
 /// unknown access is reported, never passed.
 /// </summary>
@@ -100,7 +100,7 @@ public sealed record PartFeature
 
 /// <summary>
 /// Where things are on a part, for one hardware revision (OpenPartsCore
-/// ADR-0007), as this engine read it. Coordinates are in the part's own
+/// ADR-0008), as this engine read it. Coordinates are in the part's own
 /// frame, millimetres; placing the part is the consumer's job.
 /// </summary>
 public sealed record PartFeatures

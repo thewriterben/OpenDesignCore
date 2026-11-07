@@ -112,7 +112,7 @@ public static class PartsRegistry
     }
 
     /// <summary>
-    /// The <c>features</c> block of one entry (OpenPartsCore ADR-0007), or null
+    /// The <c>features</c> block of one entry (OpenPartsCore ADR-0008), or null
     /// with the reason in <paramref name="aErrors"/>. Strict, like the
     /// envelope: this engine places geometry against these numbers, so an
     /// unknown key or a malformed item is an error rather than something to
@@ -143,7 +143,7 @@ public static class PartsRegistry
         if (!oRoot.TryGetProperty("features", out JsonElement oFeat) || oFeat.ValueKind != JsonValueKind.Object)
         {
             aErrors.Add(
-                $"{strId}: the registry has no features for this part (OpenPartsCore ADR-0007). "
+                $"{strId}: the registry has no features for this part (OpenPartsCore ADR-0008). "
                 + "A clearance check against nothing would pass everything; refusing.");
             return null;
         }

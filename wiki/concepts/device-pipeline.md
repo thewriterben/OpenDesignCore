@@ -1,7 +1,7 @@
 ---
 title: Device pipeline (Phase 1 + Phase 2)
 type: concept
-updated: 2026-11-04
+updated: 2026-11-06
 sources:
   - OpenDesignCore/DECISIONS.md (ADR-0009 execute-vs-propose, ADR-0013 FilamentRef)
   - OpenCircuitCore/DECISIONS.md (ADR-0003 KiCad direct, ADR-0005 MCP inspects only, ADR-0006 prove rules fire)
@@ -82,6 +82,6 @@ is the whole seam: two files at a process boundary, GPL stays outside, and the
 router can be swapped. Not writing a router (ROADMAP "Not ever").
 
 ## Open questions carried forward
-- Enclosure co-design for sensor-node: STEP export is one `kicad-cli pcb export step`; the ODC run needs the connector access features (OpenPartsCore ADR-0007) for the two headers before a usable enclosure exists.
+- Enclosure co-design for sensor-node: done 2026-11-06. The board's features (OpenPartsCore `boards/opencircuitcore-sensor-node`, ADR-0008) were extracted from the `kicad-cli pcb export step` output, and `examples/sensor-node-enclosure` (sensor-node-enclosure/0.1) was generated, checked against them and printed. Still open there: antenna detuning and BME280 self-heating, which the run does not model.
 - Distributor sourcing (Octopart free tier ~100 parts; Mouser/LCSC unresearched).
 - ESP-IDF 6.0 / esp-hal 1.0 migration for OBC-Prime firmware is a separate decision; `pins.rs` is plain constants and works with either.
