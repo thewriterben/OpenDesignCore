@@ -42,7 +42,7 @@ public sealed class CameraMountTests : IDisposable
     private static void Build(CameraMountParams oParams, float? fVoxelMm = null)
     {
         float fVoxel = fVoxelMm ?? CameraMountModel.FResolutionFloorMm(oParams);
-        using Library oLib = new(fVoxel);
+        using OdcLibrary oLib = new(fVoxel);
         Voxels vox = CameraMountModel.VoxBuild(oLib, oParams, fVoxel);
         CameraMountModel.Validate(vox, oParams, fVoxel);
     }
@@ -182,7 +182,7 @@ public sealed class CameraMountTests : IDisposable
     {
         CameraMountParams o = CameraMountParams.ODefault();
         float fVoxel = FVoxel();
-        using Library oLib = new(fVoxel);
+        using OdcLibrary oLib = new(fVoxel);
         Voxels vox = CameraMountModel.VoxBuild(oLib, o, fVoxel);
         vox.CalculateProperties(out float _, out BBox3 oBox);
         float fTol = 2 * fVoxel;
@@ -201,7 +201,7 @@ public sealed class CameraMountTests : IDisposable
         // slots, which is the one part of v0.1 worth keeping.
         CameraMountParams o = CameraMountParams.ODefault();
         float fVoxel = FVoxel();
-        using Library oLib = new(fVoxel);
+        using OdcLibrary oLib = new(fVoxel);
         Voxels vox = CameraMountModel.VoxBuild(oLib, o, fVoxel);
         vox.CalculateProperties(out float fMeasured, out BBox3 _);
 

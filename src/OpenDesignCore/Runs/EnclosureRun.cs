@@ -58,7 +58,7 @@ public static class EnclosureRun
 
         byte[] abStl;
         ArtifactGeometry oGeometry;
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             Voxels voxShell = EnclosureShellModel.VoxBuild(oLib, oParams, fVoxelSizeMm);
             EnclosureShellModel.Validate(voxShell, oParams, fVoxelSizeMm);

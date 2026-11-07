@@ -32,7 +32,7 @@ public sealed class CompensationRunTests : IDisposable
     {
         string strDesign = Path.Combine(_strTempDir, $"d-{fScaleX}-{fScaleY}-{fScaleZ}.stl");
         string strScan = Path.Combine(_strTempDir, $"s-{fScaleX}-{fScaleY}-{fScaleZ}.stl");
-        using (Library oLib = new(0.2f))
+        using (OdcLibrary oLib = new(0.2f))
         {
             Mesh mshDesign = Utils.mshCreateCube(oLib, new Vector3(20, 30, 10), Vector3.Zero);
             mshDesign.SaveToStlFile(strDesign, Mesh.EStlUnit.MM);
@@ -472,7 +472,7 @@ public sealed class CompensationRunTests : IDisposable
         // at the command line and lost one hop later.
         string strDesign = Path.Combine(_strTempDir, "spool-d.stl");
         string strScan = Path.Combine(_strTempDir, "spool-s.stl");
-        using (Library oLib = new(0.2f))
+        using (OdcLibrary oLib = new(0.2f))
         {
             Mesh mshDesign = Utils.mshCreateCube(oLib, new Vector3(20, 30, 10), Vector3.Zero);
             mshDesign.SaveToStlFile(strDesign, Mesh.EStlUnit.MM);

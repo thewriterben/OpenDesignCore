@@ -127,7 +127,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
     {
         // A mesh wound the wrong way voxelises to nothing or to its complement.
         const float fAf = 5.9f, fH = 3.2f;
-        using Library oLib = new(0.05f);
+        using OdcLibrary oLib = new(0.05f);
         Voxels vox = SensorNodeEnclosureModel.VoxHexPrismZ(oLib, 1f, 2f, 0f, fH, fAf);
         float fWant = MathF.Sqrt(3f) / 2f * fAf * fAf * fH;
         Assert.InRange(FVolume(vox), fWant * 0.97f, fWant * 1.03f);
@@ -145,7 +145,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
     {
         PartFeatures? oF = OFeaturesOrNull();
         if (oF is null) return;
-        using Library oLib = new(0.2f);
+        using OdcLibrary oLib = new(0.2f);
         Assert.Throws<ResolutionFloorException>(() => SensorNodeEnclosureModel.VoxBuild(
             oLib, SensorNodeEnclosureParams.ODefault(), L(oF), EnclosurePart.Lid, false, 0.2f));
     }
@@ -182,7 +182,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
         SensorNodeEnclosureParams p = SensorNodeEnclosureParams.ODefault();
         SensorNodeLayout l = L(oF);
         float fVoxel = FVoxel();
-        using Library oLib = new(fVoxel);
+        using OdcLibrary oLib = new(fVoxel);
         Voxels voxLid = SensorNodeEnclosureModel.VoxBuild(oLib, p, l, EnclosurePart.Lid, false, fVoxel);
         Voxels voxBase = SensorNodeEnclosureModel.VoxBuild(oLib, p, l, EnclosurePart.Base, false, fVoxel);
 
@@ -216,7 +216,7 @@ public sealed class SensorNodeEnclosureTests : IDisposable
         SensorNodeEnclosureParams p = SensorNodeEnclosureParams.ODefault();
         SensorNodeLayout l = L(oF);
         float fVoxel = FVoxel();
-        using Library oLib = new(fVoxel);
+        using OdcLibrary oLib = new(fVoxel);
         Voxels voxLid = SensorNodeEnclosureModel.VoxBuild(oLib, p, l, EnclosurePart.Lid, false, fVoxel);
         foreach ((Vector3 a, Vector3 b) in new[] { l.J1, l.J2 })
         {

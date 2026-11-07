@@ -58,7 +58,7 @@ public static class CalibrationBlockRun
 
         byte[] abStl;
         ArtifactGeometry oGeometry;
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             Voxels voxBlock = CalibrationBlockModel.VoxBuild(oLib, oParams, fVoxelSizeMm);
             CalibrationBlockModel.Validate(voxBlock, oParams, fVoxelSizeMm);

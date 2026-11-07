@@ -48,7 +48,7 @@ public static class SensorNodeEnclosureRun
         SensorNodeLayout oLayout = SensorNodeLayout.OFrom(oFeatures, aHoles);
         AssemblyCheckResult oFit;
         Dictionary<EnclosurePart, (byte[] Stl, ArtifactGeometry Geo)> oParts = [];
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             Voxels voxBaseA = SensorNodeEnclosureModel.VoxBuild(oLib, oParams, oLayout, EnclosurePart.Base, false, fVoxelSizeMm);
             Voxels voxLidA = SensorNodeEnclosureModel.VoxBuild(oLib, oParams, oLayout, EnclosurePart.Lid, false, fVoxelSizeMm);

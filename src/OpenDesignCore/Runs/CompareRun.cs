@@ -148,7 +148,7 @@ public static class CompareRun
         DimensionalReport oReport;
         string strDesignHash;
 
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             // The design is this engine's own export: its units are
             // authoritative and there is no scale to establish (ADR-0019).
@@ -306,7 +306,7 @@ public static class CompareRun
         DimensionalReport oReport;
         string strDesignHash, strScanHash;
 
-        using (Library oLib = new(fVoxelSizeMm))
+        using (OdcLibrary oLib = new(fVoxelSizeMm))
         {
             // Both sides go through the same strict import boundary: units
             // declared, never inferred, and each input content-addressed

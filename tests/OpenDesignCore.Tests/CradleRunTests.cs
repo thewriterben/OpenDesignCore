@@ -26,7 +26,7 @@ public sealed class CradleRunTests : IDisposable
     private string StrMakeScanStl()
     {
         string strPath = Path.Combine(_strTempDir, "scan.stl");
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         Voxels voxSphere = Voxels.voxSphere(oLib, new System.Numerics.Vector3(0, 0, 0), 8.0f);
         voxSphere.mshAsMesh().SaveToStlFile(strPath, Mesh.EStlUnit.MM);
         return strPath;
@@ -141,7 +141,7 @@ public sealed class CradleRunTests : IDisposable
     {
         string strScan = StrMakeScanStl();   // sphere, 16 mm across in file units
 
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         ScanImportResult oAtOne = ScanImport.OImport(
             oLib, strScan, Mesh.EStlUnit.MM, 1.0f,
             EScanOrigin.Photogrammetry,
@@ -178,7 +178,7 @@ public sealed class CradleRunTests : IDisposable
         // multiply the derived size by ten.
         string strScan = StrMakeScanStl();
 
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         ScanImportResult oCm = ScanImport.OImport(
             oLib, strScan, Mesh.EStlUnit.CM, 1.0f,
             EScanOrigin.Photogrammetry,
@@ -238,7 +238,7 @@ public sealed class CradleRunTests : IDisposable
     {
         string strScan = StrMakeScanStl();
 
-        using Library oLib = new(0.4f);
+        using OdcLibrary oLib = new(0.4f);
         ImportValidationException e = Assert.Throws<ImportValidationException>(
             () => ScanImport.OImport(
                 oLib, strScan, Mesh.EStlUnit.MM, 2.0f,   // an explicit scale
