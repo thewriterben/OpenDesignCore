@@ -184,7 +184,7 @@ public sealed class DataStoreTests : IDisposable
             {
               "id": "materials/extra",
               "name": "Material with unknown field",
-              "source": { "citation": "test" },
+              "source": { "citation": "doi:10.1234/fixture" },
               "surprise_field": 42
             }
             """);
@@ -233,7 +233,7 @@ public sealed class DataStoreTests : IDisposable
               "id": "materials/bad-range",
               "name": "Backwards range",
               "shrinkage_pct_range": [0.5, 0.2],
-              "source": { "citation": "test" }
+              "source": { "citation": "doi:10.1234/fixture" }
             }
             """);
 
@@ -254,7 +254,7 @@ public sealed class DataStoreTests : IDisposable
                 "dataset_version": "dataset-v2026.07.10",
                 "path": "brands/prusament/materials/PLA/filaments/prusament-pla/variants/galaxy-black"
               },
-              "source": { "citation": "test" }
+              "source": { "citation": "doi:10.1234/fixture" }
             }
             """);
 
@@ -279,12 +279,59 @@ public sealed class DataStoreTests : IDisposable
                 "dataset_version": "latest",
                 "path": "brands/prusament/materials/PLA/filaments/prusament-pla/variants/galaxy-black"
               },
-              "source": { "citation": "test" }
+              "source": { "citation": "doi:10.1234/fixture" }
             }
             """);
 
         DataValidationException oEx =
             Assert.Throws<DataValidationException>(() => DataStore.LoadAll(strDir, TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore"))));
         Assert.Contains(oEx.Errors, s => s.Contains("materials/unpinned") && s.Contains("filament_ref"));
+    }
+
+    [Theory]
+    [InlineData("vault:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#page=2")]
+    [InlineData("repo:thewriterben/OpenPartsCore@e32d954:data/material/creality-hyper-pla.json")]
+    [InlineData("ledger:jobs:cc639d8a24ae")]
+    [InlineData("standard:ISO 286-1:2010")]
+    public void MaterialWithStrictCitationForm_Loads(string strCitation)
+    {
+        string strDir = StrWriteEntry("materials", "strict.json", $$"""
+            {
+              "id": "materials/strict",
+              "name": "Strictly cited",
+              "source": { "citation": "{{strCitation}}" }
+            }
+            """);
+
+        DataSet oData = DataStore.LoadAll(strDir, TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore")));
+        Assert.Contains(oData.Materials, o => o.Id == "materials/strict");
+    }
+
+    [Theory]
+    [InlineData("Research-Report.md (2026-07-12): PLA shrinkage 0.2-0.3%")]
+    [InlineData("vault:sha256:abc")]
+    [InlineData("see vault:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")]
+    public void MaterialWithFreeTextCitation_IsRejectedNamingTheEntry(string strCitation)
+    {
+        string strDir = StrWriteEntry("materials", "prose.json", $$"""
+            {
+              "id": "materials/prose",
+              "name": "Prose cited",
+              "source": { "citation": "{{strCitation}}" }
+            }
+            """);
+
+        DataValidationException oEx =
+            Assert.Throws<DataValidationException>(() => DataStore.LoadAll(strDir, TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore"))));
+        Assert.Contains(oEx.Errors, s => s.Contains("materials/prose") && s.Contains("free text"));
+    }
+
+    [Fact]
+    public void ShippedMaterials_TakeStrictCitationForms()
+    {
+        // Runs without the sibling registry: the fixture registry stands in for parts.
+        DataSet oData = DataStore.LoadAll(Path.Combine(StrRepoRoot(), "data"), TestRegistry.StrWrite(Path.Combine(_strTempDir, "OpenPartsCore")));
+        Assert.NotEmpty(oData.Materials);
+        Assert.All(oData.Materials, oMat => Assert.NotNull(DataStore.StrCitationForm(oMat.Source.Citation)));
     }
 }
